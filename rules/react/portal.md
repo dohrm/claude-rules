@@ -1,4 +1,6 @@
-# React Portal Architecture
+---
+title: "React Portal Architecture"
+---
 
 ## Business Models — OpenAPI Generation
 

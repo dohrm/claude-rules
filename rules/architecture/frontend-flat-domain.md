@@ -1,4 +1,6 @@
-# Frontend Architecture — Flat-Domain Modular Portal
+---
+title: "Frontend Architecture — Flat-Domain Modular Portal"
+---
 
 Applicable to React/TypeScript and Leptos/Rust. The structure is identical regardless of the framework.
 

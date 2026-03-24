@@ -1,4 +1,6 @@
-# Hexagonal Architecture — Rust
+---
+title: "Hexagonal Architecture — Rust"
+---
 
 ## Rust-Specific Rules
 

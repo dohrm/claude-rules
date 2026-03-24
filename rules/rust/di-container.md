@@ -1,4 +1,6 @@
-# Dependency Injection — Manual Container Pattern (Rust)
+---
+title: "Dependency Injection — Rust"
+---
 
 ## Structure
 

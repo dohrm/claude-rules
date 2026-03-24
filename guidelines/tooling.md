@@ -1,4 +1,6 @@
-# Claude Code Tooling — Tech Radar
+---
+title: "Claude Code Tooling — Tech Radar"
+---
 
 | Quadrant | Meaning |
 |----------|---------|

@@ -1,4 +1,6 @@
-# Hexagonal Architecture
+---
+title: "Hexagonal Architecture"
+---
 
 ## Core Principle
 

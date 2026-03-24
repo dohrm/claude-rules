@@ -1,4 +1,6 @@
-# Leptos Portal Architecture
+---
+title: "Leptos Portal Architecture"
+---
 
 > **Exploratory** — SSR-first patterns are still being established. This document reflects
 > current direction and will evolve. Deviations are expected as patterns solidify.

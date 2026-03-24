@@ -1,4 +1,6 @@
-# Prompting Claude — Practical Guide
+---
+title: "Prompting Claude — Practical Guide"
+---
 
 ## Declare the expected output type
 

@@ -1,4 +1,6 @@
-# CLAUDE.md Hierarchy — Structuring Instructions Across a Project
+---
+title: "CLAUDE.md Hierarchy"
+---
 
 ## Core Principle
 

@@ -1,4 +1,6 @@
-# Leptos Gotchas (0.8+)
+---
+title: "Leptos Gotchas (0.8+)"
+---
 
 ## Component Children
 

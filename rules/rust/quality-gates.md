@@ -1,4 +1,6 @@
-# Rust Quality Gates
+---
+title: "Rust Quality Gates"
+---
 
 Before considering any change complete, all of the following must pass:
 

@@ -1,4 +1,5 @@
 ---
+title: "Skill: Add Domain Module (Rust)"
 name: rust-add-domain
 description: Add a new business module container to the Rust DI system (AppState pattern)
 ---

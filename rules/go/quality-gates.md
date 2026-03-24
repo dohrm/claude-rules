@@ -1,4 +1,6 @@
-# Go Quality Gates
+---
+title: "Go Quality Gates"
+---
 
 Every change must pass all four gates before being considered done:
 

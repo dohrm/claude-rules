@@ -1,4 +1,6 @@
-# Rust Error Handling
+---
+title: "Rust Error Handling"
+---
 
 | Context | Library |
 |---------|---------|

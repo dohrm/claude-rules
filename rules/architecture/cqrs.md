@@ -1,4 +1,6 @@
-# CQRS / Event Sourcing
+---
+title: "CQRS / Event Sourcing"
+---
 
 ## Write Flow
 

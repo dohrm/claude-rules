@@ -1,4 +1,6 @@
-# CQRS / Event Sourcing — Rust (cqrs-rust-lib)
+---
+title: "CQRS / Event Sourcing — Rust"
+---
 
 ## Library
 

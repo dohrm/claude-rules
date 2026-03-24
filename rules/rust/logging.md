@@ -1,4 +1,6 @@
-# Rust Logging (tracing)
+---
+title: "Rust Logging (tracing)"
+---
 
 | Level | Usage |
 |-------|-------|

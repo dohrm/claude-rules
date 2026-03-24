@@ -1,4 +1,6 @@
-# Go Hexagonal Packaging
+---
+title: "Go Hexagonal Packaging"
+---
 
 ## Layer Layout
 

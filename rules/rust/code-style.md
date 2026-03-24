@@ -1,4 +1,6 @@
-# Rust Code Style
+---
+title: "Rust Code Style"
+---
 
 ## Control Flow
 

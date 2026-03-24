@@ -1,4 +1,6 @@
-# Leptos Patterns (0.8+)
+---
+title: "Leptos Patterns (0.8+)"
+---
 
 ## Signals — Choosing the Right Primitive
 

@@ -1,4 +1,6 @@
-# How to Use These Rules in a Project
+---
+title: "How to Use These Rules"
+---
 
 ## Import Strategies
 
