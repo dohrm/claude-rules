@@ -6,7 +6,7 @@ hero:
   tagline: Reusable Claude Code assets for consistent AI-assisted development.
   actions:
     - text: Guidelines
-      link: /guidelines/prompting/
+      link: guidelines/prompting/
       icon: open-book
     - text: GitHub
       link: https://github.com/dohrm/claude-rules
