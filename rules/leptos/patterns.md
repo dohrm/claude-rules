@@ -38,25 +38,78 @@ view! {
 }
 ```
 
+**`|| ()` source = fetches exactly once.** No dependency → the resource never re-fetches after
+the initial load. Use this intentionally for static reference data (e.g. a list of plans in a
+dialog), and document it:
+
+```rust
+// Plans are static during a session — fetch once, no re-fetch needed.
+let plans = Resource::new(|| (), |_| list_plans(None));
+```
+
+If re-fetch on open/close is needed, use a trigger signal instead:
+
+```rust
+let trigger = RwSignal::new(0u32);
+let plans = Resource::new(move || trigger.get(), |_| list_plans(None));
+// trigger.update(|n| *n += 1) to force a refresh
+```
+
 Use `LocalResource` when the future does not need to be `Send` (client-side only, no SSR):
 
 ```rust
 let items = LocalResource::new(move || fetch_local(search.get()));
 ```
 
-## StoredValue for Non-Copy Data in Reactive Closures
+## StoredValue vs Double-Clone for Non-Copy Data
 
-Use when non-Copy data must be accessed inside `Fn` closures (`Show`, `For`, effects):
+The core problem: `view!` generates reactive closures that must be `Fn`. A `move` closure
+capturing a non-Copy value (e.g. `String`) that is then moved into a nested closure makes
+the outer closure `FnOnce` — causing a compile error.
+
+**Two valid solutions:**
+
+### StoredValue — use when data is accessed in multiple closures
+
+`get_value()` returns a fresh clone each call without consuming the `StoredValue`.
 
 ```rust
-let data = StoredValue::new(expensive_data);
+let data = StoredValue::new(some_string);
 
 view! {
     <Show when=move || open.get()>
         {move || data.get_value()}
     </Show>
+    <button on:click=move |_| use_something(data.get_value())>"Click"</button>
 }
 ```
+
+### Double-clone — use when data is accessed in a single event handler
+
+Clone outside the `move` closure (so the outer context keeps its copy), clone again inside
+for the `async move` block:
+
+```rust
+let id = some_string; // non-Copy
+
+on:click={
+    let id = id.clone();        // outside: outer view closure keeps `id`
+    move |_| {
+        let id = id.clone();    // inside: async block gets its own copy
+        spawn_local(async move {
+            do_thing(id).await;
+        });
+    }
+}
+```
+
+**Choosing between them:**
+
+| Situation | Pattern |
+|-----------|---------|
+| Data used in one event handler | Double-clone |
+| Data used in multiple closures (`Show`, `For`, effects, handlers) | `StoredValue` |
+| Data is `Copy` (bool, u32, …) | Neither — capture directly |
 
 ## Control Flow — `Either` vs `into_any()`
 
@@ -82,25 +135,25 @@ view! {
 }
 ```
 
-## Action / ServerAction
+## Action / ServerAction vs spawn_local
 
-Use `Action` for async mutations (form submissions, imperative async calls):
+Two patterns for calling server functions. Choose based on whether you have a `<form>`.
+
+### `ServerAction` — for form-driven mutations
+
+Prefer when using `<ActionForm>`. Built-in `.pending()` and `.value()` signals.
 
 ```rust
 let create_user = ServerAction::<CreateUser>::new();
 
 view! {
-    // .pending() — true while awaiting
     <Show when=move || create_user.pending().get()>
         <Spinner />
     </Show>
-
-    // .value() — most recent result (None before first run)
     {move || create_user.value().get().map(|res| match res {
         Ok(_) => view! { <SuccessMessage /> }.into_any(),
         Err(e) => view! { <ErrorMessage error=e.to_string() /> }.into_any(),
     })}
-
     <ActionForm action=create_user>
         <input type="text" name="username" />
         <button type="submit">"Create"</button>
@@ -109,6 +162,27 @@ view! {
 ```
 
 Key properties: `.pending()`, `.value()`, `.input()` (current arg while pending), `.version()` (completion count).
+
+### `spawn_local` — for imperative mutations (no form)
+
+Use in `on:click` / toggle handlers where you own the control flow:
+
+```rust
+on:click={
+    let id = id.clone();
+    move |_| {
+        let id = id.clone();
+        spawn_local(async move {
+            match delete_item(id).await {
+                Ok(()) => on_success.run(()),
+                Err(e) => error_signal.set(Some(e.to_string())),
+            }
+        });
+    }
+}
+```
+
+Always set an error signal on `Err` — do not log to console only (user gets no feedback).
 
 ## Async Actions in Event Handlers
 

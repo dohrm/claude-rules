@@ -40,10 +40,37 @@ title: "Leptos Gotchas (0.8+)"
 ## Props
 
 - Prefer `String` over `&str` for component props — use `.to_string()` at call sites
-- `into` attribute (`#[prop(into)]`) can ease ergonomics for string props
+- `#[prop(into)]` eases ergonomics for string props
 
 ## WASM Safety
 
-- Server functions and anything that uses tokio/mio are **not** WASM-safe
-- Crates used by both SSR and WASM must be free of tokio, mio, or other non-WASM dependencies
-- Gate SSR-only dependencies behind feature flags if the crate targets both environments
+Server functions and anything pulling in `tokio` / `mio` are **not** WASM-safe.
+
+For a crate that compiles to both SSR and WASM (e.g. a portal crate):
+1. Declare SSR-only deps as `optional = true` in `Cargo.toml`
+2. Enable them only in the `ssr` feature list
+3. Verify with: `cargo check -p <crate> --features hydrate --target wasm32-unknown-unknown`
+
+```toml
+[dependencies]
+my-domain = { workspace = true, optional = true }  # pulls in tokio via cqrs
+
+[features]
+ssr  = ["dep:my-domain", ...]
+hydrate = [...]  # must NOT include dep:my-domain
+```
+
+A CI check against the `hydrate` target is the only reliable guard — the compiler will
+catch any accidental SSR import in WASM-compiled code.
+
+## `FnOnce` in `view!` — the non-Copy capture problem
+
+A `move` closure that captures a non-Copy value (e.g. `String`) and then moves it into
+a nested `async move` block makes the outer closure `FnOnce`. If that closure is inside
+a `view!` that requires `Fn` (e.g. children of `<Show>`, reactive closures), you get:
+
+```
+expected a closure that implements the `Fn` trait, but this closure only implements `FnOnce`
+```
+
+See `patterns.md` — StoredValue vs Double-Clone — for the two canonical fixes.

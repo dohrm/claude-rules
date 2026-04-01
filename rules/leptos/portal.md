@@ -2,8 +2,8 @@
 title: "Leptos Portal Architecture"
 ---
 
-> **Exploratory** — SSR-first patterns are still being established. This document reflects
-> current direction and will evolve. Deviations are expected as patterns solidify.
+> **Note** — Project-specific conventions (DI wiring, folder structure, auth patterns) belong
+> in your project's own CLAUDE.md, not here. This file covers generic SSR-first architecture.
 
 ## Core Principle — SSR-First
 
@@ -88,7 +88,7 @@ let user = use_context::<CurrentUser>().expect("CurrentUser not provided");
 
 ### `locale` / `theme`
 
-Current approach: cookie-based persistence (server-readable, no FOUC).
+Cookie-based persistence (server-readable, no FOUC):
 
 ```rust
 // Server reads locale cookie → provide_context(Locale::Fr)
@@ -96,18 +96,12 @@ Current approach: cookie-based persistence (server-readable, no FOUC).
 let locale = use_context::<Locale>().unwrap_or_default();
 ```
 
-**Planned:** once a user preferences table exists, the server reads from DB instead of cookie —
-the component API (`use_context::<Locale>()`) does not change.
-
-Abstract the preference source behind a `UserPreferences` struct provided via context:
+Abstract the preference source behind a struct in context — components stay unchanged
+whether the source is a cookie or a DB:
 
 ```rust
-pub struct UserPreferences {
-    pub locale: Locale,
-    pub theme: Theme,
-}
-// Source: cookie today, DB tomorrow — components don't care
-provide_context(user_prefs);
+pub struct UserPreferences { pub locale: Locale, pub theme: Theme }
+provide_context(user_prefs); // source is opaque to consumers
 ```
 
 ## Cross-Feature State
@@ -125,7 +119,9 @@ provide_context(theme);
 let theme = use_context::<RwSignal<Theme>>().unwrap();
 ```
 
-## `features/{domain}/` Structure (Leptos)
+## Feature Module Structure
+
+Recommended structure — adapt to your project's conventions:
 
 ```
 features/billing/
@@ -138,8 +134,7 @@ No `api/` folder — server functions replace the API layer. Domain types come f
 
 ## Rules
 
-- First render must be correct — no client-side loading for portal state (user, locale, theme)
+- First render must be correct — no loading flash for portal state (user, locale, theme)
 - App state bridged via httpOnly cookies → server context → hydrated signals
 - Business types shared via crate dependencies — never duplicate domain types in the portal
 - Server functions are SSR-only — no WASM-incompatible dependencies (see `gotchas.md`)
-- `UserPreferences` abstraction must hide the storage source (cookie vs DB) from components
