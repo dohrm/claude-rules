@@ -14,6 +14,7 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Tech Radar', slug: 'tech-radar' },
+        { label: 'FAQ', slug: 'faq' },
         {
           label: 'Guidelines',
           autogenerate: { directory: 'guidelines' },
