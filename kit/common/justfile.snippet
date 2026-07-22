@@ -1,0 +1,20 @@
+# Quality-gate recipes — MERGE into your repo's root justfile.
+# `just` is the cross-platform task runner (install: `cargo install just`,
+# `brew install just`, or `scoop install just`). Simpler than make (no .PHONY,
+# no tab traps) and OS-agnostic.
+#
+# `just check` is the ONE command an agent runs to self-verify — all local gates
+# (Tier 1-2) on demand. Tier 3 (mutation) is CI-only, never here. Single source
+# of truth: lefthook.yml defines the commands; this just runs both tiers now
+# (lefthook's hooks fire on commit/push — an iterating agent needs them without
+# committing). Any failing gate aborts the recipe non-zero, so the agent keeps
+# fixing. See rules/agent/autonomy.md for the loop this powers.
+#
+# NB portability: this entry point is cross-platform, but a gate it invokes may
+# not be (e.g. a bash scripts/rust-fmt.sh). CI is the authority and runs on
+# Linux; local Windows devs can lean on CI for any non-portable gate.
+
+# Run all local gates. Iterate until green before handing back.
+check:
+    lefthook run pre-commit --all-files
+    lefthook run pre-push --all-files

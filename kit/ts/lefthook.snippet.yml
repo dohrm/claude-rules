@@ -1,0 +1,27 @@
+# TypeScript/React portion of lefthook.yml — Tiers 1 & 2. MERGE into the repo's
+# root lefthook.yml (a polyglot repo also has rust/ and go/ commands alongside).
+#
+# `glob` scopes each command: a commit touching no TS does not run these. When
+# it matches, the command runs over the whole package. ADAPT the `apps/` prefix
+# and the workspace/package path (`cd apps/web`) to your layout.
+#
+# Generated code is excluded in eslint.config.js via globalIgnores — see
+# eslint.config.base.js (src/api/generated, routeTree.gen.ts, *.gen.ts). Never
+# lint/type-check generated client code: it is rewritten on every codegen run.
+
+pre-commit:
+  parallel: true
+  commands:
+    fe-lint:
+      glob: "apps/**/*.{ts,tsx}"
+      run: cd apps/web && npm run lint
+
+pre-push:
+  parallel: true
+  commands:
+    fe-test:
+      glob: "apps/**/*.{ts,tsx}"
+      run: cd apps/web && npm run test
+    fe-build:
+      glob: "apps/**/*.{ts,tsx}"
+      run: cd apps/web && npm run build   # tsc -b && vite build → the type-check gate

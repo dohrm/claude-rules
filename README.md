@@ -1,71 +1,74 @@
 # claude-rules
 
-A personal library of reusable Claude Code assets — rules, skills, and guidelines — built up across projects and meant to be shared.
+A shared library of **Claude Code assets** — rules, agents, and a quality-gate
+kit — built across projects and installed into any repo the way shadcn installs
+components: **copy, own, pin**. No runtime dependency, no submodule to babysit.
 
-**Site:** https://dohrm.github.io/claude-rules/
+## Three asset types (different half-life, different handling)
 
-## Goals
+| Type | What | Half-life | How it's used |
+|------|------|-----------|---------------|
+| **rules/** | prose conventions (style, architecture, quality gates) per language | years | `@import`ed into a `CLAUDE.md` — read by the agent |
+| **kit/** | executable quality gates (lefthook, rustfmt, deny, mutants, CI) | years | config the *tools* run — copied to the repo, adapted per repo |
+| **agents/** | Claude Code subagent definitions | ~one model release | copied into `.claude/agents/` — kept thin (they inherit the repo's rules via CLAUDE.md) |
 
-- Centralize rules written across multiple projects into a single source of truth
-- Provide a reusable foundation: import rules directly into any project via `@`
-- Serve as a reference and onboarding base for team members working with Claude Code
+The load-bearing, durable value is in **rules + kit** (deterministic, model-independent).
+Agents are the thin, perishable layer — few, and they reference the rules rather
+than restating them.
+
+## Install (npx — cross-platform, pinned)
+
+```bash
+# in your repo, from its root:
+npx github:dohrm/claude-rules add rust            # or: ts, go — combine them
+npx github:dohrm/claude-rules add rust ts --ref v0.1.0
+npx github:dohrm/claude-rules update --ref v0.2.0 # re-install pinned profiles at a new ref
+npx github:dohrm/claude-rules list                # available & installed
+```
+
+The installer copies each profile's rules/agents/kit into your repo, pins the
+ref in `.claude-rules.lock`, and prints the one-time wiring for the kit. It
+**never merges your build config** (lefthook/eslint) — kit files are scaffolded
+into `.claude/kit/<lang>/` and you wire them once (see [`kit/README.md`](./kit/README.md)).
+
+Updates are reviewable: re-run `update` at a newer ref and read the `git diff`.
+
+### After install — wire the rules
+
+The installer copies rules to `.claude/rules/`. Reference the ones you want from
+a `CLAUDE.md` (root or per-module):
+
+```markdown
+@.claude/rules/rust/quality-gates.md
+@.claude/rules/architecture/hexagonal.md
+```
+
+Subagents inherit the project `CLAUDE.md`, so a copied agent stays thin and
+picks up these conventions without duplicating them.
 
 ## Structure
 
 ```
 claude-rules/
-├── rules/                    # Reusable rule files (@-importable in any CLAUDE.md)
-│   ├── language.md           # Language split: artifacts in English, communication in preferred language
-│   ├── architecture/
-│   │   ├── hexagonal.md             # Hexagonal architecture: dependency direction, domain purity, trait pattern
-│   │   ├── cqrs.md                  # CQRS / Event Sourcing: flow, aggregate pattern, query/QueryBuilder split
-│   │   └── frontend-flat-domain.md  # Frontend modular portal: ui/features/core/pages, dependency rules
-│   ├── rust/
-│   │   ├── code-style.md     # Naming, control flow, ownership, async, serde
-│   │   ├── error-handling.md # thiserror/anyhow usage, unwrap rules, propagation
-│   │   ├── logging.md        # tracing levels, secrets, structured fields, #[instrument]
-│   │   └── quality-gates.md  # cargo build/test/clippy/fmt
-│   ├── go/
-│   │   ├── quality-gates.md          # golangci-lint / go test -race / govulncheck
-│   │   └── hexagonal-packaging.md    # core/infra/pkg layout, dependency rule
-│   ├── react/
-│   │   └── portal.md         # OpenAPI gen, TanStack Query, portal context (user/locale/theme)
-│   └── leptos/
-│       ├── patterns.md       # Resource/Suspense, StoredValue, spawn_local, server functions
-│       ├── gotchas.md        # Children/ChildrenFn, For syntax, compilation quirks, WASM safety
-│       └── portal.md         # SSR-first, shared crate types, cookie-based app state (exploratory)
-├── skills/                   # Custom skill definitions for Claude Code
-│   └── rust-add-domain.md    # Add a new domain module to the Rust DI container
-└── guidelines/               # Patterns and recommendations for working with Claude Code
-    ├── claude-md-hierarchy.md  # CLAUDE.md file roles and loading mechanics
-    ├── how-to-use-rules.md     # Import strategies per technology
-    ├── prompting.md            # Prompt structure, syntax, and iteration tips
-    └── tooling.md              # Tech radar: MCPs, plugins, hooks (Adopt/Trial/Assess/Hold)
+├── registry.json             # drives the installer: profiles → files → dest
+├── bin/cli.mjs               # the npx installer (giget-based; dumb, data-driven)
+├── rules/                    # @-importable prose (language.md, rust/, go/, react/, architecture/, …)
+├── kit/                      # executable gates (rust/, ts/, go/) — see kit/README.md
+├── agents/                   # thin subagent defs (code-reviewer, code-simplifier)
+├── skills/                   # custom Claude Code skills
+└── guidelines/               # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
 ```
-
-## Usage
-
-The recommended approach is to add this repository as a git submodule:
-
-```bash
-git submodule add https://github.com/dohrm/claude-rules .claude/claude-rules
-```
-
-Then reference rules from your project's `.claude/rules/` files:
-
-```markdown
-@.claude/claude-rules/rules/language.md
-@.claude/claude-rules/rules/rust/quality-gates.md
-@.claude/claude-rules/rules/architecture/hexagonal.md
-```
-
-See [`guidelines/how-to-use-rules.md`](./guidelines/how-to-use-rules.md) for per-technology setup examples.
 
 ## Guidelines
-
-See [`guidelines/`](./guidelines/) for documented patterns on topics such as:
 
 - [How to use these rules in a project](./guidelines/how-to-use-rules.md)
 - [CLAUDE.md hierarchy in multi-module projects](./guidelines/claude-md-hierarchy.md)
 - [Prompting Claude — practical guide](./guidelines/prompting.md)
 - [Tooling — Tech Radar](./guidelines/tooling.md)
+
+## Contributing an update
+
+Edit the source here, cut a tag, and consumers pick it up with
+`npx github:dohrm/claude-rules update --ref <tag>`. Keep the split honest: a new
+*convention* is a **rule**; a new *check* is **kit**; an agent earns its place
+only if it does *work* (a review pass, a transformation) — otherwise it's a rule.

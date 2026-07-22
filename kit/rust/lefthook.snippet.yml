@@ -1,0 +1,45 @@
+# Rust portion of lefthook.yml — Tiers 1 & 2. MERGE into the repo's root
+# lefthook.yml (a polyglot repo also has ts/ and go/ commands alongside).
+# Install once: lefthook install
+#
+# Doctrine: these gates are the AUTHORITY on correctness — the point is to stop
+# reviewing correctness line by line and let the machine enforce it. Mutation
+# (Tier 3) is NOT here — it is CI-only (mutation-ci.yaml), too slow for a hook.
+#
+# CROSS-PLATFORM: every command here is a cross-platform binary (cargo, clippy,
+# deny, machete) — this runs unchanged on Windows/mac/linux. Keep it that way;
+# do not introduce shell scripts here (that was the one Windows blocker).
+#
+# `glob` scopes each command: a commit touching no Rust does not run these. When
+# the glob matches, the command runs over the WHOLE workspace. ADAPT the `api/`
+# prefix and workspace path to your layout.
+#
+# GENERATED CODE (special case — only if your workspace has a generated crate
+# that is a path-dep of a member, e.g. an OpenAPI client): `cargo fmt --all`
+# would reformat it (churn). See rust-fmt.sh for the exclusion approach, and its
+# header for the cross-platform caveat. Most repos have no such crate and use
+# the portable default below. For clippy, add `#![allow(clippy::all)]` to the
+# generated crate's lib.rs.
+
+pre-commit:
+  parallel: true
+  commands:
+    rust-fmt:
+      glob: "api/**/*.rs"
+      run: cd api && cargo fmt --all --check
+    rust-clippy:
+      glob: "api/**/*.rs"
+      run: cd api && cargo clippy --workspace --all-targets -- -D warnings
+
+pre-push:
+  parallel: true
+  commands:
+    rust-test:
+      glob: "api/**/*.rs"
+      run: cd api && cargo test --workspace
+    rust-deny:
+      glob: "api/**/*.{rs,toml}"
+      run: cd api && cargo deny check licenses advisories sources
+    rust-machete:
+      glob: "api/**/*.{rs,toml}"
+      run: cd api && cargo machete --skip-target-dir

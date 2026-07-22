@@ -1,0 +1,25 @@
+{
+  "repo": "dohrm/claude-rules",
+  "defaultRef": "main",
+  "_comment": "Drives the npx installer. Each entry copies a source dir from the repo (at the pinned ref) into the consuming repo. 'wire: true' = one-time manual setup needed (the installer prints a note, never auto-merges build config).",
+  "shared": [
+    { "from": "agents", "to": ".claude/agents" },
+    { "from": "rules/agent", "to": ".claude/rules/agent" },
+    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile (gives `just check`). @import rules/agent/autonomy.md into your root CLAUDE.md so every agent inherits the self-closing-loop + anti-gaming policy." }
+  ],
+  "profiles": {
+    "rust": [
+      { "from": "rules/rust", "to": ".claude/rules/rust" },
+      { "from": "rules/architecture", "to": ".claude/rules/architecture" },
+      { "from": "kit/rust", "to": ".claude/kit/rust", "wire": "Merge lefthook.snippet.yml into lefthook.yml (default fmt = portable `cargo fmt --all`); move deny.toml→workspace root, mutants.toml→.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (bash) — only if you have a generated member crate to skip; add #![allow(clippy::all)] to that crate too. See .claude/kit/README.md." }
+    ],
+    "ts": [
+      { "from": "rules/react", "to": ".claude/rules/react" },
+      { "from": "kit/ts", "to": ".claude/kit/ts", "wire": "Merge lefthook.snippet.yml into lefthook.yml; adapt eslint.config.base.js globalIgnores into your eslint config." }
+    ],
+    "go": [
+      { "from": "rules/go", "to": ".claude/rules/go" },
+      { "from": "kit/go", "to": ".claude/kit/go", "wire": "Move golangci.base.yml→.golangci.yml; merge lefthook.snippet.yml into lefthook.yml." }
+    ]
+  }
+}
