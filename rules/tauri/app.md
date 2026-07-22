@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Tauri App Architecture"
 ---
 

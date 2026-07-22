@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Leptos Gotchas (0.8+)"
 ---
 

@@ -1,9 +1,10 @@
-# kit — executable quality gates (copy, don't @import)
+# kit — executable quality gates (copy + wire; unlike rules, not auto-loaded)
 
-Rules (`../rules/`) are prose the agent *reads* → shared via `@import`.
-The **kit** is config the *tools execute* (lefthook, rustfmt, deny, mutants, CI).
-A `lefthook.yml` must physically sit at a repo's root, so the kit is consumed by
-**copy**, not `@import`.
+Rules (`../rules/`) are prose the agent *reads* → they **auto-load** from
+`.claude/rules/` (nothing to wire). The **kit** is different: it is config the
+*tools execute* (lefthook, rustfmt, deny, mutants, CI). A `lefthook.yml` must
+physically sit at the repo root and be wired into the toolchain, so the kit is
+consumed by **copy + one-time wiring**, not auto-load.
 
 The doctrine (why these gates, the tiers) lives in `../rules/*/quality-gates.md`.
 This directory is its executable counterpart — reference implementations you

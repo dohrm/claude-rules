@@ -5,7 +5,7 @@
   "shared": [
     { "from": "agents", "to": ".claude/agents" },
     { "from": "rules/agent", "to": ".claude/rules/agent" },
-    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile (gives `just check`). @import rules/agent/autonomy.md into your root CLAUDE.md so every agent inherits the self-closing-loop + anti-gaming policy." }
+    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile (gives `just check`). No wiring for autonomy: rules/agent/autonomy.md installs to .claude/rules/agent/ and auto-loads every session." }
   ],
   "profiles": {
     "rust": [

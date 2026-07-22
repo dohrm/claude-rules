@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Rust Logging (tracing)"
 ---
 

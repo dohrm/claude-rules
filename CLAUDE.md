@@ -8,7 +8,7 @@ into consuming repos via the npx installer (`bin/cli.mjs`, driven by
 
 ## Repository Structure
 
-- `rules/` — prose conventions, `@`-importable into any `CLAUDE.md` (durable)
+- `rules/` — prose conventions, **auto-loaded** from `.claude/rules/` (language rules path-scoped via `paths:`; `@import` optional) (durable)
 - `kit/` — executable quality gates (lefthook/rustfmt/deny/mutants/CI), copied & adapted per repo (durable)
 - `agents/` — thin Claude Code subagent definitions, copied into `.claude/agents/` (perishable — keep minimal)
 - `skills/` — custom skill definitions

@@ -2,7 +2,14 @@
 title: "How to Use These Rules"
 ---
 
-## Import Strategies
+> **⚠️ OUTDATED — pending rewrite.** The current model is: install with the npx
+> installer (`npx github:dohrm/claude-rules add <profile>` — see the root
+> `README.md`), which drops rules into `.claude/rules/` where Claude Code
+> **auto-loads** them (language rules are path-scoped via `paths:`). The git
+> submodule + manual `@import` approach below is legacy. `@import` still works
+> for curating a specific `CLAUDE.md`, but is no longer the primary path.
+
+## Import Strategies (legacy)
 
 ### Option A — Git Submodule (recommended)
 

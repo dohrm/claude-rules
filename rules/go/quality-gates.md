@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.go"
 title: "Go Quality Gates"
 ---
 

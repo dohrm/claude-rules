@@ -52,7 +52,7 @@ async function install(profiles, ref) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
     console.log(notes.join('\n'))
   }
-  console.log(`\nWire rules into a CLAUDE.md with @-imports, e.g.  @.claude/rules/rust/quality-gates.md`)
+  console.log(`\nRules in .claude/rules/ auto-load — no @import needed (language rules are path-scoped via their \`paths:\` frontmatter). Agents in .claude/agents/ are auto-discovered.`)
 }
 
 async function main() {

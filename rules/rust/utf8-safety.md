@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "UTF-8 String Safety"
 ---
 

@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Leptos Patterns (0.8+)"
 ---
 

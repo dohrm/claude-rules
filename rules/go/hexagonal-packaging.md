@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.go"
 title: "Go Hexagonal Packaging"
 ---
 

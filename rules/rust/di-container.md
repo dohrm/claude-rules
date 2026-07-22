@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Dependency Injection — Rust"
 ---
 

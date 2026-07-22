@@ -1,4 +1,7 @@
 ---
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
 title: "React Portal Architecture"
 ---
 

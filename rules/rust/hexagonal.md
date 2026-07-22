@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "Hexagonal Architecture — Rust"
 ---
 
