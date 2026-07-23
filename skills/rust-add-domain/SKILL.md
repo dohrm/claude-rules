@@ -1,7 +1,6 @@
 ---
-title: "Skill: Add Domain Module (Rust)"
 name: rust-add-domain
-description: Add a new business module container to the Rust DI system (AppState pattern)
+description: "Add a new business module container to the Rust DI system (AppState pattern). Use on /rust-add-domain, or when the user asks to add/wire a new domain module, business module, or DI container in a Rust hexagonal project."
 ---
 
 Add a new business module to the DI container system following the established pattern (@rules/rust/di-container.md).

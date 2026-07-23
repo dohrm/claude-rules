@@ -1,30 +1,20 @@
-# Go portion of lefthook.yml — Tiers 1 & 2. MERGE into the repo's root
-# lefthook.yml (a polyglot repo also has rust/ and ts/ commands alongside).
+# Go hooks — MERGE into the repo's root lefthook.yml.
 #
-# Aligned with rules/go/quality-gates.md: golangci-lint (bundles gofmt/govet/
-# staticcheck/errcheck/…), `go test -race`, govulncheck. See golangci.base.yml
-# for the recommended linter set.
-#
-# `glob` scopes each command. ADAPT the module path (`workflows/orchestration`)
-# to your layout. golangci-lint and govulncheck must be installed (or baked into
-# the runner image); prefer that over installing them in the hook.
+# Thin triggers only: commands live in the justfile recipes (go-lint / go-check),
+# which hold the path via the `go_dir` variable. Layout-agnostic glob.
+# Aligned with rules/go/quality-gates.md (golangci-lint / test -race / govulncheck).
+# golangci-lint + govulncheck must be installed (or baked into the runner image).
 
 pre-commit:
   parallel: true
   commands:
-    go-lint:
-      glob: "workflows/orchestration/**/*.go"
-      run: cd workflows/orchestration && golangci-lint run ./...
+    go:
+      glob: "**/*.go"
+      run: just go-lint
 
 pre-push:
   parallel: true
   commands:
-    go-build:
-      glob: "workflows/orchestration/**/*.go"
-      run: cd workflows/orchestration && go build ./...
-    go-test:
-      glob: "workflows/orchestration/**/*.go"
-      run: cd workflows/orchestration && go test -race ./...
-    go-vuln:
-      glob: "workflows/orchestration/**/*.go"
-      run: cd workflows/orchestration && govulncheck ./...   # needs network
+    go:
+      glob: "**/*.go"
+      run: just go-check

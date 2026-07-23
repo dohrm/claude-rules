@@ -5,23 +5,34 @@
   "shared": [
     { "from": "agents", "to": ".claude/agents" },
     { "from": "rules/agent", "to": ".claude/rules/agent" },
-    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile (gives `just check`). No wiring for autonomy: rules/agent/autonomy.md installs to .claude/rules/agent/ and auto-loads every session." }
+    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.)" }
   ],
   "profiles": {
     "rust": [
       { "from": "rules/rust", "to": ".claude/rules/rust" },
-      { "from": "kit/rust", "to": ".claude/kit/rust", "wire": "Merge lefthook.snippet.yml into lefthook.yml (default fmt = portable `cargo fmt --all`); move deny.toml→workspace root, mutants.toml→.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (bash) — only if you have a generated member crate to skip; add #![allow(clippy::all)] to that crate too. See .claude/kit/README.md." }
+      { "from": "kit/rust", "to": ".claude/kit/rust", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just rust-lint`/`rust-check`) and set `rust_dir` in the justfile. Move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (generated member crate): swap the fmt command in rust-check + add #![allow(clippy::all)] to that crate. See .claude/kit/README.md." },
+      { "from": "skills/rust-add-domain", "to": ".claude/skills/rust-add-domain" }
     ],
     "ts": [
       { "from": "rules/react", "to": ".claude/rules/react" },
-      { "from": "kit/ts", "to": ".claude/kit/ts", "wire": "Merge lefthook.snippet.yml into lefthook.yml; adapt eslint.config.base.js globalIgnores into your eslint config." }
+      { "from": "kit/ts", "to": ".claude/kit/ts", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`) and set `ts_dir` in the justfile. Adapt eslint.config.base.js globalIgnores into your eslint config." }
     ],
     "go": [
       { "from": "rules/go", "to": ".claude/rules/go" },
-      { "from": "kit/go", "to": ".claude/kit/go", "wire": "Move golangci.base.yml→.golangci.yml; merge lefthook.snippet.yml into lefthook.yml." }
+      { "from": "kit/go", "to": ".claude/kit/go", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml." }
     ],
     "architecture": [
       { "from": "rules/architecture", "to": ".claude/rules/architecture", "_note": "Opt-in — NOT bundled with a language profile. Rules are path-scoped (cqrs→rs, hexagonal→rs/go, frontend-flat→ts/tsx), so they load only on matching files. Add explicitly: `add rust architecture`." }
+    ],
+    "investigate": [
+      { "from": "skills/investigate", "to": ".claude/skills/investigate", "_note": "Opt-in, language-agnostic skill — a 4-phase debug methodology (locate → hypothesize → instrument → fix), model-independent. Add explicitly: `add investigate`." }
+    ],
+    "product": [
+      { "from": "skills/interview", "to": ".claude/skills/interview" },
+      { "from": "skills/prd", "to": ".claude/skills/prd" },
+      { "from": "skills/plan", "to": ".claude/skills/plan" },
+      { "from": "skills/design-system", "to": ".claude/skills/design-system" },
+      { "from": "skills/diagram", "to": ".claude/skills/diagram", "_note": "Opt-in product-lifecycle skills adapted from claude-mastery, rewritten in English. The lifecycle chains interview → prd → plan; design-system and diagram support it. Dependency-free: no Python renderer, no bundled fonts, brand-neutral. The git-flow commands (branche/livre) were intentionally dropped. Add explicitly: `add product`." }
     ]
   }
 }

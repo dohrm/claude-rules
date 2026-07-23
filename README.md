@@ -11,6 +11,7 @@ components: **copy, own, pin**. No runtime dependency, no submodule to babysit.
 | **rules/** | prose conventions (style, architecture, quality gates) per language | years | **auto-loaded** from `.claude/rules/`; language rules are path-scoped via `paths:` (load when matching files are read) |
 | **kit/** | executable quality gates (lefthook, rustfmt, deny, mutants, CI) | years | config the *tools* run — copied to the repo, adapted per repo |
 | **agents/** | Claude Code subagent definitions | ~one model release | copied into `.claude/agents/` — kept thin (they inherit the repo's rules via CLAUDE.md) |
+| **skills/** | Claude Code skills (`<name>/SKILL.md`) — reusable procedures & methodologies | varies (a *methodology* is durable; a *transformation* tracks the codebase) | copied into `.claude/skills/` (auto-discovered); invoked as `/name` or auto-triggered via the `description:` |
 
 The load-bearing, durable value is in **rules + kit** (deterministic, model-independent).
 Agents are the thin, perishable layer — few, and they reference the rules rather
@@ -21,6 +22,8 @@ than restating them.
 ```bash
 # in your repo, from its root:
 npx github:dohrm/claude-rules add rust            # or: ts, go — combine them
+npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
+npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→plan, design-system, diagram)
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
 npx github:dohrm/claude-rules update --ref v0.2.0 # re-install pinned profiles at a new ref
 npx github:dohrm/claude-rules list                # available & installed
@@ -58,7 +61,7 @@ claude-rules/
 ├── rules/                    # auto-loaded prose, path-scoped (language.md, rust/, go/, react/, architecture/, …)
 ├── kit/                      # executable gates (rust/, ts/, go/) — see kit/README.md
 ├── agents/                   # thin subagent defs (code-reviewer, code-simplifier)
-├── skills/                   # custom Claude Code skills
+├── skills/                   # Claude Code skills, canonical <name>/SKILL.md dirs (investigate, product/*, rust-add-domain)
 └── guidelines/               # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
 ```
 
@@ -73,5 +76,7 @@ claude-rules/
 
 Edit the source here, cut a tag, and consumers pick it up with
 `npx github:dohrm/claude-rules update --ref <tag>`. Keep the split honest: a new
-*convention* is a **rule**; a new *check* is **kit**; an agent earns its place
-only if it does *work* (a review pass, a transformation) — otherwise it's a rule.
+*convention* is a **rule**; a new *check* is **kit**; a repeatable *procedure or
+methodology* is a **skill** (a `SKILL.md` dir, invoked as `/name`); an **agent**
+earns its place only when the work needs its own context/tools — otherwise a skill
+in the current context is lighter. If it's neither work nor procedure, it's a rule.

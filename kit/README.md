@@ -16,31 +16,51 @@ repo handed to a Windows client runs `just check` unchanged. The **one** excepti
 is `rust/rust-fmt.sh` (bash), needed ONLY by repos with a generated member crate
 — see its header for the portable fallback.
 
-## The tiers (same command, three consumers)
+## The tiers (the justfile is the task layer; hooks + `just check` call it)
 
-| Tier | Where | What | Latency |
-|------|-------|------|---------|
-| 1 | pre-commit | fmt --check, clippy -D warnings, lint, vet | seconds |
-| 2 | pre-push   | test, deny, machete | tens of s |
-| 3 | **CI only** | mutation testing (`--in-diff`) — NEVER in the hook | minutes |
+| Tier | Recipe | Runs on | What | Latency |
+|------|--------|---------|------|---------|
+| 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
+| 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
+| 3 | *(CI only)* | PR | mutation testing (`--in-diff`) — NEVER a hook | minutes |
+
+The commands **and their paths** live once, in the justfile recipes (via the
+`*_dir` variables). lefthook triggers just call `just <tech>-lint`/`-check`
+(glob-scoped, layout-agnostic); `just check` runs the full set. One source of
+truth — no path duplicated across the kit.
 
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the
 fast loop. It is a PR/CI gate, scoped to changed code, ratcheted from a baseline
 (a healthy repo often sits ~70%, so it starts non-blocking).
 
+## Layout convention (recommended)
+
+For a polyglot repo, the cleanest structure is **one workspace per technology at
+a predictable top-level directory** — e.g. a Rust workspace under `api/`, the
+frontend under `apps/web/`, the Go module under `workflows/orchestration/`.
+Predictable roots make the per-tech gate paths obvious and keep each toolchain
+self-contained. The gate commands then live in ONE place — the repo's `justfile`
+(`just rust-check`, `just ts-check`, …) — and both `just check` and the git
+hooks call them, so no path is hardcoded in the shared kit. A single-language
+repo just keeps its workspace at the root.
+
 ## Consuming in a repo
 
-1. Copy the language folder(s) you need into the repo.
-2. **Adapt the marked lines** — workspace paths, the languages present. The
-   default Rust fmt gate is the portable `cargo fmt --all --check`. Generated
-   code needs exclusion ONLY if your repo has it:
-   - Rust with a generated *member* crate (OpenAPI client, etc.): swap the fmt
-     command for `rust-fmt.sh` (special case, bash) + add `#![allow(clippy::all)]`
-     to the generated crate root (clippy lints path-deps of members; `--exclude`
-     does not silence them — the allow does).
-   - TS: eslint `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
-3. Merge `common/justfile.snippet` into your root justfile (`just check`), then
-   `lefthook install`.
+Run **`claude-rules init`** to assemble the justfile + lefthook from the
+installed snippets, or do it by hand:
+
+1. `add` the profiles you need (installs into `.claude/`).
+2. Merge `common/justfile.snippet` into your root justfile and **set the `*_dir`
+   variables** to your layout — the ONE place paths live. Enable your techs in
+   the `check` recipe.
+3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
+   move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
+   golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
+   adapt eslint `globalIgnores`; then `lefthook install`.
+4. **Generated code** (only if present): a Rust generated *member* crate — swap
+   the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
+   to that crate (clippy lints path-dep members; `--exclude` won't silence them).
+   TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
 
 ## Contents
 
