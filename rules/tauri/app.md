@@ -5,7 +5,7 @@ title: "Tauri App Architecture"
 ---
 
 Applicable to Tauri v2 apps using Preact/React + TypeScript.
-Extends the `frontend-flat-domain` rule with Tauri-specific patterns.
+Extends the `portal-flat` rule with Tauri-specific patterns.
 
 ## Transport — Tauri IPC, Not HTTP
 
@@ -21,7 +21,7 @@ All state goes through **Zustand stores**, organized by the flat-domain rule.
 
 ## State Model
 
-Three categories — same as `frontend-flat-domain`, different tooling:
+Three categories — same as `portal-flat`, different tooling:
 
 | Category | Lives in | Tool | Updated by |
 |----------|----------|------|------------|

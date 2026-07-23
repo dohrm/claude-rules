@@ -5,7 +5,7 @@ paths:
 title: "Frontend Architecture — Flat-Domain Modular Portal"
 ---
 
-Applicable to React/TypeScript and Leptos/Rust. The structure is identical regardless of the framework.
+A flat-domain modular structure for a React/TypeScript single-page portal. Framework-agnostic in spirit — the layer boundaries matter more than the tooling.
 
 ## Module Map
 
@@ -17,7 +17,7 @@ src/
 ├── features/    # Business modules — one directory per domain
 │   └── {domain}/
 │       ├── components/   # Domain-coupled components (e.g. InvoiceList)
-│       ├── api/          # Network calls — hooks (React) or resources (Leptos)
+│       ├── api/          # Network calls — generated TanStack Query hooks
 │       └── logic/        # Local state, validation, derived values
 └── pages/       # Route entry points — assembly only
 ```
@@ -112,13 +112,11 @@ Never route data between features via shared stores or props-drilling.
 
 ## Business Models
 
-Business models are the shared language between frontend and backend. How they are shared
-depends on the technology:
+Business models are the shared language between frontend and backend. They are **generated from
+the backend OpenAPI spec** (single source of truth is the backend) — see the React idioms in the
+same profile for the generation workflow.
 
-- **React / TypeScript** — generated from OpenAPI spec (single source of truth is the backend)
-- **Leptos / Rust** — shared directly via crate dependencies (compiler enforces the contract)
-
-Either way: never hand-write types that duplicate backend models.
+Never hand-write types that duplicate backend models.
 
 ## Rules for Adding a Feature
 

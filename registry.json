@@ -1,40 +1,53 @@
 {
   "repo": "dohrm/claude-rules",
   "defaultRef": "main",
-  "_comment": "Drives the npx installer. Each entry copies a source dir from the repo (at the pinned ref) into the consuming repo. 'wire: true' = one-time manual setup needed (the installer prints a note, never auto-merges build config).",
+  "_comment": "Drives the npx installer. Each entry copies a source dir from the repo (at the pinned ref) into the consuming repo. 'kind' selects the per-agent emitter (skill|kit|rule|agent). 'to' is the Claude destination; other agents' destinations are derived from kind. 'wire: true' = one-time manual setup needed (the installer prints a note, never auto-merges build config).",
   "shared": [
-    { "from": "agents", "to": ".claude/agents" },
-    { "from": "rules/agent", "to": ".claude/rules/agent" },
-    { "from": "rules/language.md", "to": ".claude/rules/language.md" },
-    { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.)" }
+    { "from": "agents", "to": ".claude/agents", "kind": "agent" },
+    { "from": "rules/agent", "to": ".claude/rules/agent", "kind": "rule" },
+    { "from": "rules/language.md", "to": ".claude/rules/language.md", "kind": "rule" },
+    { "from": "kit/common", "to": ".claude/kit/common", "kind": "kit", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.)" }
   ],
   "profiles": {
     "rust": [
-      { "from": "rules/rust", "to": ".claude/rules/rust" },
-      { "from": "kit/rust", "to": ".claude/kit/rust", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just rust-lint`/`rust-check`) and set `rust_dir` in the justfile. Move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (generated member crate): swap the fmt command in rust-check + add #![allow(clippy::all)] to that crate. See .claude/kit/README.md." },
-      { "from": "skills/rust-add-domain", "to": ".claude/skills/rust-add-domain" }
+      { "from": "rules/rust", "to": ".claude/rules/rust", "kind": "rule" },
+      { "from": "kit/rust", "to": ".claude/kit/rust", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just rust-lint`/`rust-check`) and set `rust_dir` in the justfile. Move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (generated member crate): swap the fmt command in rust-check + add #![allow(clippy::all)] to that crate. See .claude/kit/README.md." }
     ],
     "ts": [
-      { "from": "rules/react", "to": ".claude/rules/react" },
-      { "from": "kit/ts", "to": ".claude/kit/ts", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`) and set `ts_dir` in the justfile. Adapt eslint.config.base.js globalIgnores into your eslint config." }
+      { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
+      { "from": "kit/ts", "to": ".claude/kit/ts", "kind": "kit", "_note": "TS language baseline: quality-gate rules + the kit gates. React frontend architecture lives in the `portal-flat` profile; a Node/TS backend adds `api` + `backend`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`) and set `ts_dir` in the justfile. Adapt eslint.config.base.js globalIgnores into your eslint config." }
     ],
     "go": [
-      { "from": "rules/go", "to": ".claude/rules/go" },
-      { "from": "kit/go", "to": ".claude/kit/go", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml." }
+      { "from": "rules/go", "to": ".claude/rules/go", "kind": "rule" },
+      { "from": "kit/go", "to": ".claude/kit/go", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml." }
     ],
-    "architecture": [
-      { "from": "rules/architecture", "to": ".claude/rules/architecture", "_note": "Opt-in — NOT bundled with a language profile. Rules are path-scoped (cqrs→rs, hexagonal→rs/go, frontend-flat→ts/tsx), so they load only on matching files. Add explicitly: `add rust architecture`." }
+    "hexagonal": [
+      { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule" },
+      { "from": "skills/rust-add-domain", "to": ".claude/skills/rust-add-domain", "kind": "skill", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go), path-scoped so only your language's loads. `rust-add-domain` is the rust DI-container transformation skill (needs rust-di-container.md). `architect` recommends this for backend/fullstack shapes." }
+    ],
+    "cqrs": [
+      { "from": "rules/cqrs", "to": ".claude/rules/cqrs", "kind": "rule", "_note": "Architecture pattern — gate: EXPLICIT opt-in only (non-standard). The rust variant assumes the home library `cqrs-rust-lib` (github.com/dohrm/cqrs-rust-lib). Add explicitly: `add cqrs`." }
+    ],
+    "portal-flat": [
+      { "from": "rules/react", "to": ".claude/rules/react", "kind": "rule", "_note": "React framework quality gates (Rules of Hooks, purity, RTL, a11y) — decoupled from the flat-domain architecture, applies to any React app." },
+      { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline)." }
+    ],
+    "api": [
+      { "from": "rules/api", "to": ".claude/rules/api", "kind": "rule", "_note": "Opinionated HTTP-API stack — gate: backend/fullstack. rust=axum+utoipa, go=chi+Huma, node=Fastify. All emit OpenAPI (the contract `portal-flat` generates its client from). Path-scoped per language; add explicitly: `add api`." }
+    ],
+    "backend": [
+      { "from": "rules/backend", "to": ".claude/rules/backend", "kind": "rule", "_note": "Cross-language backend conventions — gate: backend/fullstack. Error contract (problem+json), config & secrets, health & lifecycle, pagination. Language-agnostic; add explicitly: `add backend`." }
     ],
     "investigate": [
-      { "from": "skills/investigate", "to": ".claude/skills/investigate", "_note": "Opt-in, language-agnostic skill — a 4-phase debug methodology (locate → hypothesize → instrument → fix), model-independent. Add explicitly: `add investigate`." }
+      { "from": "skills/investigate", "to": ".claude/skills/investigate", "kind": "skill", "_note": "Opt-in, language-agnostic skill — a 4-phase debug methodology (locate → hypothesize → instrument → fix), model-independent. Add explicitly: `add investigate`." }
     ],
     "product": [
-      { "from": "skills/interview", "to": ".claude/skills/interview" },
-      { "from": "skills/prd", "to": ".claude/skills/prd" },
-      { "from": "skills/architect", "to": ".claude/skills/architect" },
-      { "from": "skills/design-system", "to": ".claude/skills/design-system" },
-      { "from": "skills/plan", "to": ".claude/skills/plan" },
-      { "from": "skills/diagram", "to": ".claude/skills/diagram", "_note": "Opt-in product-lifecycle skills. Chain: interview → prd (what) → architect (how/ADRs) + design-system (visual) → plan (phases); diagram supports throughout. Adapted from claude-mastery + `architect` added here. Dependency-free, brand-neutral. Git-flow commands (branche/livre) intentionally dropped. Add explicitly: `add product`." }
+      { "from": "skills/interview", "to": ".claude/skills/interview", "kind": "skill" },
+      { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
+      { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },
+      { "from": "skills/design-system", "to": ".claude/skills/design-system", "kind": "skill" },
+      { "from": "skills/plan", "to": ".claude/skills/plan", "kind": "skill" },
+      { "from": "skills/diagram", "to": ".claude/skills/diagram", "kind": "skill", "_note": "Opt-in product-lifecycle skills. Chain: interview → prd (what) → architect (how/ADRs) + design-system (visual) → plan (phases); diagram supports throughout. Adapted from claude-mastery + `architect` added here. Dependency-free, brand-neutral. Git-flow commands (branche/livre) intentionally dropped. Add explicitly: `add product`." }
     ]
   }
 }

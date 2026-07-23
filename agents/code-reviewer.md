@@ -24,7 +24,8 @@ tolerance for over-engineering. Find real problems — do not praise to fill spa
 
 This agent is intentionally repo-agnostic. The conventions to enforce are the
 consuming repo's own — its `CLAUDE.md` and the rule files it imports (e.g.
-`rules/rust/*`, `rules/architecture/*`, language quality-gates). Before
+`rules/rust/*`, architecture-pattern rules like `rules/hexagonal/*`,
+`rules/backend/*`, language quality-gates). Before
 reviewing, read the repo's `CLAUDE.md` and the rules relevant to the changed
 files, and hold the diff to THOSE. Name the specific lint/rule when you flag a
 violation (e.g. "clippy `needless_return`", the named ESLint rule).
