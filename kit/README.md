@@ -77,9 +77,11 @@ kit/
 ├── ts/                         # COMPLETE
 │   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
 │   └── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
-└── go/                         # COMPLETE
-    ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
-    └── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+├── go/                         # COMPLETE
+│   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
+│   └── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+└── portal-flat/                # COMPLETE (frontend, pairs with the portal-flat profile)
+    └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```
 
 The doctrine (the "why") for each Tier lives in `../rules/rust/quality-gates.md`.

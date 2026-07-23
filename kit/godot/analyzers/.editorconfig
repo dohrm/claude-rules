@@ -1,0 +1,6 @@
+# Severities for the Godot profile analyzers. Merge into the game project's .editorconfig
+# (or copy alongside the .csproj). With TreatWarningsAsErrors=true these fail the build.
+[*.cs]
+dotnet_diagnostic.GODOT001.severity = error   # hardcoded gameplay value
+dotnet_diagnostic.GODOT002.severity = error   # [Signal] outside EventBus
+dotnet_diagnostic.GODOT003.severity = error   # GetNode(string) — use [Export] handle

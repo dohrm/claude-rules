@@ -98,13 +98,18 @@ pages/
 
 ## State Categories
 
-Three distinct categories — never conflate them:
+Four distinct categories — never conflate them:
 
 | Category | What | Lives in | Example |
 |----------|------|----------|---------|
 | **Server state** | Data from the backend | `features/{domain}/api/` | invoice list, user profile |
 | **App state** | Portal-wide context | `core/` | current_user, locale, theme |
+| **URL / view state** | Shareable navigation state | route search params (TanStack Router) | active tab, filters, pagination, search query |
 | **Local state** | UI-only, ephemeral | `features/{domain}/logic/` | modal open, form draft |
+
+**URL-worthy state goes in search params, not component state** — anything a user
+would expect to survive a reload, a shared link, or the back button (active tab,
+filters, pagination, search query). Validate it at the route boundary with Zod.
 
 **Cross-feature data goes through server state** — two features that need the same data each
 fetch it independently. The caching layer (TanStack Query, SSR) deduplicates the request.

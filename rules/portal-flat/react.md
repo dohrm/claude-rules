@@ -7,19 +7,29 @@ title: "React Portal Architecture"
 
 ## Business Models — OpenAPI Generation
 
-Business models are **generated from the backend OpenAPI spec** — no manual type duplication.
+The client is **generated from the backend OpenAPI spec** by
+[`@hey-api/openapi-ts`](https://heyapi.dev) — no manual type duplication.
 
 ```bash
-# Regenerate after backend changes
-npm run generate:api   # fetches spec from running backend, outputs to api/generated/
+npm run generate:api        # fetches the spec from the running backend
+npm run generate:api:file   # uses a local spec file ($OPENAPI_SPEC — the CI artifact)
 ```
 
-Generated output lives in `api/generated/` and includes:
-- TypeScript types matching backend structs exactly
-- TanStack Query hooks (`useQuery` / `useMutation`) per endpoint
-- Zod schemas for runtime validation
+Generated output lives in `src/api/generated/` (never hand-edited — see the
+`.gen.ts` rule in the TypeScript gates), produced by these plugins:
 
-**Rule:** never hand-write types that mirror backend models — always generate.
+| Plugin | Emits |
+|--------|-------|
+| `@hey-api/client-axios` | the Axios client (base URL & auth via `runtimeConfigPath`) |
+| `@tanstack/react-query` | `useQuery` / `useMutation` hooks per endpoint |
+| `@hey-api/sdk` | typed request functions |
+| `@hey-api/typescript` (`enums: 'javascript'`) | request/response types |
+| `zod` (`requests: true`) | Zod schemas for request bodies — the contract-aligned base for form validation |
+
+**Rule:** never hand-write anything the contract can produce — types, hooks, and
+request schemas are always generated. You import the subset you use; the rest
+tree-shakes out of the bundle. The only runtime schema you write by hand is the
+URL one (below), because it isn't in the contract.
 
 ## Server State — TanStack Query
 
@@ -76,24 +86,48 @@ If two features need the same data, they each call the same generated hook — t
 
 Never share state between features via props-drilling or a shared store — use the query cache.
 
-## `api/` Structure
+## Runtime Validation — Zod
+
+Zod is the **single runtime-validation vocabulary**, applied **only at untrusted
+boundaries**:
+
+| Boundary | Trusted? | Validation |
+|----------|----------|------------|
+| API response | ✅ by the contract | none — checked at compile time via the generated types |
+| Form / input body | ❌ user input | **generated** Zod (the `zod` plugin's request schemas) — aligned to the contract |
+| URL search params | ❌ user-editable | **hand-written** Zod — a routing concern, absent from the OpenAPI spec |
+
+Never validate an API response at runtime: re-checking a contracted response means
+distrusting your own source of truth. Validate what the user can type, nothing else.
+
+## Routing & URL State — TanStack Router
+
+Routing uses **TanStack Router**. View state that belongs in the URL — active tab,
+filters, pagination, search query — lives in **typed search params**, not component
+state: it is shareable, survives reload, and restores on back/forward. Search params
+are validated at the route boundary with a hand-written Zod schema.
+
+## `src/api/` Structure
 
 ```
-api/
-└── generated/              # never edit manually
+src/api/
+└── generated/              # never edit manually — rewritten on each codegen run
     ├── types.gen.ts
     ├── sdk.gen.ts
+    ├── zod.gen.ts
     └── @tanstack/
         └── react-query.gen.ts
 
-core/
-└── http/
-    └── client.ts           # Axios instance — auth interceptor (Bearer token), base URL
+src/config/
+└── hey-api.ts              # runtimeConfig for the generated client — base URL, auth interceptor
 ```
 
 ## Rules
 
 - All server interactions via generated TanStack Query hooks — no raw fetch in features
-- Never edit files in `api/generated/` — regenerate instead
+- Never edit files in `src/api/generated/` — regenerate instead
+- Everything the contract can produce is generated (types, hooks, request schemas); hand-write only what it can't (URL search-param schemas)
+- Zod validates untrusted input only — forms and URL params, never API responses
+- URL-worthy view state (tab, filters, pagination, search) lives in TanStack Router search params, not component state
 - Portal state (user, locale, theme) in `core/contexts/`, not in feature-level state
 - Cross-feature data via query cache, not shared stores

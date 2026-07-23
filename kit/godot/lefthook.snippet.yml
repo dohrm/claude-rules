@@ -1,0 +1,20 @@
+# Godot C# hooks — MERGE into the repo's root lefthook.yml.
+#
+# Thin triggers only: commands live in the justfile recipes (godot-lint / godot-check),
+# which hold the paths via godot_dir + the Godot binary. Layout-agnostic globs.
+# Aligned with rules/godot-csharp/quality-gates.md (build / GDUnit4 / headless export).
+# Requires Godot 4 with .NET export templates + GDUnit4 added to the project.
+
+pre-commit:
+  parallel: true
+  commands:
+    godot:
+      glob: "*.{cs,tscn,tres,gd}"
+      run: just godot-lint
+
+pre-push:
+  parallel: true
+  commands:
+    godot:
+      glob: "*.{cs,tscn,tres,gd}"
+      run: just godot-check

@@ -21,6 +21,10 @@
       { "from": "rules/go", "to": ".claude/rules/go", "kind": "rule" },
       { "from": "kit/go", "to": ".claude/kit/go", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml." }
     ],
+    "godot": [
+      { "from": "rules/godot-csharp", "to": ".claude/rules/godot-csharp", "kind": "rule", "_note": "Godot 4 + C# (strong typing) game profile — gate: gamedev. Co-location by entity, composition over inheritance, single typed EventBus, all gameplay data in .tres (zero hardcoded values), legacy .gd migration policy (no new .gd). Path-scoped **/*.cs (+ .tscn/.tres/.gd where relevant)." },
+      { "from": "kit/godot", "to": ".claude/kit/godot", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just godot-lint`/`godot-check`) and justfile.snippet into the justfile; set godot_dir/godot_bin/godot_export_preset. chmod +x check-no-new-gd.sh. Godot project needs C# (.NET) + export templates + GDUnit4 + a matching export preset. Ships Roslyn analyzers (GODOT001 hardcoded values, GODOT002 signal placement, GODOT003 string node paths) that run inside dotnet build — reference the analyzer .csproj from the game project. The headless-export gate catches broken .tscn/.tres refs the C# compiler can't. See kit/godot/README.md." }
+    ],
     "hexagonal": [
       { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule" },
       { "from": "skills/rust-add-domain", "to": ".claude/skills/rust-add-domain", "kind": "skill", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go), path-scoped so only your language's loads. `rust-add-domain` is the rust DI-container transformation skill (needs rust-di-container.md). `architect` recommends this for backend/fullstack shapes." }
@@ -30,7 +34,8 @@
     ],
     "portal-flat": [
       { "from": "rules/react", "to": ".claude/rules/react", "kind": "rule", "_note": "React framework quality gates (Rules of Hooks, purity, RTL, a11y) — decoupled from the flat-domain architecture, applies to any React app." },
-      { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline)." }
+      { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline)." },
+      { "from": "kit/portal-flat", "to": ".claude/kit/portal-flat", "kind": "kit", "wire": "Copy openapi-ts.config.ts to your frontend root. Install: `npm i -D @hey-api/openapi-ts` + `npm i @hey-api/client-axios @tanstack/react-query zod`. Add package.json scripts `generate:api` (\"openapi-ts\", live backend) and `generate:api:file` (same, CI sets OPENAPI_SPEC to the spec artifact). Create src/config/hey-api.ts exporting the client runtimeConfig (base URL + auth interceptor). Ensure eslint globalIgnores and tsconfig exclude src/api/generated. NOT a hook tier — codegen is a dev/CI step, not a gate." }
     ],
     "api": [
       { "from": "rules/api", "to": ".claude/rules/api", "kind": "rule", "_note": "Opinionated HTTP-API stack — gate: backend/fullstack. rust=axum+utoipa, go=chi+Huma, node=Fastify. All emit OpenAPI (the contract `portal-flat` generates its client from). Path-scoped per language; add explicitly: `add api`." }

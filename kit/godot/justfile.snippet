@@ -1,0 +1,15 @@
+# Godot C# recipes — MERGE into your root justfile. Set these to your layout:
+godot_dir := "game"
+godot_bin := "godot"                 # or an absolute path to the Godot 4 .NET build
+godot_export_preset := "Linux/X11"   # must exist in export_presets.cfg
+
+# Commit-time: build (runs the Roslyn analyzers GODOT001-003 in-process) + the file-level gate.
+godot-lint:
+    cd {{godot_dir}} && dotnet build -warnaserror
+    sh .claude/kit/godot/check-no-new-gd.sh
+
+# Push-time: tests + headless export (the only gate that catches broken scene/resource refs).
+godot-check: godot-lint
+    cd {{godot_dir}} && dotnet test
+    cd {{godot_dir}} && {{godot_bin}} --headless --import
+    cd {{godot_dir}} && {{godot_bin}} --headless --export-release "{{godot_export_preset}}" /tmp/godot-export-check
