@@ -35,6 +35,8 @@ npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug
 npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system→plan, diagram)
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
 npx github:dohrm/claude-rules add rust --agent claude   # narrow to one agent (default: ALL agents)
+npx github:dohrm/claude-rules remove cqrs         # inverse of add: delete a profile's files, update the lock
+npx github:dohrm/claude-rules remove all          # full uninstall (profiles + shared + lock)
 npx github:dohrm/claude-rules update --ref v0.2.0 # re-install pinned profiles+agents at a new ref
 npx github:dohrm/claude-rules list                # available & installed
 ```
@@ -51,6 +53,14 @@ one-time wiring for the kit only. It **never merges your build config**
 (lefthook/eslint) — you wire the kit once (see [`kit/README.md`](./kit/README.md)).
 
 Updates are reviewable: re-run `update` at a newer ref and read the `git diff`.
+
+`remove <profile...>` is the inverse of `add`: it deletes the files each profile
+emitted (across the locked agents), prunes the `AGENTS.md` managed block, and
+drops the profile from the lock. Removing the last profile — or `remove all` —
+also clears the shared assets and the lock (full uninstall). It never touches
+your `justfile`/`lefthook` wiring, so after removing a kit, delete the matching
+recipes/triggers yourself; empty `.claude/` and `.agents/` dirs are left in place
+(they may hold your own files). Review with `git status` before committing.
 
 ### After install — rules and agents need no wiring
 

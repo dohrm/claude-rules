@@ -10,6 +10,7 @@
 //
 // Usage:
 //   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,codex,opencode] [--ref v1.2.0]
+//   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml (if absent)
 //   npx github:dohrm/claude-rules list
@@ -208,6 +209,96 @@ function flushAgentsMd(ctx) {
   console.log(`  ✓ AGENTS.md  (managed block: ${ctx.inline.length} inline, ${ctx.refs.length} path-scoped)`)
 }
 
+// --------------------------------------------------------------------- remove
+// Inverse of add: delete the destinations each emitter produced, per locked
+// agent, and update the lock. Symmetric with the EMITTERS/destination logic.
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
+
+// Filesystem targets that add() created for (entry, agent) — mirror of the emitters.
+function destsFor(entry, agent) {
+  const name = basename(entry.from)
+  switch (entry.kind) {
+    case 'skill': return [join(SKILL_DIR[agent], name)]
+    case 'kit':   return [join(KIT_DIR[agent], name)]
+    case 'rule':
+      if (agent === 'claude') return [entry.to]                                   // file or dir
+      if (agent === 'cursor') return [isFileFrom(entry.from) ? join('.cursor/rules', name.replace(/\.md$/, '.mdc')) : join('.cursor/rules', name)]
+      return [join('.agents/rules', name)]                                        // codex/opencode path-scoped copies
+    case 'agent':
+      if (agent === 'claude')   return [entry.to]                                 // .claude/agents
+      if (agent === 'opencode') return ['.opencode/agent']
+      return []                                                                   // cursor/codex: skipped on add
+    default: return []
+  }
+}
+
+// Drop stale path-scoped reference bullets from the AGENTS.md managed block.
+function pruneAgentsRefs(removedRuleDirs) {
+  const file = 'AGENTS.md'
+  if (!existsSync(file) || !removedRuleDirs.length) return
+  let content = readFileSync(file, 'utf8')
+  const re = new RegExp(`${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}`)
+  const m = content.match(re); if (!m) return
+  const stale = line => /^- \*\*/.test(line) && line.includes('.agents/rules/')
+    && removedRuleDirs.some(d => line.includes(d + '/') || line.includes(d + '`'))
+  let kept = m[0].split('\n').filter(line => !stale(line))
+  if (!kept.some(l => /^- \*\*/.test(l) && l.includes('.agents/rules/')))
+    kept = kept.filter(l => !l.startsWith('## Path-scoped rules'))
+  writeFileSync(file, content.replace(re, kept.join('\n')))
+  console.log('  ✓ AGENTS.md  (pruned path-scoped references)')
+}
+function stripAgentsBlock() {
+  const file = 'AGENTS.md'
+  if (!existsSync(file)) return
+  const content = readFileSync(file, 'utf8')
+  const re = new RegExp(`\\n*${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}\\n*`)
+  if (!re.test(content)) return
+  writeFileSync(file, content.replace(re, '\n').trimStart())
+  console.log('  ✓ AGENTS.md  (managed block removed)')
+}
+
+function remove(profilesArg) {
+  const lock = readLock()
+  if (!lock) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
+  const agents = lock.agents || ['claude']
+  const full = profilesArg.length === 1 && profilesArg[0] === 'all'
+  const targets = full ? lock.profiles.slice() : profilesArg
+  const notInLock = targets.filter(p => !lock.profiles.includes(p))
+  if (notInLock.length) console.log(`Not installed, skipping: ${notInLock.join(', ')}`)
+  const toRemove = targets.filter(p => lock.profiles.includes(p))
+  if (!toRemove.length) { console.error('Nothing to remove — none of those profiles are installed.'); process.exit(1) }
+  const remaining = lock.profiles.filter(p => !toRemove.includes(p))
+  const fullUninstall = full || remaining.length === 0
+
+  console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
+  const entries = [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])]
+  const removedRuleDirs = []
+  let removedKit = false
+  for (const entry of entries) {
+    if (entry.kind === 'kit') removedKit = true
+    for (const agent of agents) {
+      if (entry.kind === 'rule' && (agent === 'codex' || agent === 'opencode')) removedRuleDirs.push(join('.agents/rules', basename(entry.from)))
+      for (const dest of destsFor(entry, agent)) {
+        if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
+      }
+    }
+  }
+  if (agents.includes('codex') || agents.includes('opencode')) {
+    if (fullUninstall) stripAgentsBlock()
+    else pruneAgentsRefs([...new Set(removedRuleDirs)])
+  }
+  if (fullUninstall) {
+    if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
+    console.log('\nFully uninstalled.')
+  } else {
+    writeLock(lock.ref, remaining, agents)
+    console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
+  }
+  if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
+  console.log('• Review the deletions with `git status` / `git diff` before committing.')
+}
+
 // -------------------------------------------------------------------- install
 function readLock() { return existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, 'utf8')) : null }
 function writeLock(ref, profiles, agents) {
@@ -296,6 +387,11 @@ async function main() {
       await install(lock.profiles, refFlag || registry.defaultRef, parseAgents((lock.agents && lock.agents.join(',')) || 'claude'))
       break
     }
+    case 'remove': {
+      if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
+      remove(positional)
+      break
+    }
     case 'init': initRepo(); break
     case 'list': {
       const lock = readLock()
@@ -308,6 +404,7 @@ async function main() {
     default:
       console.log('claude-rules — usage:\n'
         + '  add <profile...> [--agent claude,cursor,codex,opencode] [--ref <ref>]   install/pin profiles (default: all agents)\n'
+        + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  list                             show available & installed profiles')
