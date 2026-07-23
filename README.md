@@ -23,7 +23,7 @@ than restating them.
 # in your repo, from its root:
 npx github:dohrm/claude-rules add rust            # or: ts, go — combine them
 npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
-npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→plan, design-system, diagram)
+npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system→plan, diagram)
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
 npx github:dohrm/claude-rules update --ref v0.2.0 # re-install pinned profiles at a new ref
 npx github:dohrm/claude-rules list                # available & installed

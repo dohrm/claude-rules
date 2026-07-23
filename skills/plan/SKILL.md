@@ -21,7 +21,7 @@ If you haven't already explored the codebase, do it to understand the current ar
 
 ### 4. Identify durable architectural decisions
 
-Before slicing, identify the high-level decisions that should not move during implementation:
+If `docs/ARCHITECTURE.md` exists (produced by `/architect`), read it and reuse its decisions and ADRs in the plan header — do not re-derive them. Otherwise, identify the high-level decisions that should not move during implementation:
 
 - Route structure / URL patterns
 - Database schema shape

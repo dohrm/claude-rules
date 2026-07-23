@@ -31,9 +31,10 @@
     "product": [
       { "from": "skills/interview", "to": ".claude/skills/interview" },
       { "from": "skills/prd", "to": ".claude/skills/prd" },
-      { "from": "skills/plan", "to": ".claude/skills/plan" },
+      { "from": "skills/architect", "to": ".claude/skills/architect" },
       { "from": "skills/design-system", "to": ".claude/skills/design-system" },
-      { "from": "skills/diagram", "to": ".claude/skills/diagram", "_note": "Opt-in product-lifecycle skills adapted from claude-mastery, rewritten in English. The lifecycle chains interview → prd → plan; design-system and diagram support it. Dependency-free: no Python renderer, no bundled fonts, brand-neutral. The git-flow commands (branche/livre) were intentionally dropped. Add explicitly: `add product`." }
+      { "from": "skills/plan", "to": ".claude/skills/plan" },
+      { "from": "skills/diagram", "to": ".claude/skills/diagram", "_note": "Opt-in product-lifecycle skills. Chain: interview → prd (what) → architect (how/ADRs) + design-system (visual) → plan (phases); diagram supports throughout. Adapted from claude-mastery + `architect` added here. Dependency-free, brand-neutral. Git-flow commands (branche/livre) intentionally dropped. Add explicitly: `add product`." }
     ]
   }
 }
