@@ -5,6 +5,7 @@
   "shared": [
     { "from": "agents", "to": ".claude/agents" },
     { "from": "rules/agent", "to": ".claude/rules/agent" },
+    { "from": "rules/language.md", "to": ".claude/rules/language.md" },
     { "from": "kit/common", "to": ".claude/kit/common", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.)" }
   ],
   "profiles": {
