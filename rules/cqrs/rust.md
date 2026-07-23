@@ -59,9 +59,20 @@ impl View<Account> for Movement {
 
 `update()` must be pure — no I/O, no side-effects.
 
+## HTTP exposure (with the `api` profile)
+
+`cqrs-rust-lib` makes the aggregate and commands the **typed HTTP contract**: it registers the operations and derives the OpenAPI schema from `Create*`/`Update*` commands and the snapshot (the primary read model). So `utoipa::ToSchema` (and `serde`) land in the **domain crate**, and there is no hand-written `#[utoipa::path]` handler or separate DTO layer. On paper this deviates from two profiles:
+
+- `api/rust` — "DTOs in the web layer; a hand-written handler without `#[utoipa::path]` is a bug". Here the generator owns both.
+- `hexagonal` — "no infra deps in core". Here `utoipa` appears in core.
+
+Accept it, don't fight it. The load-bearing invariant is unchanged: **no I/O, no client, no DB type in core or on the wire.** `ToSchema` only *describes* a schema — same category as the `serde` derives already tolerated in core, one notch more format-aware; query→DB mapping stays in the `QueryBuilder`. Hand-rolling a DTO + `#[utoipa::path]` layer to satisfy the profiles literally would fight the `/rust-add-domain` scaffold and duplicate every read model 1:1 for no invariant gained.
+
+Record each repo's exercise of this in an **ADR** — the impurity is a dated decision, not an oversight, so `utoipa`-in-core is never re-flagged as a bug on later review.
+
 ## Rules
 
-- `Aggregate` + `View` structs in domain crate — no infra imports
+- `Aggregate` + `View` structs in domain crate — no infra imports, **except** the `serde`/`utoipa::ToSchema` derives that make them the HTTP contract (see HTTP exposure; recorded in an ADR)
 - `QueryBuilder` + `ViewDispatcher` wiring in infrastructure crate
 - Events persisted via engine — no direct snapshot mutation
 - `CqrsContext` propagated from entry point, never created ad-hoc in domain
