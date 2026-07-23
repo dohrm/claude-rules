@@ -29,7 +29,7 @@ All server interactions go through **generated TanStack Query hooks**. No raw `f
 // features/billing/api/index.ts — re-export generated hooks, add domain context
 export { useBillingFilter, useBillingCreate } from '@/api/generated/@tanstack/react-query.gen';
 
-// features/billing/components/BillingList.tsx
+// features/billing/components/billing-list.tsx
 const { data, isLoading } = useBillingFilter({ query: { skip: 0, limit: 20 } });
 ```
 
