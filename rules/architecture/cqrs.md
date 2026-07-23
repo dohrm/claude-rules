@@ -1,4 +1,6 @@
 ---
+paths:
+  - "**/*.rs"
 title: "CQRS / Event Sourcing"
 ---
 

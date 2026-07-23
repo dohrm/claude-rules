@@ -1,0 +1,5 @@
+{
+  "stdout_matches": ["(?i)utf-?8|byte[ -]?index|char boundary|char_indices|as_bytes"],
+  "ci_verdict_in": ["CRITICAL", "WARNINGS"],
+  "judge": "Does the review correctly identify the UTF-8 / byte-indexing hazard on `&str` (byte slicing that can split a multi-byte char, and casting a byte to char), and point toward char-boundary-safe operations?"
+}

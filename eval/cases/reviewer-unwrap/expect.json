@@ -1,0 +1,5 @@
+{
+  "stdout_matches": ["(?i)unwrap|expect\\("],
+  "ci_verdict_in": ["CRITICAL", "WARNINGS"],
+  "judge": "Does the review flag the `unwrap()` (and `expect()`) on fallible, user-controlled input in non-test production code, and suggest propagating a Result instead?"
+}

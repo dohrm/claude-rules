@@ -1,0 +1,4 @@
+{
+  "ci_verdict_in": ["CLEAN"],
+  "judge": "Is the review free of false alarms — it does NOT invent critical/blocking issues on this correct, idiomatic, tested code? (Trivial optional style notes are acceptable; fabricated bugs are not.)"
+}

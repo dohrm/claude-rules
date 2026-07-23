@@ -1,4 +1,7 @@
 ---
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
 title: "Frontend Architecture — Flat-Domain Modular Portal"
 ---
 

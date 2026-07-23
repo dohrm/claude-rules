@@ -54,7 +54,7 @@ jobs:
           echo "Changed hunks:"; git --no-pager diff --stat "origin/${{ github.base_ref }}...HEAD"
 
       - name: Mutation testing (changed code only)
-        run: cargo mutants --in-diff pr.diff --no-shuffle -j 2 --colored never
+        run: cargo mutants --in-diff pr.diff --no-shuffle -j 2 --colors never
 
       - name: Upload mutation report
         if: always()

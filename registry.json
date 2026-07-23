@@ -10,7 +10,6 @@
   "profiles": {
     "rust": [
       { "from": "rules/rust", "to": ".claude/rules/rust" },
-      { "from": "rules/architecture", "to": ".claude/rules/architecture" },
       { "from": "kit/rust", "to": ".claude/kit/rust", "wire": "Merge lefthook.snippet.yml into lefthook.yml (default fmt = portable `cargo fmt --all`); move deny.toml→workspace root, mutants.toml→.cargo/, mutation-ci.yaml→.gitea/workflows/. rust-fmt.sh is a SPECIAL CASE (bash) — only if you have a generated member crate to skip; add #![allow(clippy::all)] to that crate too. See .claude/kit/README.md." }
     ],
     "ts": [
@@ -20,6 +19,9 @@
     "go": [
       { "from": "rules/go", "to": ".claude/rules/go" },
       { "from": "kit/go", "to": ".claude/kit/go", "wire": "Move golangci.base.yml→.golangci.yml; merge lefthook.snippet.yml into lefthook.yml." }
+    ],
+    "architecture": [
+      { "from": "rules/architecture", "to": ".claude/rules/architecture", "_note": "Opt-in — NOT bundled with a language profile. Rules are path-scoped (cqrs→rs, hexagonal→rs/go, frontend-flat→ts/tsx), so they load only on matching files. Add explicitly: `add rust architecture`." }
     ]
   }
 }

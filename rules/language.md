@@ -2,5 +2,8 @@
 title: "Language"
 ---
 
-- All written artifacts must be in **English**: code, comments, identifiers, commit messages, documentation.
-- Communicate with the user in their **preferred language**.
+- All written **artifacts** are in **English**: code, comments, identifiers,
+  commit messages.
+- User-facing **documentation** (`docs/`) is written in the project's
+  documentation language — **French** for these projects. (Override per team.)
+- **Communicate** with the user in their **preferred language**.
