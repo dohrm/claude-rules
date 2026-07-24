@@ -46,6 +46,9 @@
     "investigate": [
       { "from": "skills/investigate", "to": ".claude/skills/investigate", "kind": "skill", "_note": "Opt-in, language-agnostic skill — a 4-phase debug methodology (locate → hypothesize → instrument → fix), model-independent. Add explicitly: `add investigate`." }
     ],
+    "loop-setup": [
+      { "from": "skills/loop-setup", "to": ".claude/skills/loop-setup", "kind": "skill", "_note": "Opt-in, language- and host-agnostic skill — frames a self-terminating agent loop (4 preconditions → bounded objective → measurable done-command → budget/iteration guardrails) and writes PLAN.md + MEMORY.md + the loop prompt. Handoff branches per host: Claude /loop, Codex /goal, Cursor automation. Named loop-setup to avoid collision with Claude's built-in /loop. Add explicitly: `add loop-setup`." }
+    ],
     "product": [
       { "from": "skills/interview", "to": ".claude/skills/interview", "kind": "skill" },
       { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
