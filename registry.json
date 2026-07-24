@@ -55,7 +55,8 @@
       { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },
       { "from": "skills/design-system", "to": ".claude/skills/design-system", "kind": "skill" },
       { "from": "skills/plan", "to": ".claude/skills/plan", "kind": "skill" },
-      { "from": "skills/diagram", "to": ".claude/skills/diagram", "kind": "skill", "_note": "Opt-in product-lifecycle skills. Chain: interview → prd (what) → architect (how/ADRs) + design-system (visual) → plan (phases); diagram supports throughout. Adapted from claude-mastery + `architect` added here. Dependency-free, brand-neutral. Git-flow commands (branche/livre) intentionally dropped. Add explicitly: `add product`." }
+      { "from": "skills/pre-mortem", "to": ".claude/skills/pre-mortem", "kind": "skill" },
+      { "from": "skills/diagram", "to": ".claude/skills/diagram", "kind": "skill", "_note": "Opt-in product-lifecycle skills. Chain: interview → prd (what) → architect (how/ADRs) + design-system (visual) → plan (phases); diagram supports throughout. pre-mortem is an adversarial risk gate downstream of prd/architect that loops back into them via hand-off deltas (it owns docs/premortem/<target>-<horizon>.md — one register per exercise — never edits PRD/ADR/PLAN). Adapted from claude-mastery + `architect` and `pre-mortem` added here. Dependency-free, brand-neutral. Git-flow commands (branche/livre) intentionally dropped. Add explicitly: `add product`." }
     ]
   }
 }
