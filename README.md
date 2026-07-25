@@ -32,7 +32,7 @@ npx github:dohrm/claude-rules add rust            # or: ts, go — language base
 npx github:dohrm/claude-rules add rust hexagonal api backend   # a Rust backend (architecture patterns are opt-in, gated by shape)
 npx github:dohrm/claude-rules add ts portal-flat   # a React frontend
 npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
-npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system→plan, diagram)
+npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system+experience→plan, diagram)
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
 npx github:dohrm/claude-rules add rust --agent claude   # narrow to one agent (default: ALL agents)
 npx github:dohrm/claude-rules remove cqrs         # inverse of add: delete a profile's files, update the lock
