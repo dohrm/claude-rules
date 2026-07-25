@@ -50,17 +50,20 @@ Walk the register **High lethality first**. For each risk, propose a **concrete,
 - **Transferred** — pushed to another party/system (SLA, insurance, upstream). Name where it went.
 - **Open** — not yet resolved. Stays on the board.
 
+**Verify ≠ repair.** To sharpen a finding you may — and should — **verify** a leading indicator with read-only or idempotent probes: run the quality gate, `grep`, `cargo deny`, list a matrix. Turning a hypothesis into a proven-already-true finding is the whole point. But **applying** a mitigation that mutates code or repo config is not verification — it follows the same discipline as a document change (step 5): propose it, apply only on the user's explicit go-ahead, else leave it as a delta. A risk-analysis pass does not silently rewrite the repo it is analysing.
+
 After each disposition, restate the **residual**: what's left of this risk once the mitigation lands. A mitigation that spawns a new risk gets its own row. Loop.
 
 **Acceptable** = no **High-lethality** risk remains **Open**, and every remaining risk is explicitly Accepted, Transferred, or Mitigated with the user's sign-off. State when you reach it in one sentence. Never declare acceptable on your own authority — the user signs off.
 
-### 5. Hand off mitigations as deltas (never edit other docs)
+### 5. Hand off mitigations as deltas (never edit the target yourself)
 
-You own `docs/premortem/`. When a mitigation changes the design, emit a **precise delta** against the owning document and offer to invoke its skill — do not edit it yourself:
+You own `docs/premortem/`. When a mitigation changes the design, emit a **precise delta** against the owning artifact and offer to apply it — do not touch it yourself. This holds for documents **and** for code/config:
 
 - PRD change → *"Delta for `docs/PRD.md`: add to Out of Scope — `<text>`. Run `/prd` to apply?"*
 - Architecture change → *"Delta: supersede ADR-0003 with a new ADR — `<decision>`. Run `/architect` to apply?"*
 - Plan change → *"Delta: insert a hardening phase before Phase 2 — `<slice>`. Run `/plan` to apply?"*
+- Code/config change → *"Delta: wire `ts-check` into the `check` target; create `deny.toml`. Want me to apply these now, or leave them as tickets?"* — a bundle of code changes lands only on an explicit go-ahead, never as a silent side effect of the analysis.
 
 Track every pending delta in the register so nothing is silently lost.
 
@@ -113,6 +116,7 @@ One paragraph: the central imbalance or assumption that orients every failure be
 - **Lethality order, always.** The quiet conceptual death outranks the loud operational one. Rank by what kills, not by what's easy to see.
 - **Every failure carries a leading indicator.** No early signal → unmanageable → the finding is incomplete.
 - **One doc, one owner.** You own `docs/premortem/` only. Never edit `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/adr/*`, or `docs/PLAN.md`. Emit deltas and hand off to their skills.
+- **Verify freely, repair only on go-ahead.** Read-only/idempotent probes to prove a leading indicator (run the gate, `grep`, `cargo deny`) are encouraged. Mutating code or repo config to *apply* a mitigation is not part of the analysis — propose it as a delta and apply only on the user's explicit go-ahead. Never leave a repo changed as a side effect of analysing it.
 - **One file per (target, horizon).** Personas are lenses inside a register, never their own files — findings must merge into a single ranked set, not fragment by persona. A new target or a new horizon earns a new file.
 - **Simplicity of mitigation.** The cheapest change that defuses the risk wins. A mitigation that adds more moving parts than the risk warrants is itself a new pre-mortem finding.
 - **The user signs off on "acceptable".** You surface residual risk; you never certify it as tolerable on your own.
