@@ -43,10 +43,12 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 
 Create `docs/` and `docs/adr/` if absent.
 
-- One **ADR per accepted significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Use `<adr-template>`. The profile selection from step 2 is itself worth an ADR.
+- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Use `<adr-template>`. The profile selection from step 2 is itself worth an ADR.
+- Every ADR you write is **`Proposed`**. You researched the decision and argued it; you did not take it. Say so when you hand back — list what you propose and what changes if the answer is no — so the human knows there is something waiting on them.
 - The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
 
-Confirm *"✓ written to `docs/ARCHITECTURE.md` and docs/adr/"* and list the ADRs created.
+Confirm *"✓ written to `docs/ARCHITECTURE.md` and docs/adr/"*, list the ADRs created, and state
+plainly that they are **proposed and awaiting acceptance**.
 
 ### 5. Hand off to /plan
 
@@ -55,7 +57,9 @@ The durable decisions here (routes, schema shape, key model names, auth, boundar
 <adr-template>
 # ADR-NNNN: <short decision title>
 
-- **Status**: Proposed | Accepted | Superseded by ADR-XXXX
+- **Status**: Proposed
+  <!-- Always `Proposed`. Accepting a decision is the human's act, recorded by a
+       commit — see rules/agent/decisions.md and the `adr-check` gate. -->
 - **Date**: <YYYY-MM-DD>
 
 ## Context
@@ -118,6 +122,7 @@ External services, the contract with each, the blast radius if it fails.
 ## Rules
 
 - ADR only the **architecturally-significant** decisions (costly to reverse, wide blast radius). Not trivia.
+- Never write a status other than `Proposed` — not even for a decision the human clearly endorsed in conversation. Discussing is not accepting, and nothing in the repository distinguishes the two afterwards.
 - Simplicity first — the burden of proof is on complexity. Justify every service, store, and layer against the PRD.
 - This is the place to **name real technology** — the PRD deliberately doesn't.
 - Own the profile gating (step 2); defer to the installed rules rather than restating them.
