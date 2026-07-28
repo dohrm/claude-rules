@@ -66,8 +66,8 @@ recipes/triggers yourself; empty `.claude/` and `.agents/` dirs are left in plac
 
 `.claude/rules/` is auto-loaded by Claude Code — **no `@import` needed**. Language
 rules carry a `paths:` glob so they load only when you touch matching files
-(Rust rules on `**/*.rs`, etc.); cross-cutting rules (autonomy, language) load
-every session. Agents in `.claude/agents/` are auto-discovered. Subagents inherit
+(Rust rules on `**/*.rs`, etc.); cross-cutting rules (autonomy, decisions,
+language) load every session. Agents in `.claude/agents/` are auto-discovered. Subagents inherit
 the project's rules the same way, so a copied agent stays thin and picks up the
 conventions without restating them.
 

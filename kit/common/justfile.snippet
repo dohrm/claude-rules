@@ -15,7 +15,7 @@ go_dir   := "."      # e.g. "workflows/orchestration"
 # agent closes its loop on before handing back. Tier 3 (mutation) is CI-only.
 # Add the checks your repo needs:
 check: rust-check
-# check: rust-check ts-check go-check
+# check: rust-check ts-check go-check adr-check
 
 # ── Rust ─────────────────────────────────────────────────────────────────
 # Each line runs in its own shell, so `cd {{dir}} &&` per line (portable: works
@@ -42,3 +42,12 @@ go-check: go-lint
     cd {{go_dir}} && go test -race ./...
     cd {{go_dir}} && go build ./...
     cd {{go_dir}} && govulncheck ./...
+
+# ── Decisions ──────────────────────────────────────────────────────────────
+# Opt-in: add `adr-check` to `check` above if the repo keeps ADRs under docs/adr/.
+# An agent proposes a decision, a human accepts it — and accepting means committing
+# the status line, which is the one signal an agent does not produce on its own.
+# Doctrine: rules/agent/decisions.md. Node (>=18) rather than bash, so `just check`
+# stays cross-platform; the script is a no-op when there are no ADRs.
+adr-check:
+    node scripts/adr-check.mjs

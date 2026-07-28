@@ -6,7 +6,7 @@
     { "from": "agents", "to": ".claude/agents", "kind": "agent" },
     { "from": "rules/agent", "to": ".claude/rules/agent", "kind": "rule" },
     { "from": "rules/common", "to": ".claude/rules/common", "kind": "rule" },
-    { "from": "kit/common", "to": ".claude/kit/common", "kind": "kit", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.)" }
+    { "from": "kit/common", "to": ".claude/kit/common", "kind": "kit", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.) adr-check.mjs is OPT-IN: move it to scripts/ and add `adr-check` to the `check` recipe if the repo keeps ADRs under docs/adr/ (see rules/agent/decisions.md)." }
   ],
   "profiles": {
     "rust": [

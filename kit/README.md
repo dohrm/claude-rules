@@ -14,7 +14,8 @@ copy and adapt.
 binary — `just`, `lefthook`, `cargo`/`clippy`/`deny`/`machete`, `npm`, `go`. A
 repo handed to a Windows client runs `just check` unchanged. The **one** exception
 is `rust/rust-fmt.sh` (bash), needed ONLY by repos with a generated member crate
-— see its header for the portable fallback.
+— see its header for the portable fallback. (`common/adr-check.mjs` is Node rather
+than bash for exactly this reason; it needs Node >= 18 and no dependencies.)
 
 ## The tiers (the justfile is the task layer; hooks + `just check` call it)
 
@@ -23,6 +24,10 @@ is `rust/rust-fmt.sh` (bash), needed ONLY by repos with a generated member crate
 | 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
 | 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
 | 3 | *(CI only)* | PR | mutation testing (`--in-diff`) — NEVER a hook | minutes |
+
+`adr-check` sits in Tier 2 but guards a different thing: not whether the code is
+correct, but whether a **decision** was taken by a human. A green gate is
+permission for code, never for a decision.
 
 The commands **and their paths** live once, in the justfile recipes (via the
 `*_dir` variables). lefthook triggers just call `just <tech>-lint`/`-check`
@@ -57,7 +62,12 @@ installed snippets, or do it by hand:
    move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
    adapt eslint `globalIgnores`; then `lefthook install`.
-4. **Generated code** (only if present): a Rust generated *member* crate — swap
+4. **Decision records** (only if the repo keeps ADRs): move `common/adr-check.mjs`
+   to `scripts/` and add `adr-check` to the `check` recipe. The gate makes
+   accepting an ADR a human act — it fails when a new ADR is not `Proposed`, or
+   when a status line moved without a commit. Doctrine: `../rules/agent/decisions.md`.
+   It is a no-op in a repo with no `docs/adr/`.
+5. **Generated code** (only if present): a Rust generated *member* crate — swap
    the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
    to that crate (clippy lints path-dep members; `--exclude` won't silence them).
    TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
@@ -67,7 +77,8 @@ installed snippets, or do it by hand:
 ```
 kit/
 ├── common/                     # language-agnostic
-│   └── justfile.snippet        # `just check` — the one command an agent runs to self-verify
+│   ├── justfile.snippet        # `just check` — the one command an agent runs to self-verify
+│   └── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
 ├── rust/                       # COMPLETE
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml

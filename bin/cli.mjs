@@ -370,7 +370,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable your techs in the justfile \`check\` recipe.`)
+  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs); adapt eslint globalIgnores; enable your techs — and \`adr-check\` — in the justfile \`check\` recipe.`)
 }
 
 // ----------------------------------------------------------------------- main
