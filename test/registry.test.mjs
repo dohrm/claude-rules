@@ -112,6 +112,16 @@ test('workflow expressions use single quotes for string literals', () => {
   }
 })
 
+// The README's catalogue drifts exactly the way /architect's gating table did.
+test('README profile catalogue lists every profile', () => {
+  const readme = read(REPO, 'README.md')
+  const section = readme.split('### The profile catalogue')[1]?.split('### What the installer')[0]
+  assert.ok(section, 'README: could not find the profile catalogue section')
+  const listed = new Set([...section.matchAll(/`([a-z0-9-]+)`/g)].map(m => m[1]))
+  for (const p of Object.keys(registry.profiles))
+    assert.ok(listed.has(p), `profile "${p}" is missing from the README catalogue`)
+})
+
 test('kit entries that need wiring say so', () => {
   for (const e of allEntries.filter(e => e.kind === 'kit')) {
     const files = walk(join(REPO, e.from))
