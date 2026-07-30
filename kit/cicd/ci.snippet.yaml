@@ -113,7 +113,7 @@ jobs:
     steps:
       - name: Every gate must have actually succeeded
         run: |
-          RESULTS='${{ join(needs.*.result, " ") }}'
+          RESULTS="${{ join(needs.*.result, ' ') }}"
           echo "gate results: $RESULTS"
           for r in $RESULTS; do
             [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }

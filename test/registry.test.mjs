@@ -96,6 +96,22 @@ test('architect gating table lists exactly the registry profiles', () => {
     assert.ok(registry.profiles[p], `architect gating table offers "${p}" — no such profile in the registry`)
 })
 
+// GitHub/Gitea Actions expressions accept ONLY single-quoted string literals; a double
+// quote inside `${{ … }}` is a syntax error that no YAML parser catches — it takes a real
+// runner to reject the file. Shipping a broken workflow in the kit breaks every consumer.
+test('workflow expressions use single quotes for string literals', () => {
+  const files = [...walk(join(REPO, 'kit')), ...walk(join(REPO, '.github'))]
+    .filter(f => f.endsWith('.yml') || f.endsWith('.yaml'))
+  assert.ok(files.length > 0, 'no workflow files found — did the kit move?')
+  for (const file of files) {
+    const rel = file.slice(REPO.length + 1)
+    for (const m of read(file).matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+      assert.doesNotMatch(m[1], /"/,
+        `${rel}: double quote inside \${{ ${m[1].trim()} }} — Actions expressions only accept 'single quotes'`)
+    }
+  }
+})
+
 test('kit entries that need wiring say so', () => {
   for (const e of allEntries.filter(e => e.kind === 'kit')) {
     const files = walk(join(REPO, e.from))
