@@ -58,9 +58,9 @@ explicitly bought.
   Two windows, so a short spike does not page and a slow leak is not invisible.
 - **Every alert carries three things**: an **owner**, a **runbook** link, and one
   **action** the responder can take. Missing any of the three, it is not an alert.
-- **No alert without a runbook.** An alert that arrives with no stated first move
-  costs the responder the time it took to write the runbook, every single time it
-  fires.
+- **No alert without a runbook** (`/runbook` writes one). An alert that arrives with no
+  stated first move costs the responder the time it took to write the runbook, every
+  single time it fires.
 - **Page only for user-visible and actionable-now.** Everything else is a ticket. A
   page at 3 a.m. that resolves itself is a bug in the alert.
 - **An alert nobody acted on in six months is deleted.** Alert fatigue is not a

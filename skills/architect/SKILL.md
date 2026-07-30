@@ -29,6 +29,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `backend` | error contract, config, health, pagination | shape is **backend** or **fullstack** |
 | `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
 | `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
+| `incident` | `/runbook` (one per failure mode) + `/postmortem` (blameless, hands off deltas) | someone is on call for it — the natural pair of `ops` |
 | `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
 | `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |

@@ -34,6 +34,7 @@ npx github:dohrm/claude-rules add ts testing portal-flat   # a React frontend
 npx github:dohrm/claude-rules add testing          # test doctrine: levels, determinism, contracts, mutation ratchet
 npx github:dohrm/claude-rules add cicd             # pipeline + release doctrine, reference workflows, /ci-setup
 npx github:dohrm/claude-rules add ops k8s          # what to emit, SLOs & error budgets, migrations/rollback, /observability (+ the k8s manifest layer)
+npx github:dohrm/claude-rules add incident         # /runbook (one per failure mode) + /postmortem (blameless, hands off deltas)
 npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
 npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system+experience→plan, diagram) + the living-documents rule
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
