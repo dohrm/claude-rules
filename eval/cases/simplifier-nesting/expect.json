@@ -1,0 +1,13 @@
+{
+  "agent": "code-simplifier",
+  "file_changed": true,
+  "file_matches": [
+    "pub fn resolve_label\\(item: &Item, fallback: &str\\) -> String",
+    "fn falls_back_on_an_empty_label"
+  ],
+  "file_not_matches": [
+    "item\\.label\\.clone\\(\\)",
+    "\\}\\s*else\\s*\\{"
+  ],
+  "judge": "Did the simplifier flatten the match without changing what resolve_label returns for Some(non-empty), Some(empty) and None?"
+}

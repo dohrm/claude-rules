@@ -13,7 +13,13 @@ Default: read `docs/PRD.md`. If a file path is passed as an argument, read it. I
 
 ### 2. Extension mode if a PLAN already exists
 
-If `docs/PLAN.md` already exists, read it. Spot the PRD user stories not yet covered by an existing phase, and inconsistencies with a PRD that has moved. Do not rewrite already-validated phases; propose additional phases or targeted extensions, and flag contradictions to the user before writing.
+If `docs/PLAN.md` (or `docs/plan/`) already exists, read the index and only the phases still open. Spot the PRD user stories not yet covered by an existing phase, and inconsistencies with a PRD that has moved. **Never rewrite a shipped phase** — it records what was promised, not what was built. Propose additional phases, and flag contradictions to the user before writing.
+
+**A plan is meant to grow — the file is not.** Growth arrives as a new phase *unit*, never as more prose inside an existing one (`product/documents.md`). If the plan is a single file and is now past ~6 phases or ~400 lines, propose the split before adding anything:
+
+> *"The plan is at N phases / L lines. I'd split it: `docs/plan/NN-<slug>.md` per phase, `docs/PLAN.md` becomes the phase table. Shipped phases move as-is. Go?"*
+
+Do the migration mechanically — one file per existing phase, content unchanged — then add the new phases as units.
 
 ### 3. Explore the codebase
 
@@ -21,7 +27,7 @@ If you haven't already explored the codebase, do it to understand the current ar
 
 ### 4. Identify durable architectural decisions
 
-If `docs/ARCHITECTURE.md` exists (produced by `/architect`), read it and reuse its decisions and ADRs in the plan header — do not re-derive them. Otherwise, identify the high-level decisions that should not move during implementation:
+If `docs/ARCHITECTURE.md` exists (produced by `/architect`), the plan header is a **pointer, not a copy**: one line per decision with its ADR link, ~10 lines total. Restating an ADR's reasoning in the plan creates a second home for it, and the copy is the one that goes stale. Otherwise, identify the high-level decisions that should not move during implementation:
 
 - Route structure / URL patterns
 - Database schema shape
@@ -61,61 +67,61 @@ Iterate until validated.
 
 ### 7. Write the plan
 
-Create `docs/` if absent. Write `docs/PLAN.md` using the template. In extension mode, integrate the additional phases alongside the existing ones without touching already-validated content. Confirm *"✓ written to `docs/PLAN.md`"*.
+Create `docs/` if absent. **Two shapes, one threshold** (`product/documents.md`):
 
-<plan-template>
-# Plan: <feature name>
+- **Up to ~6 phases** — one file, `docs/PLAN.md`: the header, then each phase as `<phase-unit>` under an `## Phase N: …` heading. A directory for three phases is ceremony.
+- **Beyond that** — `docs/PLAN.md` becomes the index (`<plan-index-template>`), one file per phase in `docs/plan/NN-<slug>.md` (`<phase-unit>`).
 
-> Source PRD: <path or identifier>
+In extension mode, add units; never touch a shipped phase. Confirm what was written and, if you migrated, that the phase contents moved unchanged.
 
-## Architectural Decisions
+<plan-index-template>
+# Plan: <project name>
 
-Durable decisions that apply to every phase:
+> Source PRD: `docs/PRD.md` · Architecture: `docs/ARCHITECTURE.md`
 
-- **Routes**: ...
-- **Schema**: ...
-- **Key models**: ...
-- (add/remove sections per context)
+## Where we are
 
----
+Two or three sentences: what is shipped, what is in progress, what the next phase unlocks. This is the paragraph someone reads instead of the whole plan.
 
-## Phase 1: <title>
+## Durable decisions
 
-**User stories**: <list from the PRD>
+One line each, with the ADR link — **pointers, never copies**:
 
-### What we ship
+- **<decision>** — <one line> ([ADR-NNNN](./adr/NNNN-<slug>.md))
 
-Concise description of this vertical slice. Describe the end-to-end behavior, not the layer-by-layer implementation.
+## Phases
 
-### Acceptance criteria
+| # | Phase | Status | Ships | Blocked by |
+|---|-------|--------|-------|------------|
+| [01](./plan/01-<slug>.md) | <title> | Shipped 2026-01-31 | <one line> | — |
+| [02](./plan/02-<slug>.md) | <title> | In progress | <one line> | 01 |
+| [03](./plan/03-<slug>.md) | <title> | Planned | <one line> | 02 |
 
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
+## Out of the plan, for now
 
-## Blocked by
+What was considered and deliberately left out, one line each — the PRD's Out of Scope items that keep coming back as questions.
+<!-- Whole index: ONE screen. Rewritten in full on every update. Nothing here that
+     would need editing when a phase file changes — status and blockers only. -->
+</plan-index-template>
 
-- Reference to the blocking phase (if any)
+<phase-unit>
+<!-- ~400 words. One phase, one vertical slice. As `docs/plan/NN-<slug>.md`, or as a
+     section of PLAN.md below the split threshold. -->
+# Phase NN: <title>
 
-Or *"None — startable immediately"* if there is no blocker.
+- **Status**: Planned | In progress | Shipped <YYYY-MM-DD>
+- **Blocked by**: <phase(s)>, or *None — startable immediately*
+- **User stories**: <US-n from the PRD>
 
----
+## What we ship
 
-## Phase 2: <title>
+The end-to-end behavior of this slice, from the user's side. Not the layer-by-layer implementation, no file or function names.
 
-**User stories**: <list from the PRD>
+## Acceptance criteria
 
-### What we ship
+- [ ] <observable, verifiable — an event, an output, a measure>
 
-...
-
-### Acceptance criteria
-
-- [ ] ...
-
-## Blocked by
-
-- ...
-
-<!-- Repeat for each phase -->
-</plan-template>
+<!-- Once Shipped, this file is frozen: it records what was promised. What was
+     actually built and diverged goes in the ADR's `Implemented` section or in a
+     later phase — never as a quiet edit here. -->
+</phase-unit>

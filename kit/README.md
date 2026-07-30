@@ -27,16 +27,35 @@ than bash for exactly this reason; it needs Node >= 18 and no dependencies.)
 
 `adr-check` sits in Tier 2 but guards a different thing: not whether the code is
 correct, but whether a **decision** was taken by a human. A green gate is
-permission for code, never for a decision.
+permission for code, never for a decision. It also warns (advisory; `--strict` to
+enforce) when a record blows the one-screen budget or invents a section — the two
+ways a decision log becomes something nobody reads. Doctrine:
+`../rules/agent/decisions.md`.
+
+`docs-check` guards the other documents against the same rot. It **fails** when an
+index and its units disagree — a link to a unit that does not exist, a unit no index
+carries — because those are facts, not judgments; it **warns** on the budgets (index
+over a screen, unit over its ceiling, a single-file PRD/PLAN past the split
+threshold, a `(continued)` heading). `docs/adr/` is left to `adr-check`. Doctrine:
+`../rules/product/documents.md`.
 
 The commands **and their paths** live once, in the justfile recipes (via the
 `*_dir` variables). lefthook triggers just call `just <tech>-lint`/`-check`
 (glob-scoped, layout-agnostic); `just check` runs the full set. One source of
 truth — no path duplicated across the kit.
 
+**CI is the third caller of the same recipes**, never a second definition of them:
+`cicd/ci.snippet.yaml` runs `just <tech>-check`, so a gate the pipeline enforces is
+always one an agent can close its own loop on locally. Doctrine:
+`../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
+
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the
 fast loop. It is a PR/CI gate, scoped to changed code, ratcheted from a baseline
-(a healthy repo often sits ~70%, so it starts non-blocking).
+(a healthy repo often sits ~70%, so it starts non-blocking). Tier 3 exists per
+language: `rust/mutation-ci.yaml` (cargo-mutants), `ts/mutation-ci.yaml`
+(Stryker), and `go/coverage-ci.yaml` — a coverage ratchet, because Go has no
+production-grade mutation tool. Doctrine: `../rules/testing/ratchet.md` (install
+it with the `testing` profile).
 
 ## Layout convention (recommended)
 
@@ -78,7 +97,11 @@ installed snippets, or do it by hand:
 kit/
 ├── common/                     # language-agnostic
 │   ├── justfile.snippet        # `just check` — the one command an agent runs to self-verify
-│   └── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
+│   ├── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
+│   └── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
+├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
+│   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
+│   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish
 ├── rust/                       # COMPLETE
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml
@@ -87,10 +110,12 @@ kit/
 │   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
 ├── ts/                         # COMPLETE
 │   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
-│   └── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
+│   ├── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
+│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker, changed files) → .gitea/ or .github/workflows/
 ├── go/                         # COMPLETE
 │   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
-│   └── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+│   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+│   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
 └── portal-flat/                # COMPLETE (frontend, pairs with the portal-flat profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```

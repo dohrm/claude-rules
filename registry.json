@@ -6,7 +6,7 @@
     { "from": "agents", "to": ".claude/agents", "kind": "agent" },
     { "from": "rules/agent", "to": ".claude/rules/agent", "kind": "rule" },
     { "from": "rules/common", "to": ".claude/rules/common", "kind": "rule" },
-    { "from": "kit/common", "to": ".claude/kit/common", "kind": "kit", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.) adr-check.mjs is OPT-IN: move it to scripts/ and add `adr-check` to the `check` recipe if the repo keeps ADRs under docs/adr/ (see rules/agent/decisions.md)." }
+    { "from": "kit/common", "to": ".claude/kit/common", "kind": "kit", "wire": "Merge justfile.snippet into your root justfile and set the *_dir variables to your layout — this is the ONE place paths live. It defines `just check` + per-tech recipes (rust-lint/rust-check, ts-*, go-*) that both the git hooks and the agent call. autonomy.md auto-loads from .claude/rules/agent/ (no wiring). (`claude-rules init` can assemble this for you.) adr-check.mjs is OPT-IN: move it to scripts/ and add `adr-check` to the `check` recipe if the repo keeps ADRs under docs/adr/ (see rules/agent/decisions.md). docs-check.mjs is OPT-IN the same way (`docs-check`), for a repo with a PRD/PLAN under docs/ — it fails on an index and its units disagreeing, warns on the budgets, `--strict` to enforce them (see rules/product/documents.md, shipped with the `product` profile)." }
   ],
   "profiles": {
     "rust": [
@@ -15,11 +15,11 @@
     ],
     "ts": [
       { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
-      { "from": "kit/ts", "to": ".claude/kit/ts", "kind": "kit", "_note": "TS language baseline: quality-gate rules + the kit gates. React frontend architecture lives in the `portal-flat` profile; a Node/TS backend adds `api` + `backend`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`) and set `ts_dir` in the justfile. Adapt eslint.config.base.js globalIgnores into your eslint config." }
+      { "from": "kit/ts", "to": ".claude/kit/ts", "kind": "kit", "_note": "TS language baseline: quality-gate rules + the kit gates. React frontend architecture lives in the `portal-flat` profile; a Node/TS backend adds `api` + `backend`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`) and set `ts_dir` in the justfile. Adapt eslint.config.base.js globalIgnores into your eslint config. Tier 3 (optional, PR-only): move mutation-ci.yaml→.gitea/workflows/ (or .github/workflows/), `npm i -D @stryker-mutator/core` + a runner, `npx stryker init` — see rules/testing/ratchet.md for the calibrate-then-ratchet sequence." }
     ],
     "go": [
       { "from": "rules/go", "to": ".claude/rules/go", "kind": "rule" },
-      { "from": "kit/go", "to": ".claude/kit/go", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml." }
+      { "from": "kit/go", "to": ".claude/kit/go", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just go-lint`/`go-check`) and set `go_dir` in the justfile. Move golangci.base.yml→<go_dir>/.golangci.yml. Tier 3 (optional, PR-only): move coverage-ci.yaml→.gitea/workflows/ (or .github/workflows/) and commit a `.coverage-baseline` next to the module — Go has no production-grade mutation tool, so this is a coverage ratchet (the weaker signal; the file's header says why)." }
     ],
     "godot": [
       { "from": "rules/godot-csharp", "to": ".claude/rules/godot-csharp", "kind": "rule", "_note": "Godot 4 + C# (strong typing) game profile — gate: gamedev. Co-location by entity, composition over inheritance, single typed EventBus, all gameplay data in .tres (zero hardcoded values), legacy .gd migration policy (no new .gd). Path-scoped **/*.cs (+ .tscn/.tres/.gd where relevant)." },
@@ -37,6 +37,17 @@
       { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline)." },
       { "from": "kit/portal-flat", "to": ".claude/kit/portal-flat", "kind": "kit", "wire": "Copy openapi-ts.config.ts to your frontend root. Install: `npm i -D @hey-api/openapi-ts` + `npm i @hey-api/client-axios @tanstack/react-query zod`. Add package.json scripts `generate:api` (\"openapi-ts\", live backend) and `generate:api:file` (same, CI sets OPENAPI_SPEC to the spec artifact). Create src/config/hey-api.ts exporting the client runtimeConfig (base URL + auth interceptor). Ensure eslint globalIgnores and tsconfig exclude src/api/generated. NOT a hook tier — codegen is a dev/CI step, not a gate." }
     ],
+    "testing": [
+      { "from": "rules/testing", "to": ".claude/rules/testing", "kind": "rule", "_note": "Cross-language test doctrine — gate: any repo that has tests (so: always, once code exists). strategy (levels, determinism, flaky policy), contract (the OpenAPI spec as the gated contract between `api` and `portal-flat`, plus events/DB/third parties), ratchet (coverage is a symptom, mutation is the gate, baseline→observe→ratchet). Path-scoped rs/go/ts/tsx. The executable Tier-3 counterparts ship with the language kits: kit/rust/mutation-ci.yaml, kit/ts/mutation-ci.yaml, kit/go/coverage-ci.yaml." }
+    ],
+    "cicd": [
+      { "from": "rules/cicd", "to": ".claude/rules/cicd", "kind": "rule", "_note": "Delivery pipeline doctrine — gate: any repo with a forge. pipeline (CI calls `just check` and never reimplements it; tiers→jobs; pinning, caching, least privilege, no skip-as-pass) + release (the tag is a human act, SemVer on the contract, changelog for consumers, immutable tags). Path-scoped to workflow files + CHANGELOG.md, so it loads when you touch the pipeline, not every session." },
+      { "from": "kit/cicd", "to": ".claude/kit/cicd", "kind": "kit", "wire": "Copy ci.snippet.yaml → .github/workflows/ci.yaml (or .gitea/workflows/), DELETE the jobs for technologies you don't have, and set `runs-on` to your runner label (GitHub: ubuntu-latest; Gitea: often `linux`). Same for release.snippet.yaml if the repo publishes anything — adapt the manifest read + the build/publish steps. Then make the `ci-ok` job the ONE required check in branch protection. `just` must be on the runner (bake it into the image, or keep the pinned install step). `/ci-setup` does all of this for you and prints what's left." },
+      { "from": "skills/ci-setup", "to": ".claude/skills/ci-setup", "kind": "skill", "_note": "Bootstraps or audits the pipeline from what is actually installed (lock + justfile + existing workflows). Its audit mode produces the drift table: any CI command that is not a justfile recipe is drift the agent's local loop cannot see." }
+    ],
+    "tauri": [
+      { "from": "rules/tauri", "to": ".claude/rules/tauri", "kind": "rule", "_note": "Tauri v2 desktop app — gate: EXPLICIT opt-in. Extends `portal-flat` with the IPC transport (invoke/listen, no HTTP, no OpenAPI, no TanStack Query — Zustand stores instead). Install alongside `ts portal-flat rust`." }
+    ],
     "api": [
       { "from": "rules/api", "to": ".claude/rules/api", "kind": "rule", "_note": "Opinionated HTTP-API stack — gate: backend/fullstack. rust=axum+utoipa, go=chi+Huma, node=Fastify. All emit OpenAPI (the contract `portal-flat` generates its client from). Path-scoped per language; add explicitly: `add api`." }
     ],
@@ -50,6 +61,7 @@
       { "from": "skills/loop-setup", "to": ".claude/skills/loop-setup", "kind": "skill", "_note": "Opt-in, language- and host-agnostic skill — frames a self-terminating agent loop (4 preconditions → bounded objective → measurable done-command → budget/iteration guardrails) and writes PLAN.md + MEMORY.md + the loop prompt. Handoff branches per host: Claude /loop, Codex /goal, Cursor automation. Named loop-setup to avoid collision with Claude's built-in /loop. Add explicitly: `add loop-setup`." }
     ],
     "product": [
+      { "from": "rules/product", "to": ".claude/rules/product", "kind": "rule", "_note": "The one convention behind the product skills: a document that must GROW is a directory of append-only units plus a compacted index (the shape `docs/adr/` already has), never one file that gets longer. Carries the per-document split thresholds (plan → phase units, PRD → capability units), the unit/index budgets, the freeze-on-shipped rule, and the one-home-per-fact routing table. Path-scoped to `docs/**/*.md`, so it loads when the agent touches the documents it governs. /prd, /plan and /architect defer to it rather than restating the budgets." },
       { "from": "skills/interview", "to": ".claude/skills/interview", "kind": "skill" },
       { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
       { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },

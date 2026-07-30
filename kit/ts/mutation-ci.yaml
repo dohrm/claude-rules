@@ -1,0 +1,82 @@
+name: Mutation (TS)
+
+# Tier 3 quality gate: are the tests meaningful, or do they just execute code
+# without asserting? Coverage says nothing about this; mutation score does. This
+# is the gate that lets AI-written unit tests be trusted without reading every
+# assertion by hand. Doctrine: rules/testing/ratchet.md.
+#
+# Runs on PR against changed files only so it stays minutes, not hours.
+#
+# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose.
+# First establish a baseline, triage real gaps vs equivalent mutants, THEN set
+# `thresholds.break` in stryker.config.json to the measured baseline and remove
+# continue-on-error. Never a round number — see the ratchet rule.
+#
+# COPY to .gitea/workflows/mutation-ts.yaml (or .github/workflows/). The syntax
+# is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
+# GitHub: `ubuntu-latest`) and the working-directory to your ts_dir.
+#
+# One-time setup in the frontend/package root:
+#   npm i -D @stryker-mutator/core @stryker-mutator/vitest-runner   # or the jest runner
+#   npx stryker init      # then commit stryker.config.json
+# In stryker.config.json, exclude what mutation cannot judge:
+#   "mutate": ["src/**/*.{ts,tsx}", "!src/api/generated/**", "!src/**/*.test.{ts,tsx}",
+#              "!src/**/*.stories.tsx", "!src/main.tsx"]
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  CI: 'true'
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest             # ADAPT to your runner label
+    continue-on-error: true            # ← remove once the baseline is ratcheted
+    defaults:
+      run:
+        working-directory: .           # ADAPT to your ts_dir (e.g. apps/web)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # need the base branch to compute the diff
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Compute changed files
+        id: changed
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
+                  | grep -E '\.(ts|tsx)$' | grep -v -E '(\.test\.|/generated/)' | paste -sd, -)
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "Mutating: ${FILES:-<none>}"
+
+      - name: Mutation testing (changed files only)
+        if: steps.changed.outputs.files != ''
+        run: npx stryker run --mutate "${{ steps.changed.outputs.files }}" --reporters clear-text,html
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report
+          path: reports/mutation/
+
+# ---------------------------------------------------------------------------
+# Nightly full sweep (enable when ready): track the score over time and catch
+# erosion outside changed files.
+#   on:
+#     schedule:
+#       - cron: '0 3 * * *'
+#   then run: npx stryker run   (stryker.config.json still scopes `mutate`)
+# ---------------------------------------------------------------------------

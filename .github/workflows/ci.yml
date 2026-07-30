@@ -1,0 +1,72 @@
+name: CI
+
+# The factory's own gate. Two suites, both dependency-free (node:test only, no
+# install step — giget is imported lazily and the tests run the installer with
+# --local):
+#   test/registry.test.mjs  — static consistency of the asset tree
+#   test/cli.test.mjs       — black-box install/remove/update, per target agent
+#
+# The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
+# CLI and spends real tokens. It is a model-bump check, run on demand — see the
+# eval job below (workflow_dispatch only) and eval/README.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_eval:
+        description: 'Also run the agent eval harness (spends tokens)'
+        type: boolean
+        default: false
+      model:
+        description: 'Model to evaluate (e.g. a candidate alias)'
+        type: string
+        default: ''
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+
+  # The single required check (rules/cicd/pipeline.md): protecting the matrix job
+  # directly means a renamed or skipped leg silently counts as green.
+  ci-ok:
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every gate must have actually succeeded
+        run: |
+          RESULTS='${{ join(needs.*.result, " ") }}'
+          echo "gate results: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }
+          done
+
+  eval:
+    # Manual only: each case invokes `claude` headlessly and costs tokens.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the Claude CLI
+        run: npm i -g @anthropic-ai/claude-code
+      - name: Run the agent regression harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node eval/run.mjs ${{ inputs.model && format('--model {0}', inputs.model) || '' }}

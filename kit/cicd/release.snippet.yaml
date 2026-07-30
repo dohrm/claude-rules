@@ -1,0 +1,102 @@
+name: Release
+
+# Tag-driven release. The human pushes the tag — that push IS the decision
+# (rules/cicd/release.md); everything below is mechanical and reproducible.
+#
+# The job order is the doctrine, in this order and no other:
+#   1. the tag and the manifest version agree (else two sources of truth),
+#   2. the gates pass on the tagged commit (no release past a red or skipped gate),
+#   3. build, checksum, publish what was just tested — never a laptop build.
+#
+# COPY to .github/workflows/release.yaml or .gitea/workflows/release.yaml.
+# ADAPT: `runs-on`, the manifest read in `verify`, the build + publish steps.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write                # needed to create the release; nothing else
+
+env:
+  JUST_VERSION: '1.42.4'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest       # ADAPT to your runner label
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0         # the changelog step reads history
+
+      - name: Tag and manifest must agree
+        id: v
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          # ADAPT to your manifest — exactly ONE of these is the source of truth:
+          #   Rust:  MANIFEST=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          #   Node:  MANIFEST=$(node -p "require('./package.json').version")
+          MANIFEST=$(node -p "require('./package.json').version")
+          echo "tag=$TAG manifest=$MANIFEST"
+          [ "$TAG" = "$MANIFEST" ] || { echo "✗ tag $TAG ≠ manifest $MANIFEST"; exit 1; }
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: The changelog must have an entry for this version
+        run: |
+          grep -qE "^##+ +\[?v?${{ steps.v.outputs.version }}\]?" CHANGELOG.md \
+            || { echo "✗ CHANGELOG.md has no section for ${{ steps.v.outputs.version }}"; exit 1; }
+
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+
+      # The same gate as everywhere else — a release never gets its own weaker one.
+      # ADAPT: install the toolchains this repo needs (see ci.snippet.yaml).
+      - name: just check
+        run: just check
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest       # ADAPT
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADAPT: build the artifact(s). Build ONCE here — what is tested and
+      # published is what gets deployed; never rebuild per environment.
+      - name: Build
+        run: |
+          echo "ADAPT: cargo build --release / npm run build / go build -o dist/ ./..."
+
+      - name: Checksums
+        run: |
+          mkdir -p dist
+          ( cd dist && find . -type f ! -name 'SHA256SUMS' -exec sha256sum {} + > SHA256SUMS )
+          cat dist/SHA256SUMS
+
+      - name: Extract this version's changelog section
+        run: |
+          awk -v v="${{ needs.verify.outputs.version }}" '
+            $0 ~ "^##+ +\\[?v?" v "\\]?" { inside=1; next }
+            inside && /^##+ +\[?v?[0-9]/   { exit }
+            inside                          { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      # GitHub: softprops/action-gh-release or `gh release create`.
+      # Gitea:  the same action usually works against the Gitea API, or use its
+      #         releases API with a repo token — ADAPT and pin by SHA, this step
+      #         has write permission.
+      - name: Create the release
+        run: |
+          echo "ADAPT: gh release create ${{ github.ref_name }} dist/* --notes-file RELEASE_NOTES.md"
+
+# ---------------------------------------------------------------------------
+# Rolling back is releasing, not un-releasing: never delete or move a published
+# tag/artifact (someone already has it in a lockfile). Yank/deprecate it, pin
+# consumers to the previous version, fix forward.
+# ---------------------------------------------------------------------------

@@ -29,10 +29,12 @@ than restating them.
 ```bash
 # in your repo, from its root:
 npx github:dohrm/claude-rules add rust            # or: ts, go — language baselines, combine them
-npx github:dohrm/claude-rules add rust hexagonal api backend   # a Rust backend (architecture patterns are opt-in, gated by shape)
-npx github:dohrm/claude-rules add ts portal-flat   # a React frontend
+npx github:dohrm/claude-rules add rust testing hexagonal api backend   # a Rust backend (architecture patterns are opt-in, gated by shape)
+npx github:dohrm/claude-rules add ts testing portal-flat   # a React frontend
+npx github:dohrm/claude-rules add testing          # test doctrine: levels, determinism, contracts, mutation ratchet
+npx github:dohrm/claude-rules add cicd             # pipeline + release doctrine, reference workflows, /ci-setup
 npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
-npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system+experience→plan, diagram)
+npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system+experience→plan, diagram) + the living-documents rule
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
 npx github:dohrm/claude-rules add rust --agent claude   # narrow to one agent (default: ALL agents)
 npx github:dohrm/claude-rules remove cqrs         # inverse of add: delete a profile's files, update the lock
@@ -109,13 +111,30 @@ accepted degradation vs Claude/Cursor, which scope automatically.
 claude-rules/
 ├── registry.json             # drives the installer: profiles → files → dest
 ├── bin/cli.mjs               # the npx installer (giget-based; dumb, data-driven)
-├── rules/                    # auto-loaded prose, path-scoped: language baselines (rust/, go/, ts) + architecture patterns (hexagonal/, cqrs/, portal-flat/, api/, backend/) + agent/
+├── rules/                    # auto-loaded prose, path-scoped: language baselines (rust/, go/, ts) + architecture patterns (hexagonal/, cqrs/, portal-flat/, api/, backend/) + delivery (testing/, cicd/) + product/ + agent/
 
-├── kit/                      # executable gates (rust/, ts/, go/) — see kit/README.md
+├── kit/                      # executable gates (rust/, ts/, go/, cicd/) — see kit/README.md
 ├── agents/                   # thin subagent defs (code-reviewer, code-simplifier)
 ├── skills/                   # Claude Code skills, canonical <name>/SKILL.md dirs (investigate, product/*, rust-add-domain)
-└── guidelines/               # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
+├── guidelines/               # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
+├── test/                     # `npm test` — the installer + asset-tree gate (node:test, no deps, no network)
+└── eval/                     # agent regression harness (spends tokens; manual, see eval/README.md)
 ```
+
+## Verifying the factory itself
+
+```bash
+npm test                # installer black-box (add/remove/update per agent) + asset-tree consistency
+node eval/run.mjs       # agent rot detector — calls `claude`, spends tokens, run on a model bump
+```
+
+`npm test` needs no install: both suites use `node:test` only, and the CLI tests
+run the installer against the working tree with `--local`. It runs on every PR
+([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)); `eval/` is manual
+(`workflow_dispatch`). The asset-tree suite is what keeps this README honest —
+it fails when a rule, skill or kit directory is not reachable from
+`registry.json`, when a skill's frontmatter name drifts from its directory, or
+when `/architect`'s gating table and the registry disagree.
 
 ## Guidelines
 

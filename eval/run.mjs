@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Agent regression harness — detects rot in the code-reviewer when the model
-// changes. For each case: build a throwaway workspace with the shared agent +
-// rules + the fixture, invoke the reviewer headlessly, assert on its output.
+// Agent regression harness — detects rot in the shared subagents when the model
+// changes. For each case: build a throwaway workspace with the target agent +
+// rules + the fixture, invoke it headlessly, assert on its output (and, for
+// agents that edit code, on the resulting file).
 // See eval/README.md. No dependency beyond Node + the `claude` CLI.
 //
 // Usage:
@@ -25,25 +26,39 @@ const only = argv.find(a => !a.startsWith('--') && a !== model)
 
 if (judge) console.log('note: --judge is stubbed (v2). Running deterministic checks only.\n')
 
-// Which shared rules the reviewer needs loaded (path-scoped ones fire on file read).
-const RULE_DIRS = ['rust', 'architecture', 'agent']
+// Which shared rules a case needs loaded (path-scoped ones fire on file read).
+// Override per case with "rules": [...] in expect.json.
+const DEFAULT_RULE_DIRS = ['common', 'agent', 'rust', 'hexagonal', 'testing']
 
-function setupWorkspace(caseDir) {
-  const ws = mkdtempSync(join(tmpdir(), 'cr-eval-'))
-  mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
-  cpSync(join(REPO, 'agents', 'code-reviewer.md'), join(ws, '.claude', 'agents', 'code-reviewer.md'))
-  for (const d of RULE_DIRS) {
-    const src = join(REPO, 'rules', d)
-    if (existsSync(src)) cpSync(src, join(ws, '.claude', 'rules', d), { recursive: true })
-  }
-  for (const f of readdirSync(caseDir)) {
-    if (f.startsWith('input.')) cpSync(join(caseDir, f), join(ws, f))
-  }
-  return ws
+// Per-agent default prompt. `{file}` is the case fixture.
+const PROMPTS = {
+  'code-reviewer': 'You MUST use the code-reviewer subagent to review the file `{file}` in this directory. Return its full review verbatim, including the trailing CI_VERDICT comment line.',
+  'code-simplifier': 'You MUST use the code-simplifier subagent to simplify the file `{file}` in this directory. It must edit the file in place, preserving behavior exactly. Return its report verbatim.',
 }
 
-function invokeReviewer(ws) {
-  const prompt = 'You MUST use the code-reviewer subagent to review the file `input.rs` in this directory. Return its full review verbatim, including the trailing CI_VERDICT comment line.'
+function setupWorkspace(caseDir, expect) {
+  const ws = mkdtempSync(join(tmpdir(), 'cr-eval-'))
+  mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
+  const agent = expect.agent || 'code-reviewer'
+  cpSync(join(REPO, 'agents', `${agent}.md`), join(ws, '.claude', 'agents', `${agent}.md`))
+  for (const d of expect.rules || DEFAULT_RULE_DIRS) {
+    const src = join(REPO, 'rules', d)
+    if (existsSync(src)) cpSync(src, join(ws, '.claude', 'rules', d), { recursive: true })
+    else throw new Error(`case requests rules/${d}, which does not exist`)
+  }
+  let file = null
+  for (const f of readdirSync(caseDir)) {
+    if (f.startsWith('input.')) { cpSync(join(caseDir, f), join(ws, f)); file = f }
+  }
+  if (!file) throw new Error('no input.* fixture in the case directory')
+  return { ws, file }
+}
+
+function invokeAgent(ws, expect, file) {
+  const agent = expect.agent || 'code-reviewer'
+  const template = expect.prompt || PROMPTS[agent]
+  if (!template) throw new Error(`no default prompt for agent "${agent}" — set "prompt" in expect.json`)
+  const prompt = template.replace('{file}', file)
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose',
                 '--forward-subagent-text', '--dangerously-skip-permissions']
   if (model) args.push('--model', model)
@@ -83,12 +98,20 @@ function rx(pattern) {
   return m ? new RegExp(m[2], m[1]) : new RegExp(pattern)
 }
 
-function assertCase(out, expect) {
+function assertCase(out, expect, fileText, fileBefore) {
   const fails = []
   for (const re of expect.stdout_matches || [])
     if (!rx(re).test(out)) fails.push(`expected to match /${re}/`)
   for (const re of expect.stdout_not_matches || [])
     if (rx(re).test(out)) fails.push(`should NOT match /${re}/`)
+  // For agents that edit code (code-simplifier), the resulting file is the real
+  // assertion surface — the report is only what the agent claims it did.
+  for (const re of expect.file_matches || [])
+    if (!rx(re).test(fileText)) fails.push(`fixture expected to match /${re}/ after the run`)
+  for (const re of expect.file_not_matches || [])
+    if (rx(re).test(fileText)) fails.push(`fixture should NOT match /${re}/ after the run`)
+  if (expect.file_changed === true && fileText === fileBefore) fails.push('fixture was not modified')
+  if (expect.file_changed === false && fileText !== fileBefore) fails.push('fixture was modified but should not have been')
   if (expect.ci_verdict_in) {
     const m = out.match(/CI_VERDICT:\s*([A-Z]+)/)
     const v = m ? m[1] : '(none)'
@@ -105,18 +128,21 @@ let failed = 0
 for (const name of names) {
   const caseDir = join(CASES, name)
   const expect = JSON.parse(readFileSync(join(caseDir, 'expect.json'), 'utf8'))
-  const ws = setupWorkspace(caseDir)
+  let ws = null
   try {
-    const { text, subagentRan } = parseOutput(invokeReviewer(ws))
-    if (!subagentRan) { console.log(`⚠ ERROR ${name}: code-reviewer subagent was not invoked (non-deterministic delegation)`); failed++; continue }
-    const fails = assertCase(text, expect)
+    let file
+    ;({ ws, file } = setupWorkspace(caseDir, expect))
+    const before = readFileSync(join(ws, file), 'utf8')
+    const { text, subagentRan } = parseOutput(invokeAgent(ws, expect, file))
+    if (!subagentRan) { console.log(`⚠ ERROR ${name}: ${expect.agent || 'code-reviewer'} subagent was not invoked (non-deterministic delegation)`); failed++; continue }
+    const fails = assertCase(text, expect, readFileSync(join(ws, file), 'utf8'), before)
     if (fails.length) { console.log(`✗ FAIL  ${name}\n   - ${fails.join('\n   - ')}`); failed++ }
     else console.log(`✓ PASS  ${name}`)
     if (judge && expect.judge) console.log(`   judge (skipped): ${expect.judge}`)
   } catch (e) {
     console.log(`⚠ ERROR ${name}: ${e.message}`); failed++
   } finally {
-    rmSync(ws, { recursive: true, force: true })
+    if (ws) rmSync(ws, { recursive: true, force: true })
   }
 }
 
