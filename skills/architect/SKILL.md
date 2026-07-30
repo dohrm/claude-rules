@@ -27,6 +27,8 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `hexagonal` | ports/adapters, inward deps | shape is **backend** or **fullstack** |
 | `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify) | shape is **backend** or **fullstack** |
 | `backend` | error contract, config, health, pagination | shape is **backend** or **fullstack** |
+| `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
+| `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
 | `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
 | `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
@@ -35,7 +37,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 
 Examples:
-- Rust backend → `npx github:dohrm/claude-rules add rust testing cicd hexagonal api backend`
+- Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
 - React frontend → `npx github:dohrm/claude-rules add ts testing cicd portal-flat`
 - Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend portal-flat`
 - Node/TS backend → `add ts testing cicd api backend` (Fastify; not `portal-flat`)

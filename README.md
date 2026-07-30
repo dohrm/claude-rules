@@ -33,6 +33,7 @@ npx github:dohrm/claude-rules add rust testing hexagonal api backend   # a Rust 
 npx github:dohrm/claude-rules add ts testing portal-flat   # a React frontend
 npx github:dohrm/claude-rules add testing          # test doctrine: levels, determinism, contracts, mutation ratchet
 npx github:dohrm/claude-rules add cicd             # pipeline + release doctrine, reference workflows, /ci-setup
+npx github:dohrm/claude-rules add ops k8s          # what to emit, SLOs & error budgets, migrations/rollback, /observability (+ the k8s manifest layer)
 npx github:dohrm/claude-rules add investigate      # opt-in skill: 4-phase debug methodology
 npx github:dohrm/claude-rules add product          # opt-in product-lifecycle skills (interview→prd→architect+design-system+experience→plan, diagram) + the living-documents rule
 npx github:dohrm/claude-rules add rust ts --ref v0.1.0
@@ -111,7 +112,7 @@ accepted degradation vs Claude/Cursor, which scope automatically.
 claude-rules/
 ├── registry.json             # drives the installer: profiles → files → dest
 ├── bin/cli.mjs               # the npx installer (giget-based; dumb, data-driven)
-├── rules/                    # auto-loaded prose, path-scoped: language baselines (rust/, go/, ts) + architecture patterns (hexagonal/, cqrs/, portal-flat/, api/, backend/) + delivery (testing/, cicd/) + product/ + agent/
+├── rules/                    # auto-loaded prose, path-scoped: language baselines (rust/, go/, ts) + architecture patterns (hexagonal/, cqrs/, portal-flat/, api/, backend/) + delivery & run (testing/, cicd/, ops/, k8s/) + product/ + agent/
 
 ├── kit/                      # executable gates (rust/, ts/, go/, cicd/) — see kit/README.md
 ├── agents/                   # thin subagent defs (code-reviewer, code-simplifier)
