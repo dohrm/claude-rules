@@ -129,11 +129,29 @@ function setupWorkspace(caseDir, expect) {
 
 // ----------------------------------------------------------------------- invoking
 function invokeOnce(ws, prompt) {
-  const r = spawnSync(runner.bin, runner.args({ prompt, model, streaming: false }), {
+  const r = spawnSync(runner.bin, runner.args({ prompt, model, ws, streaming: false }), {
     cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
   })
   if (r.error) throw new Error(`failed to spawn ${runner.bin}: ${r.error.message}`)
   return r.stdout || ''
+}
+
+// A scripted user, second flavour: no streaming stdin, but the CLI can resume its own
+// last conversation (`--continue`). One invocation per turn, same session. Serial by
+// construction — "the most recent conversation" is global state, and cases run one at
+// a time.
+function driveByResume(ws, prompt, answers) {
+  let raw = invokeOnce(ws, prompt)
+  let turns = 1
+  for (const answer of answers) {
+    const r = spawnSync(runner.bin, runner.resume({ answer, model, ws }), {
+      cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
+    })
+    if (r.error) throw new Error(`failed to resume ${runner.bin}: ${r.error.message}`)
+    raw += '\n' + (r.stdout || '')
+    turns++
+  }
+  return { raw, turns, unanswered: 0 }
 }
 
 // A scripted user. A streaming runner keeps the session open on stdin, so an
@@ -142,7 +160,7 @@ function invokeOnce(ws, prompt) {
 // stdin, which ends the session after the turn in flight.
 function driveConversation(ws, prompt, answers) {
   return new Promise((resolve, reject) => {
-    const child = spawn(runner.bin, runner.args({ prompt, model, streaming: true }),
+    const child = spawn(runner.bin, runner.args({ prompt, model, ws, streaming: true }),
       { cwd: ws, stdio: ['pipe', 'pipe', 'pipe'] })
     const queue = [...answers]
     let raw = '', buf = '', turns = 0, closed = false
@@ -290,8 +308,8 @@ for (const name of names) {
 
   // A runner that cannot do what the case needs is SKIPPED, loudly and by name.
   // Silently running a weaker version of the case would be worse than not running it.
-  const cannot = answersInline && expect.answers?.length && !runner.streaming
-    ? unsupported({ ...runner, streaming: true }, expect)   // the fold-in makes it single-shot
+  const cannot = answersInline && expect.answers?.length && !runner.drive
+    ? unsupported({ ...runner, drive: "stdin" }, expect)   // the fold-in makes it single-shot
     : unsupported(runner, expect)
   if (cannot) { console.log(`⊘ SKIP  ${name} — ${cannot}`); skipped++; continue }
 
@@ -307,7 +325,7 @@ for (const name of names) {
 
     // Non-streaming runner + --answers-inline: hand over the answers up front instead
     // of turn by turn. It tests the OUTPUT, not the questioning — say so in the note.
-    const foldIn = answersInline && expect.answers?.length && !runner.streaming
+    const foldIn = answersInline && expect.answers?.length && !runner.drive
     if (foldIn) {
       prompt += `\n\nAnswers to the questions you would otherwise ask, in order — use them`
         + ` and do not stop to ask:\n${expect.answers.map((a, i) => `${i + 1}. ${a}`).join('\n')}`
@@ -324,7 +342,9 @@ for (const name of names) {
 
     let raw, note = ''
     if (expect.answers?.length && !foldIn) {
-      const r = await driveConversation(ws, prompt, expect.answers)
+      const r = runner.drive === 'resume'
+        ? driveByResume(ws, prompt, expect.answers)
+        : await driveConversation(ws, prompt, expect.answers)
       raw = r.raw
       note = ` (${r.turns} turns${r.unanswered ? `, ${r.unanswered} scripted answers unused` : ''})`
       // Unused answers mean the skill stopped asking early — worth seeing, not a failure.

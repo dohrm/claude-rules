@@ -73,15 +73,28 @@ node eval/run.mjs --bin ./build/claude                  # the claude preset, ano
 
 | Runner | Layout | Scripted answers | Subagent cases | Status |
 |---|---|---|---|---|
-| `claude` | `.claude/` | yes (`--input-format stream-json`) | yes | **verified** |
+| `claude` | `.claude/` | yes — streamed over stdin | yes | **verified** |
+| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | yes — one invocation per turn (`--continue`) | no (agents ship in plugins) | **verified** |
 | `opencode` | `.opencode/` + `AGENTS.md` | no | yes | invocation unverified |
 | `codex` | `.agents/` + `AGENTS.md` | no | no (no file subagents) | invocation unverified |
-| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | no | no | invocation unverified |
 | `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
 
 An entry marked *unverified* was written from the tool's documented non-interactive
 invocation and has never been run here — the harness says so at startup, and a wrong
 flag is wrong on exactly one line.
+
+**Confirming one is worth the half hour.** `antigravity` was wrong in three ways at
+once, and each failed *silently*: it uses Go-style flags (`--flag value` swallows the
+value, so `--dangerously-skip-permissions "…"` made the prompt disappear), `-p` takes
+the prompt as its value rather than preceding it, and it **ignores the process cwd** —
+it runs from its own install directory, so without `--add-dir` the agent cannot see a
+single installed asset and answers confidently from nothing. A `--help` page shows
+none of that.
+
+The payoff is the comparison: given the same `/runbook` skill and the same fixture,
+Antigravity produced the same section structure and harvested all four real justfile
+recipes. That is the question this harness exists to answer — *does the rule survive
+the trip to another agent?*
 
 **A local or self-hosted model** is usually not a new runner: Claude Code pointed at
 another endpoint is still Claude Code. Export the endpoint and pick the model — the

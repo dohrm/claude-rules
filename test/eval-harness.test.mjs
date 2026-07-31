@@ -68,7 +68,7 @@ test('an unknown runner names the ones that exist', () => {
 })
 
 test('an unverified preset warns before it is used', () => {
-  const r = run(['--runner', 'antigravity', '--setup-only'])
+  const r = run(['--runner', 'codex', '--setup-only'])
   assert.match(r.out, /never been run against the real CLI/)
 })
 

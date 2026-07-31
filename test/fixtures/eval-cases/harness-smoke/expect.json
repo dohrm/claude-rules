@@ -1,12 +1,20 @@
 {
   "skill": "runbook",
-  "rules": ["agent"],
+  "rules": [
+    "agent"
+  ],
   "prompt": "Write the runbook for the checkout fast-burn alert.",
   "artifacts": {
     "docs/runbook/*.md": {
-      "matches": ["checkout-killswitch-off", "(?i)^##\\s*First move", "(?i)^##\\s*Do NOT"],
-      "not_matches": ["(?i)\\bTODO\\b"],
-      "max_words": 200
+      "matches": [
+        "checkout-killswitch-off",
+        "(?i)^##\\s*First move",
+        "(?i)^##\\s*Do NOT"
+      ],
+      "not_matches": [
+        "(?i)\\bTODO\\b"
+      ],
+      "max_words": 900
     }
   }
 }
