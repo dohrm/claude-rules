@@ -5,17 +5,20 @@
 // four facts — the command line, the asset layout, the output format, and what the
 // tool can and cannot do — and adding one is a table entry, not a code change.
 //
-// VERIFIED HERE: `claude`, `antigravity`, `opencode`, and the generic `--cmd` path
-// (against a fake runner in test/). Every entry marked `unverified` is written from
-// the tool's documented non-interactive invocation and has NOT been run on this
-// machine. The harness says so at startup, and a wrong flag is wrong on exactly one
-// line — which is the point of the table. Confirm one, drop the flag, it stops warning.
+// VERIFIED HERE: `claude`, `opencode`, `codex`, `antigravity`, and the generic
+// `--cmd` path (against a fake runner in test/). An entry marked `unverified` was
+// written from documentation and never run; the harness says so at startup, and a
+// wrong flag is wrong on exactly one line — which is the point of the table.
 //
-// Confirming one is worth the half hour. Both presets written blind were wrong:
-// `antigravity` in three ways at once (flag syntax, where the prompt goes, and an
-// ignored cwd), `opencode` by missing the one flag without which it stops for a
-// permission prompt and writes nothing. Every one of those failed SILENTLY — an
-// answer to the wrong question, or an empty workspace. None is visible from --help.
+// Confirming one is worth the half hour. ALL THREE presets written blind were wrong,
+// each in a way that fails SILENTLY rather than loudly:
+//   • antigravity — Go flag syntax, `-p` takes the prompt as its VALUE, and it ignores
+//     the process cwd, so without --add-dir the agent sees no assets and answers anyway;
+//   • opencode — no `--auto`, so it stops at a permission prompt and writes nothing;
+//   • codex — writes are gated by the SANDBOX (`-s workspace-write`), not by an
+//     approval flag, so the obvious guess produces an empty workspace.
+// None of that is visible from a --help page, and every one of them reads as
+// "the skill does not work on this agent" when it is really "the invocation is wrong".
 
 // Where each agent expects its assets. Mirrors bin/cli.mjs's emitters; the workspace
 // is throwaway, so `agentsMd` gets a minimal generated file rather than the
@@ -64,14 +67,34 @@ export const RUNNERS = {
     resume: ({ answer, model }) => ['run', '--continue', '--auto', ...withModel(model), answer],
   },
 
+  // Codex. Reads AGENTS.md and discovers skills from both .agents/skills/ and
+  // .codex/skills/ (probed). `-s workspace-write` is what lets it write the artifact
+  // without an approval prompt — the sandbox, not an approval flag, is the gate here.
+  // `exec resume --last` continues the previous session, so scripted answers work.
   codex: {
     bin: 'codex',
     layout: 'agents',
     format: 'text',
-    drive: null,
+    drive: 'resume',
     subagents: false,         // no file-based subagents (same gap the installer reports)
+    args: ({ prompt, model }) =>
+      ['exec', '--color', 'never', '-s', 'workspace-write', ...withModel(model), prompt],
+    resume: ({ answer, model }) =>
+      ['exec', 'resume', '--last', '--color', 'never', '-s', 'workspace-write',
+       ...withModel(model), answer],
+  },
+
+  // Cursor's agent CLI — NOT verified here (not installed). A starting point, and the
+  // entry that keeps the "unverified" warning honest: written from documentation,
+  // which the two presets before it proved is not the same as working.
+  cursor: {
+    bin: 'cursor-agent',
+    layout: 'agents',
+    format: 'text',
+    drive: null,
+    subagents: false,
     unverified: true,
-    args: ({ prompt, model }) => ['exec', ...withModel(model), prompt],
+    args: ({ prompt, model }) => ['-p', ...withModel(model), prompt],
   },
 
   // Antigravity (`agy`). Its customization root is `.agents/`: skills at

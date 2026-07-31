@@ -23,7 +23,8 @@ gives the skill a fixture repo to read and asserts on what it wrote. The runner:
 
 1. makes a throwaway git workspace: the case's `files/` tree committed as the
    baseline, the case's `input.*` on top as the uncommitted working change,
-2. installs the target agent or skill + its rules into `.claude/`,
+2. installs the target agent or skill + its rules **where that runner reads them**
+   (`.claude/`, `.opencode/`, `.agents/` + an `AGENTS.md` — see the runner table),
 3. invokes it **headlessly** at a chosen `--model` — single-shot, or driven turn by
    turn from the case's scripted `answers`,
 4. asserts: regex over what it said, regex over the files it wrote, and the kit's own
@@ -45,7 +46,7 @@ node eval/run.mjs --timeout 900       # per-case seconds (default 600)
 node eval/run.mjs --judge             # also grade fuzzy criteria
 ```
 
-⚠️ Each case spends real tokens (it calls `claude`). Keep cases **few and
+⚠️ Each case spends real tokens (it calls a real agent CLI). Keep cases **few and
 high-value** — this suite tests the perishable layer, so it must not itself
 become a maintenance burden. Add a case only when it guards a real behavior.
 A skill case runs a whole consultation: budget minutes, not seconds
@@ -67,24 +68,25 @@ output format, and what the tool can and cannot do — and they live in one tabl
 ```bash
 node eval/run.mjs --runner opencode                     # a preset
 node eval/run.mjs --runner codex --model gpt-5.1        # …with a model
-node eval/run.mjs --cmd "agy run {prompt}" --format text --layout agents
+node eval/run.mjs --cmd "my-agent --run {prompt}" --format text --layout agents
 node eval/run.mjs --bin ./build/claude                  # the claude preset, another binary
 ```
 
 | Runner | Layout | Scripted answers | Subagent cases | Status |
 |---|---|---|---|---|
 | `claude` | `.claude/` | yes — streamed over stdin | yes | **verified** |
-| `opencode` | `.opencode/` + `AGENTS.md` | yes — one invocation per turn (`--continue`) | skipped: its output does not say whether one ran | **verified** |
-| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | yes — one invocation per turn (`--continue`) | no (agents ship in plugins) | **verified** |
-| `codex` | `.agents/` + `AGENTS.md` | no | no (no file subagents) | invocation unverified |
+| `opencode` | `.opencode/` + `AGENTS.md` | yes — one invocation per turn | skipped: output does not say whether one ran | **verified** |
+| `codex` | `.agents/` + `AGENTS.md` | yes — `exec resume --last` | no (no file subagents) | **verified** |
+| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | yes — one invocation per turn | no (agents ship in plugins) | **verified** |
+| `cursor` (`cursor-agent`) | `.agents/` + `AGENTS.md` | no | no | invocation unverified |
 | `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
 
-An entry marked *unverified* was written from the tool's documented non-interactive
-invocation and has never been run here — the harness says so at startup, and a wrong
-flag is wrong on exactly one line.
+An entry marked *unverified* was written from documentation and has never been run
+here — the harness says so at startup, and a wrong flag is wrong on exactly one line.
 
-**Confirming one is worth the half hour.** Both presets written blind were wrong, and
-every failure was silent:
+**Confirming one is worth the half hour.** All three presets written blind were wrong,
+and each failed *silently* — as "the skill does not work on this agent" rather than
+"the invocation is wrong":
 
 - `antigravity` — Go-style flags (`--flag value` swallows the value, so
   `--dangerously-skip-permissions "…"` turned the *flag name* into the prompt), `-p`
@@ -92,13 +94,13 @@ every failure was silent:
   cwd**: it runs from its own install directory, so without `--add-dir` the agent sees
   no installed asset at all — and answers confidently anyway.
 - `opencode` — needs `--auto`, or it stops at a permission prompt and writes nothing.
-  One missing flag between "the skill works" and "no artifact".
+- `codex` — writes are gated by the **sandbox** (`-s workspace-write`), not by an
+  approval flag. The obvious guess produces an empty workspace.
 
 The payoff is the comparison. Given the same `/runbook` skill and the same fixture,
-Claude, opencode and Antigravity each produced the same section structure and
-harvested all four real justfile recipes — none invented a command. That is the
-question this harness exists to answer: *does the rule survive the trip to another
-agent?*
+**all four agents produced the same section structure and harvested the real justfile
+recipes — none invented a command.** That is the question this harness exists to
+answer: *does the rule survive the trip to another agent?*
 
 Two practical notes: a runner has to be on `PATH` for the harness to spawn it (or pass
 `--bin ~/.opencode/bin/opencode`), and text-mode runners have their ANSI colour codes
