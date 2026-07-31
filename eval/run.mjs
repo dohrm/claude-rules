@@ -15,30 +15,49 @@
 // See eval/README.md. No dependency beyond Node + the `claude` CLI.
 //
 // Usage:
-//   node eval/run.mjs                      # all cases, default model
+//   node eval/run.mjs                      # all cases, default runner (claude), default model
 //   node eval/run.mjs --model <alias|id>   # re-run against a candidate model
 //   node eval/run.mjs runbook-commands     # a single case
+//   node eval/run.mjs --runner opencode    # another agent CLI (see eval/runners.mjs)
+//   node eval/run.mjs --bin ./my-claude    # same preset, a different binary
+//   node eval/run.mjs --cmd "agy run {prompt}" --format text   # any other command
+//   node eval/run.mjs --answers-inline     # fold scripted answers into the prompt (non-streaming runners)
+//   node eval/run.mjs --cases <dir>        # a different case directory
 //   node eval/run.mjs --timeout 900        # per-case seconds (default 600)
 //   node eval/run.mjs --keep               # keep the workspaces to inspect them
 //   node eval/run.mjs --setup-only         # build the workspaces and stop (free: authoring a case)
 //   node eval/run.mjs --judge              # (v2, not yet implemented — stubbed)
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
+import { LAYOUTS, resolveRunner, unsupported } from './runners.mjs'
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)))   // claude-rules root
-const CASES = join(REPO, 'eval', 'cases')
 
 const argv = process.argv.slice(2)
 const flag = (name, fallback = null) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback }
+const VALUE_FLAGS = ['--model', '--timeout', '--runner', '--bin', '--cmd', '--layout', '--format', '--cases']
 const model = flag('--model')
 const timeoutMs = Number(flag('--timeout', '600')) * 1000
 const judge = argv.includes('--judge')
 const keep = argv.includes('--keep')
 const setupOnly = argv.includes('--setup-only')   // spends no tokens: check a new case's fixtures
-const only = argv.find(a => !a.startsWith('--') && a !== model && a !== flag('--timeout', null))
+const answersInline = argv.includes('--answers-inline')
+const CASES = flag('--cases') || join(REPO, 'eval', 'cases')
+const values = new Set(VALUE_FLAGS.map(f => flag(f)).filter(Boolean))
+const only = argv.find(a => !a.startsWith('--') && !values.has(a))
+
+const runner = resolveRunner({
+  runner: flag('--runner'), bin: flag('--bin'), cmd: flag('--cmd'),
+  layout: flag('--layout'), format: flag('--format'),
+})
+const layout = LAYOUTS[runner.layout]
+if (!layout) { console.error(`unknown layout "${runner.layout}". Known: ${Object.keys(LAYOUTS).join(', ')}`); process.exit(2) }
+if (runner.unverified)
+  console.log(`note: the "${runner.name}" invocation has never been run against the real CLI.`
+    + ` If it fails on a flag, fix the one line in eval/runners.mjs.\n`)
 
 if (judge) console.log('note: --judge is stubbed (v2). Running deterministic checks only.\n')
 
@@ -53,23 +72,36 @@ const PROMPTS = {
 }
 
 // --------------------------------------------------------------------- workspace
+const walkMd = (dir, base = '') => readdirSync(dir).flatMap(n =>
+  statSync(join(dir, n)).isDirectory() ? walkMd(join(dir, n), join(base, n)) : (n.endsWith('.md') ? [join(base, n)] : []))
+
 function setupWorkspace(caseDir, expect) {
   const ws = mkdtempSync(join(tmpdir(), 'cr-eval-'))
 
-  // Rules the target needs, as the installer would place them.
-  for (const d of expect.rules || DEFAULT_RULE_DIRS) {
+  // Assets where THIS runner reads them (eval/runners.mjs). Same destinations the
+  // installer emits to, so a case exercises the assets as that agent actually sees them.
+  const ruleDirs = expect.rules || DEFAULT_RULE_DIRS
+  for (const d of ruleDirs) {
     const src = join(REPO, 'rules', d)
     if (!existsSync(src)) throw new Error(`case requests rules/${d}, which does not exist`)
-    cpSync(src, join(ws, '.claude', 'rules', d), { recursive: true })
+    cpSync(src, join(ws, layout.rules, d), { recursive: true })
+  }
+  // Agents without per-file path scoping read one file; the workspace is throwaway,
+  // so this is a plain generated pointer, not the installer's managed block.
+  if (layout.agentsMd) {
+    const refs = ruleDirs.flatMap(d => walkMd(join(REPO, 'rules', d))
+      .map(f => `- read \`${join(layout.rules, d, f)}\` when working on files it applies to`))
+    writeFileSync(join(ws, 'AGENTS.md'), `# Project rules\n\n${refs.join('\n')}\n`)
   }
   if (expect.agent) {
-    mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
-    cpSync(join(REPO, 'agents', `${expect.agent}.md`), join(ws, '.claude', 'agents', `${expect.agent}.md`))
+    if (!layout.agents) throw new Error(`${runner.name} has no place to install a subagent`)
+    mkdirSync(join(ws, layout.agents), { recursive: true })
+    cpSync(join(REPO, 'agents', `${expect.agent}.md`), join(ws, layout.agents, `${expect.agent}.md`))
   }
   if (expect.skill) {
     const src = join(REPO, 'skills', expect.skill)
     if (!existsSync(src)) throw new Error(`case targets skill "${expect.skill}", which does not exist`)
-    cpSync(src, join(ws, '.claude', 'skills', expect.skill), { recursive: true })
+    cpSync(src, join(ws, layout.skills, expect.skill), { recursive: true })
   }
 
   // A whole fixture tree (a justfile, docs/, manifests…) — the repo the skill reads.
@@ -96,28 +128,21 @@ function setupWorkspace(caseDir, expect) {
 }
 
 // ----------------------------------------------------------------------- invoking
-const baseArgs = () => {
-  const args = ['-p', '--output-format', 'stream-json', '--verbose',
-                '--forward-subagent-text', '--dangerously-skip-permissions']
-  if (model) args.push('--model', model)
-  return args
-}
-
 function invokeOnce(ws, prompt) {
-  const r = spawnSync('claude', [...baseArgs(), prompt], {
+  const r = spawnSync(runner.bin, runner.args({ prompt, model, streaming: false }), {
     cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
   })
-  if (r.error) throw new Error(`failed to spawn claude: ${r.error.message}`)
+  if (r.error) throw new Error(`failed to spawn ${runner.bin}: ${r.error.message}`)
   return r.stdout || ''
 }
 
-// A scripted user. `claude --input-format stream-json` keeps the session open on
-// stdin, so an interactive skill (one question at a time) can be driven to the end:
-// every time a turn completes, we send the next scripted answer; when the script runs
-// out we close stdin, which ends the session after the turn in flight.
+// A scripted user. A streaming runner keeps the session open on stdin, so an
+// interactive skill (one question at a time) can be driven to the end: every time a
+// turn completes, we send the next scripted answer; when the script runs out we close
+// stdin, which ends the session after the turn in flight.
 function driveConversation(ws, prompt, answers) {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', [...baseArgs(), '--input-format', 'stream-json'],
+    const child = spawn(runner.bin, runner.args({ prompt, model, streaming: true }),
       { cwd: ws, stdio: ['pipe', 'pipe', 'pipe'] })
     const queue = [...answers]
     let raw = '', buf = '', turns = 0, closed = false
@@ -144,7 +169,7 @@ function driveConversation(ws, prompt, answers) {
       }
     })
     child.stderr.on('data', () => {})
-    child.on('error', (e) => { clearTimeout(timer); reject(new Error(`failed to spawn claude: ${e.message}`)) })
+    child.on('error', (e) => { clearTimeout(timer); reject(new Error(`failed to spawn ${runner.bin}: ${e.message}`)) })
     child.on('close', () => { clearTimeout(timer); resolve({ raw, turns, unanswered: queue.length }) })
 
     send(prompt)
@@ -152,8 +177,10 @@ function driveConversation(ws, prompt, answers) {
 }
 
 // Collect every text fragment from the stream-json output, and note whether a
-// subagent actually ran (a Task tool use / parent_tool_use_id appears).
+// subagent actually ran (a Task tool use / parent_tool_use_id appears). A plain-text
+// runner has neither structure nor that signal: its stdout IS the answer.
 function parseOutput(raw) {
+  if (runner.format !== 'stream-json') return { text: raw, subagentRan: false }
   let text = '', subagentRan = false
   for (const line of raw.split('\n')) {
     const s = line.trim(); if (!s) continue
@@ -253,13 +280,21 @@ const names = readdirSync(CASES).filter(n => existsSync(join(CASES, n, 'expect.j
                                 .filter(n => !only || n === only)
 if (!names.length) { console.error(only ? `no such case: ${only}` : 'no cases found'); process.exit(2) }
 
-let failed = 0
+let failed = 0, skipped = 0
 for (const name of names) {
   const caseDir = join(CASES, name)
   const expect = JSON.parse(readFileSync(join(caseDir, 'expect.json'), 'utf8'))
   // A case targets a skill or an agent; the agent harness predates skills, so it defaults.
   if (!expect.skill && !expect.agent) expect.agent = 'code-reviewer'
   const target = expect.skill ? `/${expect.skill}` : expect.agent
+
+  // A runner that cannot do what the case needs is SKIPPED, loudly and by name.
+  // Silently running a weaker version of the case would be worse than not running it.
+  const cannot = answersInline && expect.answers?.length && !runner.streaming
+    ? unsupported({ ...runner, streaming: true }, expect)   // the fold-in makes it single-shot
+    : unsupported(runner, expect)
+  if (cannot) { console.log(`⊘ SKIP  ${name} — ${cannot}`); skipped++; continue }
+
   let ws = null
   try {
     let file
@@ -268,7 +303,15 @@ for (const name of names) {
 
     const template = expect.prompt || PROMPTS[expect.agent]
     if (!template) throw new Error(`no prompt for "${target}" — set "prompt" in expect.json`)
-    const prompt = template.replace('{file}', file || '')
+    let prompt = template.replace('{file}', file || '')
+
+    // Non-streaming runner + --answers-inline: hand over the answers up front instead
+    // of turn by turn. It tests the OUTPUT, not the questioning — say so in the note.
+    const foldIn = answersInline && expect.answers?.length && !runner.streaming
+    if (foldIn) {
+      prompt += `\n\nAnswers to the questions you would otherwise ask, in order — use them`
+        + ` and do not stop to ask:\n${expect.answers.map((a, i) => `${i + 1}. ${a}`).join('\n')}`
+    }
 
     if (setupOnly) {
       const tree = (dir, pre = '') => readdirSync(dir).filter(n => n !== '.git').sort()
@@ -280,13 +323,14 @@ for (const name of names) {
     }
 
     let raw, note = ''
-    if (expect.answers?.length) {
+    if (expect.answers?.length && !foldIn) {
       const r = await driveConversation(ws, prompt, expect.answers)
       raw = r.raw
       note = ` (${r.turns} turns${r.unanswered ? `, ${r.unanswered} scripted answers unused` : ''})`
       // Unused answers mean the skill stopped asking early — worth seeing, not a failure.
     } else {
       raw = invokeOnce(ws, prompt)
+      if (foldIn) note = ' (answers folded into the prompt — the questioning is NOT tested)'
     }
 
     const { text, subagentRan } = parseOutput(raw)
@@ -308,5 +352,7 @@ for (const name of names) {
   }
 }
 
-console.log(`\n${names.length - failed}/${names.length} passed${model ? ` (model: ${model})` : ''}`)
+const ran = names.length - skipped
+console.log(`\n${ran - failed}/${ran} passed${skipped ? `, ${skipped} skipped` : ''}`
+  + ` (runner: ${runner.name}${model ? `, model: ${model}` : ''})`)
 process.exit(failed ? 1 : 0)

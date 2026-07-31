@@ -52,7 +52,54 @@ A skill case runs a whole consultation: budget minutes, not seconds
 (`architect-adr-budget` takes 8 turns).
 
 `npm test` validates the cases themselves for free — target exists, requested
-rules exist, the gate script exists, and the case asserts *something*.
+rules exist, the gate script exists, and the case asserts *something*. It also runs
+the **harness** end to end against a deterministic fake agent
+(`test/fixtures/fake-agent.mjs`), which is what keeps `run.mjs` honest without
+spending anything — and is the same `--cmd` path any other CLI goes through.
+
+## Running it with another agent
+
+The assets are agent-agnostic, so a regression in them should be observable wherever
+they are used. A **runner** is four facts — the command line, the asset layout, the
+output format, and what the tool can and cannot do — and they live in one table,
+[`runners.mjs`](./runners.mjs).
+
+```bash
+node eval/run.mjs --runner opencode                     # a preset
+node eval/run.mjs --runner codex --model gpt-5.1        # …with a model
+node eval/run.mjs --cmd "agy run {prompt}" --format text --layout agents
+node eval/run.mjs --bin ./build/claude                  # the claude preset, another binary
+```
+
+| Runner | Layout | Scripted answers | Subagent cases | Status |
+|---|---|---|---|---|
+| `claude` | `.claude/` | yes (`--input-format stream-json`) | yes | **verified** |
+| `opencode` | `.opencode/` + `AGENTS.md` | no | yes | invocation unverified |
+| `codex` | `.agents/` + `AGENTS.md` | no | no (no file subagents) | invocation unverified |
+| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | no | no | invocation unverified |
+| `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
+
+An entry marked *unverified* was written from the tool's documented non-interactive
+invocation and has never been run here — the harness says so at startup, and a wrong
+flag is wrong on exactly one line.
+
+**A local or self-hosted model** is usually not a new runner: Claude Code pointed at
+another endpoint is still Claude Code. Export the endpoint and pick the model — the
+harness inherits the environment:
+
+```bash
+ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_AUTH_TOKEN=x \
+  node eval/run.mjs --model qwen3-coder
+```
+
+**Capabilities are enforced, not faked.** A case a runner cannot run is **skipped by
+name** (`⊘ SKIP … cannot be driven turn by turn`), never silently downgraded — a
+skipped case reads as unverified, which is the truth. `--answers-inline` is the
+explicit exception: it folds the scripted answers into the prompt so a single-shot
+runner can reach the output, and it prints that the *questioning* is no longer tested.
+
+Comparing runners is the point: the same case, the same assertions, and the gates as
+the oracle, tell you whether a rule survives the trip to another agent.
 
 ## Case format
 

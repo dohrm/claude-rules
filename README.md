@@ -234,8 +234,10 @@ claude-rules/
 ## Verifying the factory itself
 
 ```bash
-npm test                # installer black-box (add/remove/update per agent) + asset-tree consistency + the kit's doc gates
-node eval/run.mjs       # agent rot detector — calls `claude`, spends tokens, run on a model bump
+npm test                # installer black-box + asset-tree + prose lint + the kit's doc gates + the eval harness
+node eval/run.mjs       # rot detector for the agents AND the skills — spends tokens, run on a model bump
+node eval/run.mjs --runner opencode          # …or any other agent CLI
+node eval/run.mjs --cmd "agy run {prompt}"   # …or any other command (see eval/README.md)
 ```
 
 `npm test` needs no install: `node:test` only, and the CLI tests run the installer
@@ -247,8 +249,12 @@ a skill's frontmatter name drifts from its directory, when `/architect`'s gating
 table and the registry disagree, or when a shipped workflow uses an expression
 syntax GitHub rejects.
 
-Known gap: the skills are prose, and nothing verifies their *output* yet — `eval/`
-covers the two subagents only.
+`eval/` covers the two subagents and four skills (`/architect`, `/plan`, `/runbook`,
+`/postmortem`), judged where possible by the kit's own gates — `adr-check --strict`
+and `docs-check --strict` are the oracle, so the assertion stays deterministic while
+the prose varies. It runs against **any agent CLI**, not just Claude: a runner is one
+table entry in `eval/runners.mjs`. The remaining skills are evaluable but not
+evaluated; the ones that are pure dialogue or pure judgment deliberately never will be.
 
 ## Guidelines
 
