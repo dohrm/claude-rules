@@ -1,0 +1,37 @@
+{
+  "skill": "postmortem",
+  "rules": [
+    "common",
+    "agent",
+    "ops"
+  ],
+  "prompt": "Use the postmortem skill (/postmortem) for the incident described in docs/incident-2026-06-12.md. Write the postmortem file.",
+  "answers": [
+    "Yes, it burnt 31 of the 43 minutes of monthly budget and customers could not check out — it earns a postmortem.",
+    "Those factors look right. Keep the list of action items short.",
+    "Owners: the platform team for the alerting and the runbook, the data team for the migration rule. Dates within the next two sprints are fine.",
+    "Write it now.",
+    "Nothing to add."
+  ],
+  "artifacts": {
+    "docs/postmortem/*.md": {
+      "matches": [
+        "(?i)detect",
+        "(?i)mitigat",
+        "(?i)resolve",
+        "(?i)action items",
+        "(?i)owner",
+        "(?i)expand|nullable|batched|lock"
+      ],
+      "not_matches": [
+        "Sam",
+        "Priya",
+        "(?i)root cause was\\b",
+        "(?i)be more careful|pay more attention|human error",
+        "(?i)\\bPR #412 (was )?merged by\\b"
+      ],
+      "max_words": 1200
+    }
+  },
+  "judge": "Are detect, mitigate and resolve reported as separate durations, and is every action item a change to the system with an owner and a date?"
+}

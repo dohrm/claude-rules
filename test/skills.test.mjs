@@ -4,10 +4,9 @@
 // that no longer exists, an unclosed template tag.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, basename, dirname } from 'node:path'
 import { REPO, readFm, walk, dirsIn } from './helpers.mjs'
-import { readFileSync } from 'node:fs'
 
 const SKILLS = dirsIn(join(REPO, 'skills'))
 const proseFiles = () => [
@@ -93,6 +92,46 @@ test('document-producing skills name a path under docs/', () => {
     assert.ok(SKILLS.includes(name), `skills/${name} is gone — update the OWNERS map`)
     assert.ok(read(join(REPO, 'skills', name, 'SKILL.md')).includes(path),
       `skills/${name}: must state its output path (${path})`)
+  }
+})
+
+// An eval case costs tokens to run and nothing to validate. Catch the authoring
+// mistakes here rather than three minutes into a headless session.
+test('eval cases are well formed', () => {
+  const casesDir = join(REPO, 'eval', 'cases')
+  const cases = dirsIn(casesDir).filter(n => existsSync(join(casesDir, n, 'expect.json')))
+  assert.ok(cases.length > 0, 'no eval cases found')
+  const agents = walk(join(REPO, 'agents')).map(f => basename(f, '.md'))
+
+  for (const name of cases) {
+    const dir = join(casesDir, name)
+    const where = `eval/cases/${name}`
+    let expect
+    assert.doesNotThrow(() => { expect = JSON.parse(read(join(dir, 'expect.json'))) }, `${where}: expect.json does not parse`)
+
+    assert.ok(!(expect.skill && expect.agent), `${where}: targets both a skill and an agent`)
+    if (expect.skill) assert.ok(SKILLS.includes(expect.skill), `${where}: unknown skill "${expect.skill}"`)
+    if (expect.agent) assert.ok(agents.includes(expect.agent), `${where}: unknown agent "${expect.agent}"`)
+
+    for (const d of expect.rules || [])
+      assert.ok(existsSync(join(REPO, 'rules', d)), `${where}: requests rules/${d}, which does not exist`)
+
+    for (const spec of expect.gates || []) {
+      const script = spec.split(/\s+/)[0]
+      assert.ok(existsSync(join(REPO, 'kit', 'common', script)), `${where}: gate "${script}" is not in kit/common/`)
+    }
+
+    // A skill case has no default prompt, and an agent case needs something to review.
+    if (expect.skill) assert.ok(expect.prompt, `${where}: a skill case must set "prompt"`)
+    else assert.ok(readdirSync(dir).some(f => f.startsWith('input.')), `${where}: an agent case needs an input.* fixture`)
+
+    // Assertions that can never fire are worse than none.
+    const hasAssertion = ['stdout_matches', 'stdout_not_matches', 'file_matches', 'file_not_matches',
+      'artifacts', 'gates', 'ci_verdict_in', 'file_changed'].some(k => expect[k] !== undefined)
+    assert.ok(hasAssertion, `${where}: asserts nothing`)
+
+    for (const pattern of Object.keys(expect.artifacts || {}))
+      assert.doesNotMatch(pattern, /^\//, `${where}: artifact "${pattern}" must be workspace-relative`)
   }
 })
 

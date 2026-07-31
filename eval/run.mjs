@@ -1,28 +1,44 @@
 #!/usr/bin/env node
-// Agent regression harness — detects rot in the shared subagents when the model
-// changes. For each case: build a throwaway workspace with the target agent +
-// rules + the fixture, invoke it headlessly, assert on its output (and, for
-// agents that edit code, on the resulting file).
+// Regression harness for the perishable layer — the subagents and the skills.
+// A new model can silently change how they behave; this catches it on a model bump
+// instead of in the field.
+//
+// For each case: build a throwaway git workspace with the target asset + its rules +
+// the fixture, invoke it headlessly (single-shot, or driven turn by turn from a
+// scripted user), then assert. Assertions are deterministic on purpose — the model's
+// prose varies, its OUTPUT SHAPE must not:
+//   • regex over what it said, and over the files it wrote;
+//   • and, best of all, the kit's own gates run against the artifacts. `/architect`
+//     is judged by adr-check, `/plan` and `/prd` by docs-check. The gate we ship to
+//     consumers is the oracle here — if it passes for them, it must pass for us.
+//
 // See eval/README.md. No dependency beyond Node + the `claude` CLI.
 //
 // Usage:
 //   node eval/run.mjs                      # all cases, default model
 //   node eval/run.mjs --model <alias|id>   # re-run against a candidate model
-//   node eval/run.mjs reviewer-utf8        # a single case
+//   node eval/run.mjs runbook-commands     # a single case
+//   node eval/run.mjs --timeout 900        # per-case seconds (default 600)
+//   node eval/run.mjs --keep               # keep the workspaces to inspect them
+//   node eval/run.mjs --setup-only         # build the workspaces and stop (free: authoring a case)
 //   node eval/run.mjs --judge              # (v2, not yet implemented — stubbed)
-import { mkdtempSync, mkdirSync, cpSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, cpSync, readFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)))   // claude-rules root
 const CASES = join(REPO, 'eval', 'cases')
 
 const argv = process.argv.slice(2)
-const model = (() => { const i = argv.indexOf('--model'); return i >= 0 ? argv[i + 1] : null })()
+const flag = (name, fallback = null) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback }
+const model = flag('--model')
+const timeoutMs = Number(flag('--timeout', '600')) * 1000
 const judge = argv.includes('--judge')
-const only = argv.find(a => !a.startsWith('--') && a !== model)
+const keep = argv.includes('--keep')
+const setupOnly = argv.includes('--setup-only')   // spends no tokens: check a new case's fixtures
+const only = argv.find(a => !a.startsWith('--') && a !== model && a !== flag('--timeout', null))
 
 if (judge) console.log('note: --judge is stubbed (v2). Running deterministic checks only.\n')
 
@@ -30,41 +46,109 @@ if (judge) console.log('note: --judge is stubbed (v2). Running deterministic che
 // Override per case with "rules": [...] in expect.json.
 const DEFAULT_RULE_DIRS = ['common', 'agent', 'rust', 'hexagonal', 'testing']
 
-// Per-agent default prompt. `{file}` is the case fixture.
+// Default prompt per target. `{file}` is the case fixture, when there is one.
 const PROMPTS = {
   'code-reviewer': 'You MUST use the code-reviewer subagent to review the file `{file}` in this directory. Return its full review verbatim, including the trailing CI_VERDICT comment line.',
   'code-simplifier': 'You MUST use the code-simplifier subagent to simplify the file `{file}` in this directory. It must edit the file in place, preserving behavior exactly. Return its report verbatim.',
 }
 
+// --------------------------------------------------------------------- workspace
 function setupWorkspace(caseDir, expect) {
   const ws = mkdtempSync(join(tmpdir(), 'cr-eval-'))
-  mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
-  const agent = expect.agent || 'code-reviewer'
-  cpSync(join(REPO, 'agents', `${agent}.md`), join(ws, '.claude', 'agents', `${agent}.md`))
+
+  // Rules the target needs, as the installer would place them.
   for (const d of expect.rules || DEFAULT_RULE_DIRS) {
     const src = join(REPO, 'rules', d)
-    if (existsSync(src)) cpSync(src, join(ws, '.claude', 'rules', d), { recursive: true })
-    else throw new Error(`case requests rules/${d}, which does not exist`)
+    if (!existsSync(src)) throw new Error(`case requests rules/${d}, which does not exist`)
+    cpSync(src, join(ws, '.claude', 'rules', d), { recursive: true })
   }
+  if (expect.agent) {
+    mkdirSync(join(ws, '.claude', 'agents'), { recursive: true })
+    cpSync(join(REPO, 'agents', `${expect.agent}.md`), join(ws, '.claude', 'agents', `${expect.agent}.md`))
+  }
+  if (expect.skill) {
+    const src = join(REPO, 'skills', expect.skill)
+    if (!existsSync(src)) throw new Error(`case targets skill "${expect.skill}", which does not exist`)
+    cpSync(src, join(ws, '.claude', 'skills', expect.skill), { recursive: true })
+  }
+
+  // A whole fixture tree (a justfile, docs/, manifests…) — the repo the skill reads.
+  const filesDir = join(caseDir, 'files')
+  if (existsSync(filesDir)) cpSync(filesDir, ws, { recursive: true })
+
+  // A git baseline, so the workspace behaves like a real repo: the reviewer has a
+  // diff to review, and adr-check has a HEAD to compare against.
+  const git = (...args) => spawnSync('git', args, { cwd: ws, stdio: 'ignore' })
+  git('init', '-q')
+  git('-c', 'user.email=eval@example.com', '-c', 'user.name=eval', 'commit', '-q', '--allow-empty', '-m', 'baseline')
+  if (existsSync(filesDir)) {
+    git('add', '-A')
+    git('-c', 'user.email=eval@example.com', '-c', 'user.name=eval', 'commit', '-q', '-m', 'fixture')
+  }
+
+  // The single-file fixture stays UNCOMMITTED: it is the working change under review.
   let file = null
   for (const f of readdirSync(caseDir)) {
     if (f.startsWith('input.')) { cpSync(join(caseDir, f), join(ws, f)); file = f }
   }
-  if (!file) throw new Error('no input.* fixture in the case directory')
+  if (expect.agent && !file) throw new Error('an agent case needs an input.* fixture')
   return { ws, file }
 }
 
-function invokeAgent(ws, expect, file) {
-  const agent = expect.agent || 'code-reviewer'
-  const template = expect.prompt || PROMPTS[agent]
-  if (!template) throw new Error(`no default prompt for agent "${agent}" — set "prompt" in expect.json`)
-  const prompt = template.replace('{file}', file)
-  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose',
+// ----------------------------------------------------------------------- invoking
+const baseArgs = () => {
+  const args = ['-p', '--output-format', 'stream-json', '--verbose',
                 '--forward-subagent-text', '--dangerously-skip-permissions']
   if (model) args.push('--model', model)
-  const r = spawnSync('claude', args, { cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  return args
+}
+
+function invokeOnce(ws, prompt) {
+  const r = spawnSync('claude', [...baseArgs(), prompt], {
+    cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
+  })
   if (r.error) throw new Error(`failed to spawn claude: ${r.error.message}`)
   return r.stdout || ''
+}
+
+// A scripted user. `claude --input-format stream-json` keeps the session open on
+// stdin, so an interactive skill (one question at a time) can be driven to the end:
+// every time a turn completes, we send the next scripted answer; when the script runs
+// out we close stdin, which ends the session after the turn in flight.
+function driveConversation(ws, prompt, answers) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('claude', [...baseArgs(), '--input-format', 'stream-json'],
+      { cwd: ws, stdio: ['pipe', 'pipe', 'pipe'] })
+    const queue = [...answers]
+    let raw = '', buf = '', turns = 0, closed = false
+    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error(`timed out after ${timeoutMs / 1000}s`)) }, timeoutMs)
+
+    const send = (text) => child.stdin.write(
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }) + '\n')
+    const endInput = () => { if (!closed) { closed = true; child.stdin.end() } }
+
+    child.stdout.on('data', (chunk) => {
+      raw += chunk
+      buf += chunk
+      const lineEnd = buf.lastIndexOf('\n')
+      if (lineEnd < 0) return
+      const lines = buf.slice(0, lineEnd).split('\n')
+      buf = buf.slice(lineEnd + 1)
+      for (const line of lines) {
+        let obj; try { obj = JSON.parse(line) } catch { continue }
+        // One `result` per completed turn: the agent is waiting on the user again.
+        if (obj.type !== 'result') continue
+        turns++
+        if (queue.length) send(queue.shift())
+        else endInput()
+      }
+    })
+    child.stderr.on('data', () => {})
+    child.on('error', (e) => { clearTimeout(timer); reject(new Error(`failed to spawn claude: ${e.message}`)) })
+    child.on('close', () => { clearTimeout(timer); resolve({ raw, turns, unanswered: queue.length }) })
+
+    send(prompt)
+  })
 }
 
 // Collect every text fragment from the stream-json output, and note whether a
@@ -91,27 +175,71 @@ function parseOutput(raw) {
   return { text, subagentRan }
 }
 
-// Build a RegExp, supporting a leading inline flag group like `(?i)` (PCRE/Python
-// style) which JS does not accept natively — convert it to the flags argument.
+// --------------------------------------------------------------------- assertions
+// Supports a leading inline flag group like `(?i)`, which JS does not accept natively.
+// `m` is always on: these patterns run over whole documents, so `^## Section` means
+// "a heading line", never "the first line of the file".
 function rx(pattern) {
   const m = pattern.match(/^\(\?([a-z]+)\)([\s\S]*)$/)
-  return m ? new RegExp(m[2], m[1]) : new RegExp(pattern)
+  const [body, flags] = m ? [m[2], m[1]] : [pattern, '']
+  return new RegExp(body, flags.includes('m') ? flags : flags + 'm')
 }
 
-function assertCase(out, expect, fileText, fileBefore) {
+/** Files matching a path that may end in a `*` glob, relative to the workspace. */
+function resolveArtifact(ws, pattern) {
+  if (!pattern.includes('*')) return existsSync(join(ws, pattern)) ? [join(ws, pattern)] : []
+  const dir = join(ws, dirname(pattern))
+  if (!existsSync(dir)) return []
+  const re = new RegExp('^' + pattern.split('/').pop().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
+  return readdirSync(dir).filter(n => re.test(n)).map(n => join(dir, n)).filter(f => statSync(f).isFile())
+}
+
+/** The kit gate we ship to consumers, run against what the skill just wrote. */
+function runGate(ws, spec) {
+  const [script, ...args] = spec.split(/\s+/)
+  const r = spawnSync(process.execPath, [join(REPO, 'kit', 'common', script), ...args],
+    { cwd: ws, encoding: 'utf8' })
+  return { ok: r.status === 0, out: (r.stdout || '') + (r.stderr || '') }
+}
+
+function assertCase(ws, out, expect, fileText, fileBefore) {
   const fails = []
   for (const re of expect.stdout_matches || [])
     if (!rx(re).test(out)) fails.push(`expected to match /${re}/`)
   for (const re of expect.stdout_not_matches || [])
     if (rx(re).test(out)) fails.push(`should NOT match /${re}/`)
-  // For agents that edit code (code-simplifier), the resulting file is the real
-  // assertion surface — the report is only what the agent claims it did.
-  for (const re of expect.file_matches || [])
-    if (!rx(re).test(fileText)) fails.push(`fixture expected to match /${re}/ after the run`)
-  for (const re of expect.file_not_matches || [])
-    if (rx(re).test(fileText)) fails.push(`fixture should NOT match /${re}/ after the run`)
-  if (expect.file_changed === true && fileText === fileBefore) fails.push('fixture was not modified')
-  if (expect.file_changed === false && fileText !== fileBefore) fails.push('fixture was modified but should not have been')
+
+  // For an agent that edits code, the fixture is the truth; the report is a claim.
+  if (fileText !== null) {
+    for (const re of expect.file_matches || [])
+      if (!rx(re).test(fileText)) fails.push(`fixture expected to match /${re}/ after the run`)
+    for (const re of expect.file_not_matches || [])
+      if (rx(re).test(fileText)) fails.push(`fixture should NOT match /${re}/ after the run`)
+    if (expect.file_changed === true && fileText === fileBefore) fails.push('fixture was not modified')
+    if (expect.file_changed === false && fileText !== fileBefore) fails.push('fixture was modified but should not have been')
+  }
+
+  // For a skill, the artifacts it wrote are the truth.
+  for (const [pattern, rules] of Object.entries(expect.artifacts || {})) {
+    const found = resolveArtifact(ws, pattern)
+    if (!found.length) { fails.push(`no artifact at ${pattern}`); continue }
+    const text = found.map(f => readFileSync(f, 'utf8')).join('\n')
+    for (const re of rules.matches || [])
+      if (!rx(re).test(text)) fails.push(`${pattern} expected to match /${re}/`)
+    for (const re of rules.not_matches || [])
+      if (rx(re).test(text)) fails.push(`${pattern} should NOT match /${re}/`)
+    if (rules.max_words) {
+      const w = text.split(/\s+/).filter(Boolean).length
+      if (w > rules.max_words) fails.push(`${pattern}: ${w} words (max ${rules.max_words})`)
+    }
+  }
+
+  // And the gates we ship are the strictest reviewer available.
+  for (const spec of expect.gates || []) {
+    const { ok, out: gateOut } = runGate(ws, spec)
+    if (!ok) fails.push(`gate \`${spec}\` failed:\n     ${gateOut.trim().split('\n').join('\n     ')}`)
+  }
+
   if (expect.ci_verdict_in) {
     const m = out.match(/CI_VERDICT:\s*([A-Z]+)/)
     const v = m ? m[1] : '(none)'
@@ -120,6 +248,7 @@ function assertCase(out, expect, fileText, fileBefore) {
   return fails
 }
 
+// --------------------------------------------------------------------------- run
 const names = readdirSync(CASES).filter(n => existsSync(join(CASES, n, 'expect.json')))
                                 .filter(n => !only || n === only)
 if (!names.length) { console.error(only ? `no such case: ${only}` : 'no cases found'); process.exit(2) }
@@ -128,21 +257,54 @@ let failed = 0
 for (const name of names) {
   const caseDir = join(CASES, name)
   const expect = JSON.parse(readFileSync(join(caseDir, 'expect.json'), 'utf8'))
+  // A case targets a skill or an agent; the agent harness predates skills, so it defaults.
+  if (!expect.skill && !expect.agent) expect.agent = 'code-reviewer'
+  const target = expect.skill ? `/${expect.skill}` : expect.agent
   let ws = null
   try {
     let file
     ;({ ws, file } = setupWorkspace(caseDir, expect))
-    const before = readFileSync(join(ws, file), 'utf8')
-    const { text, subagentRan } = parseOutput(invokeAgent(ws, expect, file))
-    if (!subagentRan) { console.log(`⚠ ERROR ${name}: ${expect.agent || 'code-reviewer'} subagent was not invoked (non-deterministic delegation)`); failed++; continue }
-    const fails = assertCase(text, expect, readFileSync(join(ws, file), 'utf8'), before)
-    if (fails.length) { console.log(`✗ FAIL  ${name}\n   - ${fails.join('\n   - ')}`); failed++ }
-    else console.log(`✓ PASS  ${name}`)
+    const before = file ? readFileSync(join(ws, file), 'utf8') : null
+
+    const template = expect.prompt || PROMPTS[expect.agent]
+    if (!template) throw new Error(`no prompt for "${target}" — set "prompt" in expect.json`)
+    const prompt = template.replace('{file}', file || '')
+
+    if (setupOnly) {
+      const tree = (dir, pre = '') => readdirSync(dir).filter(n => n !== '.git').sort()
+        .flatMap(n => statSync(join(dir, n)).isDirectory()
+          ? [`${pre}${n}/`, ...tree(join(dir, n), pre + '  ')] : [`${pre}${n}`])
+      console.log(`· SETUP ${name} → ${target}\n   ${tree(ws).join('\n   ')}\n   prompt: ${prompt.slice(0, 100)}…`)
+      console.log(`   ${(expect.answers || []).length} scripted answer(s), gates: ${(expect.gates || []).join(', ') || 'none'}`)
+      continue
+    }
+
+    let raw, note = ''
+    if (expect.answers?.length) {
+      const r = await driveConversation(ws, prompt, expect.answers)
+      raw = r.raw
+      note = ` (${r.turns} turns${r.unanswered ? `, ${r.unanswered} scripted answers unused` : ''})`
+      // Unused answers mean the skill stopped asking early — worth seeing, not a failure.
+    } else {
+      raw = invokeOnce(ws, prompt)
+    }
+
+    const { text, subagentRan } = parseOutput(raw)
+    if (expect.agent && !subagentRan) {
+      console.log(`⚠ ERROR ${name}: the ${expect.agent} subagent was not invoked (non-deterministic delegation)`)
+      failed++; continue
+    }
+    const after = file ? readFileSync(join(ws, file), 'utf8') : null
+    const fails = assertCase(ws, text, expect, after, before)
+    if (fails.length) { console.log(`✗ FAIL  ${name}${note}\n   - ${fails.join('\n   - ')}`); failed++ }
+    else console.log(`✓ PASS  ${name}${note}`)
     if (judge && expect.judge) console.log(`   judge (skipped): ${expect.judge}`)
+    if (keep) console.log(`   workspace: ${ws}`)
   } catch (e) {
-    console.log(`⚠ ERROR ${name}: ${e.message}`); failed++
+    console.log(`⚠ ERROR ${name}: ${e.message}`)
+    failed++
   } finally {
-    if (ws) rmSync(ws, { recursive: true, force: true })
+    if (ws && !keep) rmSync(ws, { recursive: true, force: true })
   }
 }
 

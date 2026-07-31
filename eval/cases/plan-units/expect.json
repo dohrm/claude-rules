@@ -1,0 +1,22 @@
+{
+  "skill": "plan",
+  "rules": ["common", "agent", "product"],
+  "prompt": "Use the plan skill (/plan). The PRD is at docs/PRD.md and the architecture at docs/ARCHITECTURE.md. Prefer thin vertical slices. Write the plan when it is validated.",
+  "answers": [
+    "The granularity is right — keep the slices thin, I would rather have more phases than fewer.",
+    "The dependencies look correct.",
+    "Yes, split it as you proposed and write the files.",
+    "Nothing to add, finish up."
+  ],
+  "gates": ["docs-check.mjs docs --strict"],
+  "artifacts": {
+    "docs/PLAN.md": {
+      "matches": ["\\]\\(\\./plan/", "(?i)status", "(?i)blocked by"],
+      "max_words": 500
+    },
+    "docs/plan/*.md": {
+      "matches": ["(?i)\\*\\*Status\\*\\*", "(?i)^##\\s*What we ship", "(?i)^##\\s*Acceptance criteria"]
+    }
+  },
+  "judge": "Is each phase a vertical slice that could ship on its own, rather than a layer of the system?"
+}

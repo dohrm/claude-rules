@@ -11,7 +11,10 @@ Two rules govern everything below:
 
 - **Blameless.** Everyone acted reasonably given what they knew at the time. The target
   is the system that made the wrong action look right. *"Human error"* is never a cause;
-  it is a system that permitted it.
+  it is a system that permitted it. **Roles, never names** — "the on-call engineer", "the
+  author of the change" — including in the timeline, including when the sentence is
+  praise. An incident document travels far beyond the room it was written in, and a name
+  in it is read as an attribution by everyone who was not there.
 - **No single root cause.** A complex system fails through several factors that were
   each individually survivable. "The" root cause is a comforting fiction that stops the
   investigation at the first plausible stop.
@@ -95,6 +98,9 @@ deltas, and what a human must decide (the budget-policy consequence, whether an 
 item is worth the cost, who owns each date).
 
 <postmortem-template>
+<!-- ~800 words plus the timeline table. Past that the analysis has become an essay:
+     the factors are being argued rather than stated, or an action item is being
+     designed here instead of in the ADR it was handed off to. -->
 # Postmortem — <what broke>, <YYYY-MM-DD>
 
 - **Impact**: <who was affected, for how long, what they could not do>
