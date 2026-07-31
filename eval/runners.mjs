@@ -5,16 +5,17 @@
 // four facts — the command line, the asset layout, the output format, and what the
 // tool can and cannot do — and adding one is a table entry, not a code change.
 //
-// VERIFIED HERE: `claude`, `antigravity`, and the generic `--cmd` path (against a
-// fake runner in test/). Every entry marked `unverified` is written from the tool's
-// documented non-interactive invocation and has NOT been run on this machine. The
-// harness says so at startup, and a wrong flag is wrong on exactly one line — which
-// is the point of the table. Confirm one, drop the flag, and it stops warning.
+// VERIFIED HERE: `claude`, `antigravity`, `opencode`, and the generic `--cmd` path
+// (against a fake runner in test/). Every entry marked `unverified` is written from
+// the tool's documented non-interactive invocation and has NOT been run on this
+// machine. The harness says so at startup, and a wrong flag is wrong on exactly one
+// line — which is the point of the table. Confirm one, drop the flag, it stops warning.
 //
-// Confirming one is worth the half hour: `antigravity` was wrong in three ways at
-// once (subcommand, flag syntax, and an ignored cwd), and every one of them failed
-// silently — an empty answer, a flag read as the prompt, an agent that simply could
-// not see the assets. None of that is visible from a --help page.
+// Confirming one is worth the half hour. Both presets written blind were wrong:
+// `antigravity` in three ways at once (flag syntax, where the prompt goes, and an
+// ignored cwd), `opencode` by missing the one flag without which it stops for a
+// permission prompt and writes nothing. Every one of those failed SILENTLY — an
+// answer to the wrong question, or an empty workspace. None is visible from --help.
 
 // Where each agent expects its assets. Mirrors bin/cli.mjs's emitters; the workspace
 // is throwaway, so `agentsMd` gets a minimal generated file rather than the
@@ -47,14 +48,20 @@ export const RUNNERS = {
     ],
   },
 
+  // opencode. Respects the process cwd, and discovers skills from BOTH
+  // `.opencode/skills/` and `.agents/skills/`. `--auto` is required or it stops for a
+  // permission prompt and writes nothing; `-c` continues the last session, so scripted
+  // answers work one invocation per turn. It has file-based subagents
+  // (`.opencode/agent/`), but its text output does not say whether one ran, so agent
+  // cases still skip — see unsupported().
   opencode: {
     bin: 'opencode',
     layout: 'opencode',
     format: 'text',
-    drive: null,
+    drive: 'resume',
     subagents: true,
-    unverified: true,
-    args: ({ prompt, model }) => ['run', ...withModel(model), prompt],
+    args: ({ prompt, model }) => ['run', '--auto', ...withModel(model), prompt],
+    resume: ({ answer, model }) => ['run', '--continue', '--auto', ...withModel(model), answer],
   },
 
   codex: {

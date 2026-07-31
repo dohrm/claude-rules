@@ -198,7 +198,10 @@ function driveConversation(ws, prompt, answers) {
 // subagent actually ran (a Task tool use / parent_tool_use_id appears). A plain-text
 // runner has neither structure nor that signal: its stdout IS the answer.
 function parseOutput(raw) {
-  if (runner.format !== 'stream-json') return { text: raw, subagentRan: false }
+  // A pretty-printing CLI mixes ANSI escapes into its output; strip them, or an
+  // assertion anchored on a line start matches a colour code instead.
+  if (runner.format !== 'stream-json')
+    return { text: raw.replace(/\[[0-9;]*[A-Za-z]/g, ''), subagentRan: false }
   let text = '', subagentRan = false
   for (const line of raw.split('\n')) {
     const s = line.trim(); if (!s) continue
