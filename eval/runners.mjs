@@ -5,12 +5,12 @@
 // four facts — the command line, the asset layout, the output format, and what the
 // tool can and cannot do — and adding one is a table entry, not a code change.
 //
-// VERIFIED HERE: `claude`, `opencode`, `codex`, `antigravity`, and the generic
-// `--cmd` path (against a fake runner in test/). An entry marked `unverified` was
-// written from documentation and never run; the harness says so at startup, and a
-// wrong flag is wrong on exactly one line — which is the point of the table.
+// VERIFIED HERE: every preset — `claude`, `opencode`, `codex`, `antigravity`,
+// `cursor` — plus the generic `--cmd` path (against a fake runner in test/). An entry
+// marked `unverified` was written from documentation and never run; the harness says
+// so at startup, and a wrong flag is wrong on exactly one line.
 //
-// Confirming one is worth the half hour. ALL THREE presets written blind were wrong,
+// Confirming one is worth the half hour. All three presets written BLIND were wrong,
 // each in a way that fails SILENTLY rather than loudly:
 //   • antigravity — Go flag syntax, `-p` takes the prompt as its VALUE, and it ignores
 //     the process cwd, so without --add-dir the agent sees no assets and answers anyway;
@@ -19,6 +19,8 @@
 //     approval flag, so the obvious guess produces an empty workspace.
 // None of that is visible from a --help page, and every one of them reads as
 // "the skill does not work on this agent" when it is really "the invocation is wrong".
+// (`cursor` is the exception that proves it: its flags were corrected from the
+// installed binary's --help BEFORE the first run, and that run passed first time.)
 
 // Where each agent expects its assets. Mirrors bin/cli.mjs's emitters; the workspace
 // is throwaway, so `agentsMd` gets a minimal generated file rather than the
@@ -84,17 +86,21 @@ export const RUNNERS = {
        ...withModel(model), answer],
   },
 
-  // Cursor's agent CLI — NOT verified here (not installed). A starting point, and the
-  // entry that keeps the "unverified" warning honest: written from documentation,
-  // which the two presets before it proved is not the same as working.
+  // Cursor's agent CLI (`cursor-agent`, program name `agent`). Needs `agent login` or
+  // CURSOR_API_KEY. Probed: it loads BOTH rule surfaces — a `.cursor/rules/*.mdc` with
+  // alwaysApply AND a plain AGENTS.md — and discovers skills from `.agents/skills/` as
+  // well as `.cursor/skills/`. So the `agents` layout is enough here, and the harness
+  // does not need the installer's .mdc transform.
   cursor: {
     bin: 'cursor-agent',
     layout: 'agents',
     format: 'text',
-    drive: null,
+    drive: 'resume',          // --continue resumes the previous session
     subagents: false,
-    unverified: true,
-    args: ({ prompt, model }) => ['-p', ...withModel(model), prompt],
+    // `-p` is print mode ("access to all tools, including write and shell");
+    // `--force` allows the commands, the same gate as opencode's --auto.
+    args: ({ prompt, model }) => ['-p', '--force', ...withModel(model), prompt],
+    resume: ({ answer, model }) => ['-p', '--continue', '--force', ...withModel(model), answer],
   },
 
   // Antigravity (`agy`). Its customization root is `.agents/`: skills at

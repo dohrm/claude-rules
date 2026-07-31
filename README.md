@@ -236,7 +236,7 @@ claude-rules/
 ```bash
 npm test                # installer black-box + asset-tree + prose lint + the kit's doc gates + the eval harness
 node eval/run.mjs       # rot detector for the agents AND the skills — spends tokens, run on a model bump
-node eval/run.mjs --runner opencode          # …or codex, antigravity, claude (all verified)
+node eval/run.mjs --runner opencode          # …or codex, cursor, antigravity, claude
 node eval/run.mjs --cmd "my-agent {prompt}"  # …or any other command (see eval/README.md)
 ```
 
@@ -252,10 +252,10 @@ syntax GitHub rejects.
 `eval/` covers the two subagents and four skills (`/architect`, `/plan`, `/runbook`,
 `/postmortem`), judged where possible by the kit's own gates — `adr-check --strict`
 and `docs-check --strict` are the oracle, so the assertion stays deterministic while
-the prose varies. It runs against **any agent CLI**, not just Claude — `claude`, `opencode`, `codex`
-and `antigravity` are verified against the real binaries, and anything else goes
-through `--cmd`. Given the same skill and fixture, all four produced the same
-document structure and none invented a command. The remaining skills are evaluable but not
+the prose varies. It runs against **any agent CLI**, not just Claude — every preset (`claude`, `opencode`, `codex`,
+`cursor`, `antigravity`) is verified against the real binary, and anything else goes
+through `--cmd`. Given the same skill and fixture, all five produced the same document
+structure and none invented a command. The remaining skills are evaluable but not
 evaluated; the ones that are pure dialogue or pure judgment deliberately never will be.
 
 ## Guidelines

@@ -78,15 +78,15 @@ node eval/run.mjs --bin ./build/claude                  # the claude preset, ano
 | `opencode` | `.opencode/` + `AGENTS.md` | yes — one invocation per turn | skipped: output does not say whether one ran | **verified** |
 | `codex` | `.agents/` + `AGENTS.md` | yes — `exec resume --last` | no (no file subagents) | **verified** |
 | `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | yes — one invocation per turn | no (agents ship in plugins) | **verified** |
-| `cursor` (`cursor-agent`) | `.agents/` + `AGENTS.md` | no | no | invocation unverified |
+| `cursor` (`cursor-agent`) | `.agents/` + `AGENTS.md` | yes — `--continue` | no | **verified** |
 | `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
 
 An entry marked *unverified* was written from documentation and has never been run
 here — the harness says so at startup, and a wrong flag is wrong on exactly one line.
 
-**Confirming one is worth the half hour.** All three presets written blind were wrong,
-and each failed *silently* — as "the skill does not work on this agent" rather than
-"the invocation is wrong":
+**Confirming one is worth the half hour.** All three presets written *blind* were
+wrong, and each failed *silently* — as "the skill does not work on this agent" rather
+than "the invocation is wrong":
 
 - `antigravity` — Go-style flags (`--flag value` swallows the value, so
   `--dangerously-skip-permissions "…"` turned the *flag name* into the prompt), `-p`
@@ -97,9 +97,15 @@ and each failed *silently* — as "the skill does not work on this agent" rather
 - `codex` — writes are gated by the **sandbox** (`-s workspace-write`), not by an
   approval flag. The obvious guess produces an empty workspace.
 
+`cursor` is the exception that proves the rule: its flags were read off the installed
+binary's `--help` before the first run, and that run passed first time. Reading beats
+guessing; running beats reading.
+
 The payoff is the comparison. Given the same `/runbook` skill and the same fixture,
-**all four agents produced the same section structure and harvested the real justfile
-recipes — none invented a command.** That is the question this harness exists to
+**all five agents produced the same section structure and harvested the real justfile
+recipes — none invented a command.** Cursor went further and left an explicit
+`_[fill: …]_` blank where the fixture could not tell it who is on call, which is what
+the skill asks for instead of inventing. That is the question this harness exists to
 answer: *does the rule survive the trip to another agent?*
 
 Two practical notes: a runner has to be on `PATH` for the harness to spawn it (or pass

@@ -67,9 +67,21 @@ test('an unknown runner names the ones that exist', () => {
   assert.match(r.out, /claude/)
 })
 
-test('an unverified preset warns before it is used', () => {
-  const r = run(['--runner', 'cursor', '--setup-only'])
-  assert.match(r.out, /never been run against the real CLI/)
+// Every preset is currently verified, so this asserts the mechanism from both sides:
+// a verified runner must stay silent, and any entry that IS marked unverified must
+// announce itself. Written this way so it keeps working as entries come and go.
+test('the unverified warning fires for exactly the presets that carry the flag', async () => {
+  const { RUNNERS } = await import(join(REPO, 'eval', 'runners.mjs'))
+  const WARNING = /never been run against the real CLI/
+
+  const verified = Object.keys(RUNNERS).filter(n => !RUNNERS[n].unverified)
+  assert.ok(verified.length, 'no verified runner to check against')
+  assert.doesNotMatch(run(['--runner', verified[0], '--setup-only']).out, WARNING,
+    `${verified[0]} is verified — it must not warn`)
+
+  for (const name of Object.keys(RUNNERS).filter(n => RUNNERS[n].unverified))
+    assert.match(run(['--runner', name, '--setup-only']).out, WARNING,
+      `${name} is marked unverified — it must say so before it is used`)
 })
 
 test('--setup-only builds every real case and spends nothing', () => {
