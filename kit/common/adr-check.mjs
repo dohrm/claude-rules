@@ -14,10 +14,15 @@
 // is compared), and moving a status back down to `Proposed` (withdrawing a claim is not
 // making one).
 //
+// It also WARNS (non-blocking) on the two things that make a decision log go unread — an
+// over-long record, and a section invented as an overflow valve. Warnings, because "too
+// long" is a judgment a human makes and a gate should not fake; `--strict` promotes them to
+// failures for a repo that wants the budget enforced.
+//
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
 //
-// Usage:  node scripts/adr-check.mjs [adr-dir]        (default: docs/adr)
+// Usage:  node scripts/adr-check.mjs [adr-dir] [--strict]      (default dir: docs/adr)
 
 import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -28,7 +33,55 @@ const STATUS_LINE = /^-\s*\*\*Status\*\*:\s*(\S+)/m
 // A status line in a unified diff, added or removed.
 const STATUS_IN_DIFF = /^[+-]-\s*\*\*Status\*\*:/m
 
-const adrDir = process.argv[2] ?? 'docs/adr'
+const args = process.argv.slice(2)
+const strict = args.includes('--strict')
+const adrDir = args.find((a) => !a.startsWith('--')) ?? 'docs/adr'
+
+// One decision, one screen. Doctrine + per-section budgets: rules/agent/decisions.md.
+const WORD_CEILING = 600
+// A heading is canonical when it names one of these. Anything else is an overflow valve.
+const SECTION_KEYWORDS = ['context', 'decision', 'consequence', 'alternative', 'implement']
+const HEADING = /^##[^#].*$/gm
+
+const words = (s) => s.split(/\s+/).filter(Boolean).length
+
+/** Sections whose heading names none of the canonical five. */
+const oddSections = (text) =>
+  (text.match(HEADING) ?? [])
+    .map((h) => h.replace(/^#+\s*/, '').trim())
+    .filter((h) => !SECTION_KEYWORDS.some((k) => h.toLowerCase().includes(k)))
+
+/** Prints the advisory block once — a warning about verbosity should not be verbose. */
+function reportBudget(oversized, invented, strict) {
+  const label = strict ? 'error' : 'warning'
+  if (oversized.length > 0) {
+    console.error(
+      `adr-check ${label}: ${oversized.length} record(s) over the ${WORD_CEILING}-word ceiling:`,
+    )
+    for (const { file, count } of oversized) console.error(`  ${path.basename(file)} — ${count}w`)
+    console.error(
+      `  Past the ceiling a record decides more than one thing, describes what the thing` +
+        ` looks like instead of why it was chosen, or argues with an objection nobody raised.` +
+        ` Split it, or move the description out (schema → DATA-MODEL, behavior → EXPERIENCE,` +
+        ` sequencing → PLAN). Never compress the reasoning — it is the only part that had to` +
+        ` be written there.`,
+    )
+  }
+  if (invented.length > 0) {
+    console.error(`adr-check ${label}: section(s) outside the canonical set:`)
+    for (const { file, headings } of invented)
+      console.error(`  ${path.basename(file)} — ${headings.map((h) => `"${h}"`).join(', ')}`)
+    console.error(
+      `  Canonical: Context, Decision, Consequences, Alternatives considered, Implemented.` +
+        ` An invented heading is an overflow valve; an amendment is a dated note of five lines` +
+        ` or fewer under the section it corrects.`,
+    )
+  }
+  console.error(
+    `\nSize and sections: rules/agent/decisions.md` +
+      (strict ? '' : ' (advisory here — pass --strict to enforce the budget).'),
+  )
+}
 
 /** Runs git, returning its stdout, or null when it exits non-zero. */
 function git(...args) {
@@ -73,9 +126,17 @@ function main() {
 
   const hasHead = git('rev-parse', '--verify', 'HEAD') !== null
   const problems = []
+  const oversized = []
+  const invented = []
 
   for (const file of files) {
-    const match = readFileSync(file, 'utf8').match(STATUS_LINE)
+    const text = readFileSync(file, 'utf8')
+    const count = words(text)
+    if (count > WORD_CEILING) oversized.push({ file, count })
+    const headings = oddSections(text)
+    if (headings.length > 0) invented.push({ file, headings })
+
+    const match = text.match(STATUS_LINE)
     if (!match) {
       problems.push(`${file}: no '- **Status**:' line.`)
       continue
@@ -114,13 +175,18 @@ function main() {
     console.log("  The guard becomes real with the repository's first commit.")
   }
 
+  const budgetCount = oversized.length + invented.length
+  if (budgetCount > 0) reportBudget(oversized, invented, strict)
+
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem)
     console.error(`\nSee rules/agent/decisions.md for the lifecycle.`)
     return 1
   }
+  if (strict && budgetCount > 0) return 1
 
-  console.log(`adr-check: ${files.length} decision record(s) in order.`)
+  const note = budgetCount > 0 ? ` (${budgetCount} advisory warning(s) above)` : ''
+  console.log(`adr-check: ${files.length} decision record(s) in order.${note}`)
   return 0
 }
 

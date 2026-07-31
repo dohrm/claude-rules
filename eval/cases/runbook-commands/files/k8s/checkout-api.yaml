@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: shop-prod
+spec:
+  replicas: 4
+  template:
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: checkout-api
+          image: registry.internal/shop/checkout-api@sha256:0f1e2d
+          readinessProbe:
+            httpGet: { path: /@/ready, port: 8080 }
+          livenessProbe:
+            httpGet: { path: /@/live, port: 8080 }

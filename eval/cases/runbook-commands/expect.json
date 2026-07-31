@@ -1,0 +1,30 @@
+{
+  "skill": "runbook",
+  "rules": ["common", "agent", "ops"],
+  "prompt": "Use the runbook skill (/runbook) for the alert `checkout availability — fast burn` listed in docs/OBSERVABILITY.md. Explore this repository first. Write the runbook file when you have what you need.",
+  "answers": [
+    "The platform team is on call. They have kubectl access to the shop-prod namespace and can run just recipes from the repo root.",
+    "Yes, there is a kill switch: the checkout v2 path is behind the CHECKOUT_V2_ENABLED flag, and turning it off degrades to v1 pricing rather than failing.",
+    "That looks right. Write the file now.",
+    "I cannot rehearse it right now — mark it accordingly and finish.",
+    "Nothing else, thanks."
+  ],
+  "artifacts": {
+    "docs/runbook/*.md": {
+      "matches": [
+        "checkout-killswitch-off",
+        "checkout-api",
+        "(?i)^##\\s*First move",
+        "(?i)^##\\s*Do NOT",
+        "(?i)rehearsed"
+      ],
+      "not_matches": [
+        "(?i)my-app|example-namespace|<your-|acme",
+        "(?i)\\bTODO\\b",
+        "(?i)check the logs\\s*$"
+      ],
+      "max_words": 900
+    }
+  },
+  "judge": "Does every command in the runbook exist in the fixture's justfile or manifests, rather than being plausible-looking invention?"
+}

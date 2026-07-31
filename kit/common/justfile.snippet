@@ -15,7 +15,7 @@ go_dir   := "."      # e.g. "workflows/orchestration"
 # agent closes its loop on before handing back. Tier 3 (mutation) is CI-only.
 # Add the checks your repo needs:
 check: rust-check
-# check: rust-check ts-check go-check adr-check
+# check: rust-check ts-check go-check adr-check docs-check
 
 # ── Rust ─────────────────────────────────────────────────────────────────
 # Each line runs in its own shell, so `cd {{dir}} &&` per line (portable: works
@@ -51,3 +51,14 @@ go-check: go-lint
 # stays cross-platform; the script is a no-op when there are no ADRs.
 adr-check:
     node scripts/adr-check.mjs
+    # Size/section budgets are advisory above. Enforce them with:
+    #   node scripts/adr-check.mjs docs/adr --strict
+
+# ── Living documents ───────────────────────────────────────────────────────
+# Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.
+# A document meant to grow is a directory of units plus a compacted index — this fails
+# on an index and its units disagreeing (dangling link, unreferenced unit) and warns on
+# the budgets. Doctrine: rules/product/documents.md. No-op with no docs/.
+# Enforce the budgets too with: node scripts/docs-check.mjs docs --strict
+docs-check:
+    node scripts/docs-check.mjs

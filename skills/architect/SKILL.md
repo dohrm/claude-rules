@@ -21,17 +21,27 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | Profile | What | Install when |
 |---------|------|--------------|
 | `rust` / `go` / `ts` | language baseline (style, gates, logging) | always, per language in use |
+| `godot` | Godot 4 + C# game (co-location, typed EventBus, data in `.tres`) | shape is **gamedev** |
+| `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | always, as soon as the repo has tests |
+| `cicd` | pipeline + release doctrine, reference workflows, `/ci-setup` | as soon as the repo has a forge — i.e. always, in practice |
 | `hexagonal` | ports/adapters, inward deps | shape is **backend** or **fullstack** |
 | `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify) | shape is **backend** or **fullstack** |
 | `backend` | error contract, config, health, pagination | shape is **backend** or **fullstack** |
+| `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
+| `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
+| `incident` | `/runbook` (one per failure mode) + `/postmortem` (blameless, hands off deltas) | someone is on call for it — the natural pair of `ops` |
 | `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
+| `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
+| `product` | the product-lifecycle skills (`/prd`, `/architect`, `/plan`, `/pre-mortem`, …) | the team wants the framing chain in-repo (it is how you got here) |
+| `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
+| `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 
 Examples:
-- Rust backend → `npx github:dohrm/claude-rules add rust hexagonal api backend`
-- React frontend → `npx github:dohrm/claude-rules add ts portal-flat`
-- Rust API + React portal (fullstack) → `add rust ts hexagonal api backend portal-flat`
-- Node/TS backend → `add ts api backend` (Fastify; not `portal-flat`)
+- Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
+- React frontend → `npx github:dohrm/claude-rules add ts testing cicd portal-flat`
+- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend portal-flat`
+- Node/TS backend → `add ts testing cicd api backend` (Fastify; not `portal-flat`)
 
 Add `cqrs` only if the user confirms they want event sourcing. Say so explicitly: *"CQRS is non-standard and pulls in a home library — do you want it, or a plain repository?"*
 
@@ -55,6 +65,9 @@ plainly that they are **proposed and awaiting acceptance**.
 The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what `docs/PLAN.md`'s "Architectural Decisions" header should reference — `/plan` reads this file rather than re-deriving them.
 
 <adr-template>
+<!-- ONE screen, ~400 words total, 600 hard ceiling. ONE decision per record. No
+     section outside the five below. Budgets per section are in
+     rules/agent/decisions.md — they are the point of the template, not a hint. -->
 # ADR-NNNN: <short decision title>
 
 - **Status**: Proposed
@@ -64,19 +77,26 @@ The durable decisions here (routes, schema shape, key model names, auth, boundar
 
 ## Context
 
-The forces at play: the PRD constraint(s), the existing system, and what makes this decision significant. State facts, not the choice.
+~120 words. The forces at play, as facts: the PRD constraint(s), the existing system, what makes this significant. Not the history of the discussion, not the choice.
 
 ## Decision
 
-The choice, in active voice: *"We will …"*. Precise enough to act on.
+~150 words, bullets. The choice in active voice: *"We will …"*. Precise enough to act on. Everything a *"we will"* appears in outside this section is a **different ADR**.
 
 ## Consequences
 
-What becomes easier, and what becomes harder. Name the costs we knowingly accept.
+~100 words. What gets harder, and the costs we knowingly accept. Not a place for new choices.
 
 ## Alternatives considered
 
-- **<option>** — why not chosen (the trade-off, not a dismissal).
+2–4 bullets, **one line each** — the option, then the trade-off that killed it (not a dismissal).
+
+- **<option>** — <the trade-off>.
+
+## Implemented
+
+<!-- OPTIONAL, added after the code, ~150 words. Omit it while nothing is built. -->
+Only three things earn a line: a claim the code now **proves** (name the test), where reality **diverged** from the prediction (cheaper / costlier / different), and what exists but is **not load-bearing yet**. Not a changelog. It never touches the status line.
 </adr-template>
 
 <architecture-template>
@@ -122,6 +142,8 @@ External services, the contract with each, the blast radius if it fails.
 ## Rules
 
 - ADR only the **architecturally-significant** decisions (costly to reverse, wide blast radius). Not trivia.
+- `docs/ARCHITECTURE.md` is itself an **index** (`product/documents.md`): the stack table and the decision log point at the ADRs, they never restate their reasoning. Each section one screen.
+- **One decision per record, one screen per record.** A reader who postpones an ADR has not decided; length is a cost, not a virtue. When a record runs long, split it or move the description out (schemas → `DATA-MODEL.md`, screen behavior → `EXPERIENCE.md`, sequencing → `PLAN.md`) — never compress the reasoning, which is the only part that had to be written here.
 - Never write a status other than `Proposed` — not even for a decision the human clearly endorsed in conversation. Discussing is not accepting, and nothing in the repository distinguishes the two afterwards.
 - Simplicity first — the burden of proof is on complexity. Justify every service, store, and layer against the PRD.
 - This is the place to **name real technology** — the PRD deliberately doesn't.

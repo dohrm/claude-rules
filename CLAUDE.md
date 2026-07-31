@@ -23,6 +23,8 @@ in Claude format only — never hand-maintain the transformed outputs.
 - `skills/` — Claude Code skills as canonical `<name>/SKILL.md` dirs, copied into `.claude/skills/` (auto-discovered); frontmatter is `name` + `description` (the description drives auto-triggering)
 - `guidelines/` — patterns for working with Claude Code
 - `registry.json` + `bin/cli.mjs` — the installer (data-driven; the CLI stays dumb)
+- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR.
+- `eval/` — agent regression harness; calls `claude` and spends tokens, so it is manual (model bumps only)
 
 ## Working rules
 
@@ -33,3 +35,6 @@ in Claude format only — never hand-maintain the transformed outputs.
   rules), so never restate conventions inside an agent prompt.
 - The installer never merges build config — kit wiring is manual and documented.
 - Artifacts (rules, agents, docs) are written in English; see `rules/language.md`.
+- Adding an asset is not done until `npm test` passes: a new profile must appear in
+  `/architect`'s gating table, a new rule/skill/kit dir must be reachable from
+  `registry.json`, a skill's frontmatter `name` must equal its directory name.

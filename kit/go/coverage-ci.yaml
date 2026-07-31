@@ -1,0 +1,70 @@
+name: Coverage ratchet (Go)
+
+# Tier 3 quality gate for Go — deliberately NOT mutation testing.
+#
+# WHY NOT MUTATION: the Go mutation tools (go-mutesting, gremlins) are not
+# maintained to the level of cargo-mutants or Stryker — slow, flaky on generics,
+# and prone to unkillable mutants in idiomatic error handling. Shipping one here
+# would create a gate the team disables within a month. So this is the honest
+# weaker signal: a coverage RATCHET on changed packages. It cannot tell an
+# assertion-free test from a real one — pair it with review, and read
+# rules/testing/ratchet.md for why coverage is never a target.
+#
+# The ratchet: coverage of the changed packages must not drop below the committed
+# baseline. Only ever up; lowering the baseline is a reviewed decision.
+#
+# COPY to .gitea/workflows/coverage-go.yaml (or .github/workflows/). The syntax is
+# the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
+# GitHub: `ubuntu-latest`) and working-directory to your go_dir.
+#
+# One-time setup: commit a baseline file next to the module —
+#   echo "0.0" > .coverage-baseline        # then raise it once measured
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest             # ADAPT to your runner label
+    continue-on-error: true            # ← remove once the baseline is ratcheted
+    defaults:
+      run:
+        working-directory: .           # ADAPT to your go_dir
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # need the base branch to compute the diff
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Test with race detector and coverage
+        run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Ratchet against the committed baseline
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          BASE=$(cat .coverage-baseline 2>/dev/null || echo 0)
+          echo "coverage: ${TOTAL}%  baseline: ${BASE}%"
+          awk -v t="$TOTAL" -v b="$BASE" 'BEGIN { if (t + 0.01 < b) { print "✗ coverage dropped below the baseline"; exit 1 } }'
+          awk -v t="$TOTAL" -v b="$BASE" 'BEGIN { if (t > b + 1) print "→ baseline can be raised to " t " (commit .coverage-baseline)" }'
+
+      - name: Which changed lines are untested
+        if: always()
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" | grep -E '\.go$' | grep -v _test.go > changed.txt || true
+          echo "--- uncovered statements in changed files ---"
+          go tool cover -func=coverage.out | grep -v ' 100.0%$' | grep -F -f changed.txt || echo "(none)"
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: coverage.out

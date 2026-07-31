@@ -1,0 +1,25 @@
+# Task layer for the shop platform. CI, the hooks and the agent all call these.
+
+ns := "shop-prod"
+
+check: rust-check
+
+rust-lint:
+    cargo fmt --all --check
+    cargo clippy --workspace --all-targets -- -D warnings
+rust-check: rust-lint
+    cargo test --workspace
+
+# ── Operations ─────────────────────────────────────────────────────────────
+# The checkout v2 path is behind a flag; turning it off degrades to v1 pricing.
+checkout-killswitch-off:
+    kubectl -n {{ns}} set env deploy/checkout-api CHECKOUT_V2_ENABLED=false
+
+checkout-rollback:
+    kubectl -n {{ns}} rollout undo deploy/checkout-api
+
+checkout-logs since="15m":
+    kubectl -n {{ns}} logs deploy/checkout-api --since={{since}} --tail=200
+
+checkout-dependency-status:
+    kubectl -n {{ns}} exec deploy/checkout-api -- /app/bin/healthcheck --verbose

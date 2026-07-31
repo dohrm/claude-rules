@@ -32,10 +32,13 @@ jobs:
   mutation:
     runs-on: linux                     # ADAPT to your runner label
     continue-on-error: true            # ← remove once baselines are ratcheted
-    env:
-      # ADAPT: caching for your runner (optional).
-      RUSTC_WRAPPER: /home/ghrunner/.cargo/bin/sccache
-      CARGO_TARGET_DIR: /home/ghrunner/.cache/cargo-target/mutants
+    # ADAPT (optional): on a persistent self-hosted runner, a shared compiler cache and
+    # a target dir OUTSIDE the workspace turn a 20-minute mutation run into a few. Both
+    # are paths on YOUR runner, so they are commented out — an absolute path from
+    # someone else's machine is a silent failure waiting on yours.
+    # env:
+    #   RUSTC_WRAPPER: sccache            # or the absolute path on your runner
+    #   CARGO_TARGET_DIR: <a writable dir on the runner, outside the workspace>
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

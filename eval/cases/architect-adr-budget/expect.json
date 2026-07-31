@@ -1,0 +1,25 @@
+{
+  "skill": "architect",
+  "rules": ["common", "agent", "product"],
+  "prompt": "Use the architect skill (/architect). The PRD is at docs/PRD.md. Work through it and write the outputs.",
+  "answers": [
+    "Backend only for now — the dispatcher console is a separate frontend project.",
+    "Go. The team maintains two Go services already and nothing in Rust.",
+    "PostgreSQL. It is what the platform team operates; no second store unless the PRD forces it.",
+    "Authentication comes from the existing Keycloak; the public tracking page is unauthenticated and rate-limited.",
+    "It deploys to the existing Kubernetes cluster.",
+    "Your recommendations are fine. Write ARCHITECTURE.md and the ADRs.",
+    "Nothing to add, finish up."
+  ],
+  "gates": ["adr-check.mjs docs/adr --strict", "docs-check.mjs docs --strict"],
+  "artifacts": {
+    "docs/ARCHITECTURE.md": {
+      "matches": ["(?i)decision log", "(?i)adr-0001", "(?i)\\bgo\\b", "(?i)postgres"]
+    },
+    "docs/adr/*.md": {
+      "matches": ["\\*\\*Status\\*\\*:\\s*Proposed", "(?i)^##\\s*Alternatives considered"],
+      "not_matches": ["\\*\\*Status\\*\\*:\\s*(Accepted|Rejected|Superseded|Deprecated)"]
+    }
+  },
+  "judge": "Is there exactly one decision per ADR, each justified against a constraint that appears in the PRD?"
+}

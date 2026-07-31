@@ -1,0 +1,120 @@
+name: CI
+
+# Tier 1-2 gate. The pipeline is a scheduler, not a second definition of
+# "correct": every job below calls `just`, which is the ONE place that knows the
+# commands and the paths (kit/common/justfile.snippet). Doctrine:
+# rules/cicd/pipeline.md.
+#
+# COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — the syntax is
+# the same. ADAPT: `runs-on` (GitHub: ubuntu-latest; Gitea: your runner label,
+# often `linux`), and DELETE the jobs for technologies this repo does not have.
+#
+# `just` on the runner: baking it into the runner image is the fastest and the
+# most reliable (no marketplace action to mirror). The install step below is the
+# fallback — pinned, and skipped when `just` is already present.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A force-push should leave one run, not three.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: '1.42.4'         # ADAPT / bump deliberately
+
+jobs:
+  rust:                          # DELETE if no Rust
+    runs-on: ubuntu-latest       # ADAPT to your runner label
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2          # caches the toolchain deps, never the verdict
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Ensure the Tier-2 tools
+        run: |
+          command -v cargo-deny >/dev/null 2>&1 || cargo install cargo-deny --locked
+          command -v cargo-machete >/dev/null 2>&1 || cargo install cargo-machete --locked
+      - name: just rust-check
+        run: just rust-check
+
+  ts:                            # DELETE if no TypeScript
+    runs-on: ubuntu-latest       # ADAPT
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'     # ADAPT — pin it, never `latest`
+          cache: npm
+          cache-dependency-path: '**/package-lock.json'
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install deps
+        run: npm ci                          # ADAPT the working directory to your ts_dir
+      - name: just ts-check
+        run: just ts-check
+
+  go:                            # DELETE if no Go
+    runs-on: ubuntu-latest       # ADAPT
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable     # ADAPT — pin a version for a release-bearing repo
+          cache: true
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Ensure the Tier-2 tools
+        run: |
+          command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          command -v govulncheck  >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: just go-check
+        run: just go-check
+
+  # Documents gate — OPT-IN, only if the repo keeps ADRs (docs/adr/) or a PRD/PLAN.
+  # An agent proposes a decision, a human accepts it (rules/agent/decisions.md); a document
+  # that grows stays units + a compacted index (rules/product/documents.md).
+  # docs:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with: { fetch-depth: 0 }   # the gate reads history to see a moved status line
+  #     - uses: actions/setup-node@v4
+  #       with: { node-version: '22' }
+  #     - run: node scripts/adr-check.mjs
+  #     - run: node scripts/docs-check.mjs
+
+  # ONE required check for branch protection. Without this, protecting each job
+  # individually means a job that is skipped (renamed, conditioned out) silently
+  # counts as green — see the "skipped required check" rule.
+  ci-ok:
+    if: always()
+    needs: [rust, ts, go]        # ADAPT to the jobs you kept
+    runs-on: ubuntu-latest       # ADAPT
+    steps:
+      - name: Every gate must have actually succeeded
+        run: |
+          RESULTS="${{ join(needs.*.result, ' ') }}"
+          echo "gate results: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }
+          done
