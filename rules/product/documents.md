@@ -23,6 +23,11 @@ Below the threshold, one file is right — a directory for three phases is cerem
 The split is a mechanical migration when the threshold arrives, not a decision to
 agonise over.
 
+The numbers here are **defaults, not law**. A repo whose document legitimately needs
+a different budget declares it once in `.docs-budgets.json` at its root — see
+[The gate](#the-gate). Read that file before writing: where it exists, it wins over
+this table.
+
 ## The unit
 
 - **One unit, one thing** — one decision, one phase, one capability. If it needs
@@ -41,7 +46,8 @@ agonise over.
 
 The index is the **compaction**, not a table of contents. It must be readable on
 its own and answer exactly three questions: **where are we, what is next, what is
-out**. One line per unit, and a hard budget of one screen.
+out**. One line per unit, and a hard budget of one screen — `indexCeiling`, which a
+repo may set per document when its index genuinely needs more (see [The gate](#the-gate)).
 
 - It carries only what is needed to navigate and to know status. **Never a fact
   that would have to be updated when a unit changes** — that fact has one home, and
@@ -89,6 +95,26 @@ split threshold, a `(continued)` heading — because "too long" is a judgment a 
 makes, and a gate that fakes one is worse than no gate. `--strict` turns the
 warnings into failures. `docs/adr/` is checked by `adr-check` instead, which knows
 the same budgets plus the status guard.
+
+**The budgets are per-repo.** A number that is right for most projects is wrong for
+some — a PRD index carrying fourteen capabilities does not compact into one screen,
+however well it is written. Both gates read `.docs-budgets.json` at the repo root,
+where a document may raise any of `indexCeiling`, `unitCeiling`, `splitLines`,
+`splitAt` (and `adr.unitCeiling`), or set one to `null` for no ceiling at all:
+
+```json
+{
+  "$why": "14 capabilities — the spine plus the table does not fit 500 words",
+  "prd": { "indexCeiling": 1500 }
+}
+```
+
+That file is **yours**: the installer never writes it, so `claude-rules update`
+cannot reset a threshold this repo argued for — unlike editing the gate script,
+which the next update overwrites. Say *why* in the file (`$why`), because a moved
+budget is a claim about this project, and the gate prints the override on every run
+so it never becomes an invisible default. Numbers only: the shape — units plus a
+compacted index — is not a setting.
 
 ## Checklist
 
