@@ -65,7 +65,9 @@ and never runs a product skill; a greenfield product starts at `/interview`.
 
 A PRD and a plan are meant to grow; the *file* is not. Past a threshold each becomes
 a directory of append-only units plus a one-screen index — the shape `docs/adr/`
-already has (`rules/product/documents.md`, enforced advisorily by `docs-check`).
+already has (`rules/product/documents.md`, enforced advisorily by `docs-check`). The
+thresholds are defaults: a repo moves them in `.docs-budgets.json` at its root, a file
+the installer never writes — so an update cannot reset a budget you argued for.
 
 ```
 docs/
