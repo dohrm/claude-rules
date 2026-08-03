@@ -39,6 +39,12 @@ over a screen, unit over its ceiling, a single-file PRD/PLAN past the split
 threshold, a `(continued)` heading). `docs/adr/` is left to `adr-check`. Doctrine:
 `../rules/product/documents.md`.
 
+Every budget of both gates is a **default**, overridable per repo in
+`.docs-budgets.json` at the root — `{ "prd": { "indexCeiling": 1500 } }`, `null` for
+no ceiling, `adr.unitCeiling` for the decision records. Put it there rather than in
+the script: the installer never writes that file, so `claude-rules update` cannot
+reset it. The gates print the override on every run, so a moved budget stays visible.
+
 The commands **and their paths** live once, in the justfile recipes (via the
 `*_dir` variables). lefthook triggers just call `just <tech>-lint`/`-check`
 (glob-scoped, layout-agnostic); `just check` runs the full set. One source of

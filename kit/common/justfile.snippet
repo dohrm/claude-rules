@@ -103,6 +103,8 @@ adr-check:
     node scripts/adr-check.mjs
     # Size/section budgets are advisory above. Enforce them with:
     #   node scripts/adr-check.mjs docs/adr --strict
+    # Move the ceiling for THIS repo in .docs-budgets.json (never in the script — an
+    # update overwrites it):  { "adr": { "unitCeiling": 900 } }
 
 # ── Living documents ───────────────────────────────────────────────────────
 # Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.
@@ -110,5 +112,7 @@ adr-check:
 # on an index and its units disagreeing (dangling link, unreferenced unit) and warns on
 # the budgets. Doctrine: rules/product/documents.md. No-op with no docs/.
 # Enforce the budgets too with: node scripts/docs-check.mjs docs --strict
+# Budgets are defaults — move them for THIS repo in .docs-budgets.json (never in the
+# script, which an update overwrites):  { "prd": { "indexCeiling": 1500 } }
 docs-check:
     node scripts/docs-check.mjs

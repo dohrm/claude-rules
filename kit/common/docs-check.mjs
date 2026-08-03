@@ -16,44 +16,26 @@
 //   • a single-file PRD/PLAN past the split threshold;
 //   • a `(continued)` heading — the documented symptom of growth-by-inflation.
 //
+// Those budgets are DEFAULTS. A repo that needs a different one declares it in
+// `.docs-budgets.json` at its root — a file the installer never writes, so an update
+// cannot reset it (see the DEFAULTS block below).
+//
 // `docs/adr/` is deliberately NOT checked here: adr-check.mjs owns it (same budgets, plus
 // the status/commit guard).
 //
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
 //
-// Usage:  node scripts/docs-check.mjs [docs-dir] [--strict]      (default dir: docs)
+// Usage:  node scripts/docs-check.mjs [docs-dir] [--strict] [--config=<file>]
+//         (defaults: docs, .docs-budgets.json)
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-// ADAPT to your project if a document legitimately needs a different budget — you own
-// this file. Targets come from rules/product/documents.md; ceilings are 1.5× the target,
-// so a gate fires on a real overshoot and not on a well-written unit.
-const LIVING = [
-  {
-    name: 'plan',
-    index: 'PLAN.md',
-    units: 'plan',
-    unitCeiling: 600, // ~400-word phase
-    splitLines: 400,
-    unitMarker: /^##\s*Phase\s/gm, // the single-file shape, from the /plan template
-    splitAt: 6,
-  },
-  {
-    name: 'PRD',
-    index: 'PRD.md',
-    units: 'prd',
-    unitCeiling: 750, // ~500-word capability
-    splitLines: 400,
-    unitMarker: null, // capabilities have no stable single-file marker — size only
-    splitAt: 8,
-  },
-]
-const INDEX_CEILING = 500 // words — "one screen", generously
-
 const args = process.argv.slice(2)
 const strict = args.includes('--strict')
+const configArg = args.find((a) => a.startsWith('--config='))
+const configPath = configArg ? configArg.slice('--config='.length) : '.docs-budgets.json'
 const docsDir = args.find((a) => !a.startsWith('--')) ?? 'docs'
 
 const words = (s) => s.split(/\s+/).filter(Boolean).length
@@ -65,6 +47,100 @@ const mdFiles = (dir) =>
     .filter((n) => n.endsWith('.md') && n.toLowerCase() !== 'readme.md')
     .sort()
     .map((n) => path.join(dir, n))
+
+// ------------------------------------------------------------------- budgets
+// Targets come from rules/product/documents.md; ceilings are 1.5× the target, so a gate
+// fires on a real overshoot and not on a well-written unit.
+//
+// A repo whose document legitimately needs a different budget declares it in
+// `.docs-budgets.json` at the repo root. That file is YOURS — the installer never writes
+// it, so `claude-rules update` cannot reset a threshold your repo argued for. (Editing the
+// numbers below works too, but an update overwrites this script; the config file is the
+// durable half.) Numbers only: the shape — units plus a compacted index — is doctrine.
+//
+//   {
+//     "$why": "a 12-capability PRD index does not compact into 500 words",
+//     "prd":  { "indexCeiling": 1500 },
+//     "plan": { "splitAt": 8 },
+//     "adr":  { "unitCeiling": 900 }        ← read by adr-check.mjs, ignored here
+//   }
+//
+// Any budget may be `null` — no ceiling, and that warning is never raised.
+const DEFAULTS = {
+  indexCeiling: 500, // words — "one screen", generously; the fallback for any document below
+  plan: { unitCeiling: 600, splitLines: 400, splitAt: 6 }, // ~400-word phase
+  prd: { unitCeiling: 750, splitLines: 400, splitAt: 8 }, // ~500-word capability
+}
+const DOC_KEYS = ['indexCeiling', 'unitCeiling', 'splitLines', 'splitAt']
+const OTHER_GATES = ['adr'] // adr-check.mjs reads the same file for its own half
+
+const bail = (msg) => {
+  console.error(`docs-check: ${msg}`)
+  process.exit(2)
+}
+
+/** DEFAULTS with the repo's overrides merged in, plus the list of what was overridden. */
+function loadBudgets(file) {
+  const out = { indexCeiling: DEFAULTS.indexCeiling, plan: { ...DEFAULTS.plan }, prd: { ...DEFAULTS.prd } }
+  const overrides = []
+  if (!existsSync(file)) return { ...out, overrides, file: null }
+
+  let raw
+  try {
+    raw = JSON.parse(read(file))
+  } catch (e) {
+    bail(`${file} is not valid JSON — ${e.message}`)
+  }
+  // A typo must not silently disable a budget, so an unknown key is an error.
+  const budget = (where, v) => {
+    if (v === null) return Infinity
+    if (!Number.isInteger(v) || v <= 0)
+      bail(`${file}: "${where}" must be a positive integer, or null for no ceiling — got ${JSON.stringify(v)}`)
+    return v
+  }
+  for (const [key, value] of Object.entries(raw)) {
+    if (key.startsWith('$') || OTHER_GATES.includes(key)) continue // $why / $comment: for the reader
+    if (key === 'indexCeiling') {
+      out.indexCeiling = budget(key, value)
+      overrides.push(`${key}=${value}`)
+      continue
+    }
+    if (!(key in out) || typeof out[key] !== 'object')
+      bail(`${file}: unknown key "${key}" — expected indexCeiling, plan, prd (or ${OTHER_GATES.join(', ')}).`)
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+      bail(`${file}: "${key}" must be an object of budgets, e.g. { "indexCeiling": 1500 }.`)
+    for (const [k, v] of Object.entries(value)) {
+      if (k.startsWith('$')) continue
+      if (!DOC_KEYS.includes(k))
+        bail(`${file}: unknown key "${key}.${k}" — expected ${DOC_KEYS.join(', ')}.`)
+      out[key][k] = budget(`${key}.${k}`, v)
+      overrides.push(`${key}.${k}=${v}`)
+    }
+  }
+  return { ...out, overrides, file }
+}
+
+const budgets = loadBudgets(configPath)
+
+// An index ceiling is per-document — a PRD spine plus a capability table compacts to a
+// different size than a phase table — and falls back to the global one when not declared.
+const LIVING = [
+  {
+    name: 'plan',
+    index: 'PLAN.md',
+    units: 'plan',
+    unitMarker: /^##\s*Phase\s/gm, // the single-file shape, from the /plan template
+    ...budgets.plan,
+  },
+  {
+    name: 'PRD',
+    index: 'PRD.md',
+    units: 'prd',
+    unitMarker: null, // capabilities have no stable single-file marker — size only
+    ...budgets.prd,
+  },
+]
+const indexCeiling = (doc) => doc.indexCeiling ?? budgets.indexCeiling
 
 /** Markdown link targets, resolved against the file that carries them. */
 function linkedPaths(file, text) {
@@ -93,11 +169,12 @@ function checkLiving(doc, problems, warnings) {
     }
 
     const indexWords = words(indexText)
-    if (indexWords > INDEX_CEILING) {
+    const ceiling = indexCeiling(doc)
+    if (indexWords > ceiling) {
       warnings.push({
         kind: 'index',
         file: indexPath,
-        detail: `${indexWords} words (ceiling ${INDEX_CEILING})`,
+        detail: `${indexWords} words (ceiling ${ceiling})`,
       })
     }
 
@@ -180,6 +257,12 @@ const TITLE = {
   continued: '`(continued)` heading',
 }
 
+// A budget this repo moved is stated, not applied silently — a gate nobody can see the
+// thresholds of is a gate nobody trusts.
+const budgetNote = budgets.overrides.length
+  ? ` Overridden in ${budgets.file}: ${budgets.overrides.join(', ')}.`
+  : ''
+
 function report(warnings) {
   const label = strict ? 'error' : 'warning'
   for (const kind of ['index', 'unit', 'split', 'continued']) {
@@ -191,7 +274,8 @@ function report(warnings) {
   }
   console.error(
     `\nBudgets and shapes: rules/product/documents.md` +
-      (strict ? '' : ' (advisory here — pass --strict to enforce them).'),
+      (strict ? '' : ' (advisory here — pass --strict to enforce them).') +
+      budgetNote,
   )
 }
 
@@ -217,7 +301,7 @@ function main() {
   if (strict && warnings.length > 0) return 1
 
   const note = warnings.length > 0 ? ` (${warnings.length} advisory warning(s) above)` : ''
-  console.log(`docs-check: ${docsDir}/ in order.${note}`)
+  console.log(`docs-check: ${docsDir}/ in order.${note}${budgetNote}`)
   return 0
 }
 

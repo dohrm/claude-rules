@@ -22,10 +22,11 @@
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
 //
-// Usage:  node scripts/adr-check.mjs [adr-dir] [--strict]      (default dir: docs/adr)
+// Usage:  node scripts/adr-check.mjs [adr-dir] [--strict] [--config=<file>]
+//         (defaults: docs/adr, .docs-budgets.json)
 
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const KNOWN_STATUSES = ['Proposed', 'Accepted', 'Rejected', 'Superseded', 'Deprecated']
@@ -35,10 +36,54 @@ const STATUS_IN_DIFF = /^[+-]-\s*\*\*Status\*\*:/m
 
 const args = process.argv.slice(2)
 const strict = args.includes('--strict')
+const configArg = args.find((a) => a.startsWith('--config='))
+const configPath = configArg ? configArg.slice('--config='.length) : '.docs-budgets.json'
 const adrDir = args.find((a) => !a.startsWith('--')) ?? 'docs/adr'
 
 // One decision, one screen. Doctrine + per-section budgets: rules/agent/decisions.md.
-const WORD_CEILING = 600
+//
+// The ceiling is a DEFAULT: a repo raises it under `"adr": { "unitCeiling": 900 }` in
+// `.docs-budgets.json` at its root (`null` = no ceiling) — the same file docs-check.mjs
+// reads for the PRD/PLAN budgets, and one the installer never writes, so an update cannot
+// reset it. The loader is duplicated in both gates on purpose: each stays a single file you
+// can drop into scripts/ on its own. The canonical section list is doctrine, not a setting.
+const DEFAULT_WORD_CEILING = 600
+
+/** The ADR word ceiling, plus a note when the repo moved it. */
+function loadCeiling(file) {
+  if (!existsSync(file)) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
+  let raw
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'))
+  } catch (e) {
+    console.error(`adr-check: ${file} is not valid JSON — ${e.message}`)
+    process.exit(2)
+  }
+  const adr = raw.adr
+  if (adr === undefined) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
+  if (adr === null || typeof adr !== 'object' || Array.isArray(adr)) {
+    console.error(`adr-check: ${file}: "adr" must be an object, e.g. { "unitCeiling": 900 }.`)
+    process.exit(2)
+  }
+  // A typo must not silently disable the budget.
+  for (const key of Object.keys(adr))
+    if (!key.startsWith('$') && key !== 'unitCeiling') {
+      console.error(`adr-check: ${file}: unknown key "adr.${key}" — expected unitCeiling.`)
+      process.exit(2)
+    }
+  const v = adr.unitCeiling
+  if (v === undefined) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
+  if (v !== null && (!Number.isInteger(v) || v <= 0)) {
+    console.error(
+      `adr-check: ${file}: "adr.unitCeiling" must be a positive integer, or null for no ceiling — got ${JSON.stringify(v)}`,
+    )
+    process.exit(2)
+  }
+  return { ceiling: v === null ? Infinity : v, note: ` Overridden in ${file}: adr.unitCeiling=${v}.` }
+}
+
+const { ceiling: WORD_CEILING, note: budgetNote } = loadCeiling(configPath)
+
 // A heading is canonical when it names one of these. Anything else is an overflow valve.
 const SECTION_KEYWORDS = ['context', 'decision', 'consequence', 'alternative', 'implement']
 const HEADING = /^##[^#].*$/gm
@@ -79,7 +124,8 @@ function reportBudget(oversized, invented, strict) {
   }
   console.error(
     `\nSize and sections: rules/agent/decisions.md` +
-      (strict ? '' : ' (advisory here — pass --strict to enforce the budget).'),
+      (strict ? '' : ' (advisory here — pass --strict to enforce the budget).') +
+      budgetNote,
   )
 }
 
@@ -186,7 +232,7 @@ function main() {
   if (strict && budgetCount > 0) return 1
 
   const note = budgetCount > 0 ? ` (${budgetCount} advisory warning(s) above)` : ''
-  console.log(`adr-check: ${files.length} decision record(s) in order.${note}`)
+  console.log(`adr-check: ${files.length} decision record(s) in order.${note}${budgetNote}`)
   return 0
 }
 
