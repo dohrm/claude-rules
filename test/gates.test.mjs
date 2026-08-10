@@ -105,6 +105,50 @@ test('docs-check: docs/adr is left to adr-check', () => {
   })
 })
 
+// The budgets are defaults. A repo moves them in a file the installer never writes, so
+// `claude-rules update` cannot reset a threshold the repo argued for.
+test('docs-check: a per-document index ceiling from .docs-budgets.json wins', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/PRD.md', `# PRD\n\n${filler(600)}\n\n[a](./prd/01-a.md)\n`)
+    write(dir, 'docs/prd/01-a.md', '# Capability 01\n\nA thing.\n')
+
+    const before = run(DOCS_CHECK, ['docs'], dir)
+    assert.match(before.out, /docs\/PRD\.md — 60\d words \(ceiling 500\)/)
+    assert.equal(run(DOCS_CHECK, ['docs', '--strict'], dir).status, 1)
+
+    write(dir, '.docs-budgets.json', '{ "$why": "12 capabilities", "prd": { "indexCeiling": 1500 } }')
+    const after = run(DOCS_CHECK, ['docs', '--strict'], dir)
+    assert.equal(after.status, 0, after.out)
+    assert.match(after.out, /Overridden in \.docs-budgets\.json: prd\.indexCeiling=1500/)
+
+    // …and only for the document that declared it: PLAN.md keeps the global default.
+    write(dir, 'docs/PLAN.md', `# Plan\n\n${filler(600)}\n\n[a](./plan/01-a.md)\n`)
+    write(dir, 'docs/plan/01-a.md', PHASE)
+    assert.match(run(DOCS_CHECK, ['docs'], dir).out, /docs\/PLAN\.md — 60\d words \(ceiling 500\)/)
+  })
+})
+
+test('docs-check: null is no ceiling, and a typo is an error (never a silently disabled budget)', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/PLAN.md', PLAN_INDEX)
+    write(dir, 'docs/plan/01-a.md', PHASE + filler(700))
+
+    write(dir, '.docs-budgets.json', '{ "plan": { "unitCeiling": null } }')
+    assert.equal(run(DOCS_CHECK, ['docs', '--strict'], dir).status, 0)
+
+    write(dir, '.docs-budgets.json', '{ "plan": { "unitCieling": 900 } }')
+    const typo = run(DOCS_CHECK, ['docs'], dir)
+    assert.equal(typo.status, 2)
+    assert.match(typo.out, /unknown key "plan\.unitCieling"/)
+
+    write(dir, '.docs-budgets.json', '{ "plan": { "unitCeiling": 0 } }')
+    assert.equal(run(DOCS_CHECK, ['docs'], dir).status, 2)
+
+    write(dir, '.docs-budgets.json', '{ oops')
+    assert.match(run(DOCS_CHECK, ['docs'], dir).out, /not valid JSON/)
+  })
+})
+
 test('adr-check: over the ceiling warns, and --strict promotes it', () => {
   withTmpRepo((dir) => {
     write(
@@ -116,6 +160,15 @@ test('adr-check: over the ceiling warns, and --strict promotes it', () => {
     assert.equal(warn.status, 0)
     assert.match(warn.out, /over the 600-word ceiling/)
     assert.equal(run(ADR_CHECK, ['docs/adr', '--strict'], dir).status, 1)
+
+    // Same repo-owned override file as docs-check; its PRD/PLAN keys are not adr-check's.
+    write(dir, '.docs-budgets.json', '{ "prd": { "indexCeiling": 1500 }, "adr": { "unitCeiling": 900 } }')
+    const raised = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(raised.status, 0, raised.out)
+    assert.match(raised.out, /Overridden in \.docs-budgets\.json: adr\.unitCeiling=900/)
+
+    write(dir, '.docs-budgets.json', '{ "adr": { "wordCeiling": 900 } }')
+    assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
   })
 })
 

@@ -136,5 +136,10 @@ that fakes one is worse than no gate; the warning exists so the drift is visible
 while writing instead of at review. A repo that wants the budget enforced passes
 `--strict`, which turns both into failures.
 
+600 is a **default**. A repo moves it in `.docs-budgets.json` at its root —
+`{ "adr": { "unitCeiling": 900 } }`, or `null` for no ceiling — the same file the
+document budgets live in (`../product/documents.md`), and one the installer never
+writes, so an update cannot reset it. The canonical section list is not a setting.
+
 Like every gate: it is a file, so it can be edited. It is not a wall. It is there so
 that skipping the step has to be a deliberate, visible act rather than an oversight.
