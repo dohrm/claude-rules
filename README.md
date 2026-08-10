@@ -135,6 +135,10 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   [`kit/README.md`](./kit/README.md). `init` does the assembling for you.
 - The ref and the agent set are pinned in `.claude-rules.lock`, so `update` replays
   your choices. Updates are reviewable: re-run `update` and read the `git diff`.
+- **`add` is additive.** It extends the lock — profiles *and* agents — and re-emits
+  everything it now holds, so a second `add` never drops the first one. A bare `add`
+  on an existing install keeps its agent set rather than widening to all four; pass
+  `--agent` to add a target. Narrowing is `remove`'s job, never a side effect of `add`.
 - `remove` is the exact inverse: it deletes what each profile emitted, prunes the
   `AGENTS.md` managed block, and updates the lock. It never touches your
   `justfile`/`lefthook` wiring — delete those recipes yourself. Review with

@@ -99,6 +99,56 @@ test('no --agent installs every known agent', () => {
   })
 })
 
+// `add` used to write ONLY its arguments to the lock, so a second add dropped the
+// first profile out of it while leaving its files on disk: invisible to `update`,
+// and orphaned by `remove all` — which deletes the lock, leaving no way to find them.
+test('add extends the lock instead of replacing it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'go', '--agent', 'claude'], dir))
+
+    assert.deepEqual(lockOf(dir).profiles, ['rust', 'go'])
+    assert.ok(has(dir, '.claude/rules/rust/code-style.md'), 'the first profile must survive a second add')
+    assert.ok(has(dir, '.claude/rules/go/quality-gates.md'))
+  })
+})
+
+test('add without --agent keeps the locked agent set (never widens to all)', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'go'], dir))
+
+    assert.deepEqual(lockOf(dir).agents, ['claude'])
+    assert.ok(!has(dir, '.cursor/rules'), 'a bare add must not start emitting for other agents')
+  })
+})
+
+test('add --agent adds a target to the locked set, and back-fills the locked profiles', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'go', '--agent', 'cursor'], dir))
+
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
+    // the profile that predates the new agent must exist for it too, or the lock lies
+    assert.ok(has(dir, '.cursor/rules/rust/code-style.mdc'), 'locked profile not emitted for the new agent')
+    assert.ok(has(dir, '.claude/rules/go/quality-gates.md'), 'new profile not emitted for the locked agent')
+  })
+})
+
+// (empty parent dirs like .claude/rules/ may remain — assets are what must go)
+test('remove all after several adds deletes every installed asset', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'go', '--agent', 'claude'], dir))
+    ok(runCliBare(['remove', 'all'], dir))
+
+    assert.ok(!has(dir, '.claude-rules.lock'))
+    assert.ok(!has(dir, '.claude/rules/rust'), 'first-added profile orphaned by the uninstall')
+    assert.ok(!has(dir, '.claude/rules/go'))
+    assert.ok(!has(dir, '.claude/kit/rust'))
+  })
+})
+
 test('remove <profile> deletes only that profile and updates the lock', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'claude'], dir))

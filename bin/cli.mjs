@@ -378,7 +378,18 @@ async function main() {
   switch (cmd) {
     case 'add': {
       if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,codex,opencode] [--ref <ref>]'); process.exit(1) }
-      await install(positional, refFlag || registry.defaultRef, parseAgents())   // no --agent → all agents
+      // `add` EXTENDS the install; it never redefines it. Writing only the new
+      // profiles would leave the previous ones on disk but out of the lock —
+      // invisible to `update`, and orphaned by `remove all`, which then deletes
+      // the lock and leaves no way to find them.
+      const lock = readLock()
+      const profiles = [...new Set([...(lock ? lock.profiles : []), ...positional])]
+      // Same rule for agents: no --agent on an existing install keeps its set
+      // (never silently widen to all four); an explicit --agent adds a target.
+      const locked = lock && lock.agents ? lock.agents : []
+      const agents = [...new Set([...locked, ...parseAgents(locked.join(','))])]
+      if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
+      await install(profiles, refFlag || registry.defaultRef, agents)
       break
     }
     case 'update': {
