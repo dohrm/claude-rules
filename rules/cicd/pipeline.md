@@ -24,8 +24,11 @@ fix costs a round trip. If a check is worth blocking a merge, it is worth being
 runnable locally with one command.
 
 The legitimate exceptions are the things that *cannot* run locally, and they are
-few: Tier 3 (mutation / coverage ratchet, needs the PR diff), publishing, and
-anything requiring a secret. Everything else goes through the justfile.
+fewer than they look: publishing, and anything requiring a secret. That is the
+list. **Tier 3 is not on it** — "it needs the PR diff" is not a reason, because
+`git diff <base>...HEAD` computes the same merge-base set on a laptop. Mutation
+stays out of the *hooks* (minutes per run), not out of the machine: the kit ships
+it as `just mutate-diff`, and the PR job re-runs it as a witness.
 
 ## Tiers → jobs
 
@@ -33,7 +36,7 @@ anything requiring a secret. Everything else goes through the justfile.
 |------|-------|--------|
 | 1 — fmt, lint | pre-commit hook, and inside `just <tech>-check` on PR | yes |
 | 2 — tests, deny/vulncheck, build | pre-push hook, and `just check` on PR | yes |
-| 3 — mutation / coverage ratchet | CI only, on the PR diff | not until ratcheted |
+| 3 — mutation / coverage ratchet | `just mutate-diff` before the push, and the PR job — never a hook | not until ratcheted |
 
 One job per technology so they run in parallel and a red one names its own
 toolchain. Tier 3 is a separate job (see `kit/rust/mutation-ci.yaml`,

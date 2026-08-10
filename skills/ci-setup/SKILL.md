@@ -40,8 +40,10 @@ Produce a **drift table**, one row per command CI runs:
 |---|---|---|
 
 Three verdicts, no fourth: **move it** into a justfile recipe (the default),
-**keep it** as a legitimate CI-only exception (Tier 3, publishing, anything needing
-a secret — name which), or **delete it** (dead or duplicated). Present the table
+**keep it** as a legitimate CI-only exception (publishing, anything needing a
+secret — name which), or **delete it** (dead or duplicated). Tier 3 is *not* such
+an exception: mutation runs locally too (`just mutate-diff`), so a mutation job
+whose command has no justfile counterpart is drift like any other. Present the table
 and the diagnosis before touching a file.
 
 Also flag: unpinned actions or images, a missing concurrency group, a cached

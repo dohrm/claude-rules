@@ -7,6 +7,12 @@ name: Mutation (TS)
 #
 # Runs on PR against changed files only so it stays minutes, not hours.
 #
+# This job is the WITNESS, not the first observation: the same tool runs locally
+# via `just ts-mutate` before the push. Stryker has no `--since`, so the two
+# differ in HOW they scope — locally `--incremental` (reuses the previous report
+# and re-tests what changed), here `--mutate` on the PR's changed files, which
+# needs no prior state on a fresh runner. Same verdict, different starting point.
+#
 # CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose.
 # First establish a baseline, triage real gaps vs equivalent mutants, THEN set
 # `thresholds.break` in stryker.config.json to the measured baseline and remove
