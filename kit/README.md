@@ -23,7 +23,7 @@ than bash for exactly this reason; it needs Node >= 18 and no dependencies.)
 |------|--------|---------|------|---------|
 | 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
 | 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
-| 3 | *(CI only)* | PR | mutation testing (`--in-diff`) — NEVER a hook | minutes |
+| 3 | `just mutate-diff` | per coherent block, before the push — and the PR job | mutation on the diff — NEVER a hook | minutes |
 
 `adr-check` sits in Tier 2 but guards a different thing: not whether the code is
 correct, but whether a **decision** was taken by a human. A green gate is
@@ -50,12 +50,21 @@ always one an agent can close its own loop on locally. Doctrine:
 `../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
 
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the
-fast loop. It is a PR/CI gate, scoped to changed code, ratcheted from a baseline
-(a healthy repo often sits ~70%, so it starts non-blocking). Tier 3 exists per
-language: `rust/mutation-ci.yaml` (cargo-mutants), `ts/mutation-ci.yaml`
-(Stryker), and `go/coverage-ci.yaml` — a coverage ratchet, because Go has no
-production-grade mutation tool. Doctrine: `../rules/testing/ratchet.md` (install
-it with the `testing` profile).
+fast loop. That makes it a **per-block** gate, not a per-iteration one — and *not*
+a CI-only one: `git diff <base>...HEAD` gives the same merge-base set locally that
+the PR job computes, so `just mutate-diff` runs it before the push and CI re-runs
+it as a witness. It is scoped to changed code and ratcheted from a baseline (a
+healthy repo often sits ~70%, so it starts non-blocking). Per language:
+`rust/mutation-ci.yaml` (cargo-mutants), `ts/mutation-ci.yaml` (Stryker —
+`--incremental` locally, it has no `--since`), and `go/coverage-ci.yaml` — a
+coverage ratchet, because Go has no production-grade mutation tool. A survivor has
+three possible answers (delete the code / assert it / exclude it), which is why the
+doctrine matters more than the tool: `../rules/testing/ratchet.md` (install it with
+the `testing` profile).
+
+`dup-check` (jscpd, npx-only) is the other opt-in Tier 2 recipe: copy-paste is the
+one AI-slop indicator from `../rules/agent/guardrails.md` a machine can measure.
+Baseline it before you enable it — same ratchet as any other metric.
 
 ## Layout convention (recommended)
 

@@ -8,6 +8,11 @@ name: Mutation
 # Runs on PR against changed code only (`--in-diff`) so it stays minutes, not
 # hours. Scoping/exclusions live in .cargo/mutants.toml (I/O crates, getters).
 #
+# This job is the WITNESS, not the first observation: the same run happens
+# locally via `just rust-mutate` before the push (the merge-base diff is
+# computable on a laptop). If survivors are being discovered here rather than in
+# the editor, the local loop is not being run — see rules/testing/ratchet.md.
+#
 # CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose. A
 # healthy repo often sits ~70% (below a naive 0.75 bar). First establish
 # per-crate baselines, triage real gaps vs equivalent mutants, THEN flip to
@@ -39,6 +44,9 @@ jobs:
     # env:
     #   RUSTC_WRAPPER: sccache            # or the absolute path on your runner
     #   CARGO_TARGET_DIR: <a writable dir on the runner, outside the workspace>
+    defaults:
+      run:
+        working-directory: .             # ADAPT to your rust_dir (e.g. api)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -50,18 +58,21 @@ jobs:
       - name: Ensure cargo-mutants
         run: command -v cargo-mutants >/dev/null 2>&1 || cargo install cargo-mutants --locked
 
+      # `--relative` makes the paths workspace-relative, which is what
+      # cargo-mutants expects when the Rust workspace is NOT at the repo root.
+      # Same command as the local `just rust-mutate` recipe — one definition.
       - name: Compute PR diff
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          git diff "origin/${{ github.base_ref }}...HEAD" > pr.diff
-          echo "Changed hunks:"; git --no-pager diff --stat "origin/${{ github.base_ref }}...HEAD"
+          git diff "origin/${{ github.base_ref }}...HEAD" --relative -- . > pr.diff
+          echo "Changed hunks:"; git --no-pager diff --stat "origin/${{ github.base_ref }}...HEAD" -- .
 
       - name: Mutation testing (changed code only)
         run: cargo mutants --in-diff pr.diff --no-shuffle -j 2 --colors never
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mutants-out
           path: mutants.out/

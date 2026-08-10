@@ -10,9 +10,12 @@
 rust_dir := "."      # e.g. "api"                       for a backend under api/
 ts_dir   := "."      # e.g. "apps/web"
 go_dir   := "."      # e.g. "workflows/orchestration"
+base     := "origin/main"   # branch a feature is measured against (Tier 3)
 
 # Full local self-verify (Tiers 1-2) across the techs you have — the command an
-# agent closes its loop on before handing back. Tier 3 (mutation) is CI-only.
+# agent closes its loop on before handing back, in seconds. Tier 3 (mutation)
+# is deliberately NOT in here: it costs minutes, so it runs per coherent block
+# (`just mutate-diff`), not per iteration.
 # Add the checks your repo needs:
 check: rust-check
 # check: rust-check ts-check go-check adr-check docs-check
@@ -42,6 +45,53 @@ go-check: go-lint
     cd {{go_dir}} && go test -race ./...
     cd {{go_dir}} && go build ./...
     cd {{go_dir}} && govulncheck ./...
+
+# ── Tier 3 — do the tests ASSERT, or do they merely execute? ───────────────
+# Coverage cannot answer that; mutation can. Minutes, not seconds — so this is
+# NEVER a git hook and never part of `check`. Run it when a coherent block is
+# finished, BEFORE pushing: the survivors come back while the code is still in
+# your head, instead of at PR time. CI runs the same tool on the PR diff as a
+# witness (kit/*/mutation-ci.yaml). Doctrine: rules/testing/ratchet.md.
+#
+# Opt-in per tech — uncomment the ones whose tool is installed. A recipe that
+# is absent is a valid answer: the agent reports mutation as not-run rather
+# than pretending. Add `pr.diff` and `coverage.out` to .gitignore.
+mutate-diff: rust-mutate
+# mutate-diff: rust-mutate ts-mutate go-cover
+
+# `git diff <base>...HEAD` = changes since the merge-base, i.e. the same set the
+# PR job computes. `--relative` inside {{rust_dir}} rewrites the paths so they
+# are workspace-relative, which is what cargo-mutants expects when the Rust
+# workspace is NOT at the repo root. Needs: cargo install cargo-mutants.
+rust-mutate:
+    cd {{rust_dir}} && git diff {{base}}...HEAD --relative -- . > pr.diff
+    cd {{rust_dir}} && cargo mutants --in-diff pr.diff --no-shuffle
+
+# StrykerJS has no `--since`: it has `--incremental`, which reuses the previous
+# report and re-tests only what changed — same outcome, one flag, no file list
+# to compute. The first run is a full one; every run after it is minutes.
+# Needs: npm i -D @stryker-mutator/core + a runner, then npx stryker init.
+ts-mutate:
+    cd {{ts_dir}} && npx stryker run --incremental
+
+# Go has no production-grade mutation tool, so this is the weaker signal: run
+# the suite with coverage and read which statements in the code you just touched
+# are still at 0%. The numeric ratchet against .coverage-baseline stays in CI
+# (kit/go/coverage-ci.yaml) — here you want the map, not the verdict.
+go-cover:
+    cd {{go_dir}} && go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+    cd {{go_dir}} && go tool cover -func=coverage.out
+
+# ── Duplication (opt-in) ───────────────────────────────────────────────────
+# Copy-paste is an agent's native failure mode, and it is the one "AI slop
+# indicator" from rules/agent/guardrails.md a machine can measure. jscpd is
+# npx-only (no install, no server) and language-agnostic. Add `dup-check` to
+# `check` once the reported number is at a level you accept — the same
+# baseline-then-ratchet sequence as any other metric (rules/testing/ratchet.md).
+# Tune --threshold (max % duplication tolerated) and the ignore globs.
+dup-check:
+    npx --yes jscpd . --min-lines 12 --threshold 3 --reporters consoleFull \
+        --ignore "**/node_modules/**,**/target/**,**/dist/**,**/*generated*/**"
 
 # ── Decisions ──────────────────────────────────────────────────────────────
 # Opt-in: add `adr-check` to `check` above if the repo keeps ADRs under docs/adr/.

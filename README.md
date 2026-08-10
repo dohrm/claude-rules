@@ -166,11 +166,13 @@ git hooks, you or the agent, and CI. No command is defined twice.
 | `just check` | 1+2, every tech — **the command an agent closes its loop on** | before every hand-back |
 | `just adr-check` | 2 — a decision was taken by a human (+ ADR size/section advisories) | opt-in, with `docs/adr/` |
 | `just docs-check` | 2 — an index and its units agree (+ budget advisories) | opt-in, with a PRD/PLAN |
-| *(CI only)* | 3 — mutation testing / coverage ratchet, on the PR diff | minutes; never a hook |
+| `just mutate-diff` | 3 — mutation / coverage ratchet, on the merge-base diff | per coherent block, before the push; minutes; never a hook |
 
-Tier 3 ships per language (`kit/rust/mutation-ci.yaml`, `kit/ts/mutation-ci.yaml`,
-`kit/go/coverage-ci.yaml`) and starts **non-blocking**: measure a baseline, then
-ratchet. The Tier 1-2 pipeline is `kit/cicd/ci.snippet.yaml`, whose jobs call the
+Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
+a laptop that the PR job computes on a runner, so the agent runs it before pushing
+and CI re-runs it as a witness. It ships per language (`kit/rust/mutation-ci.yaml`,
+`kit/ts/mutation-ci.yaml`, `kit/go/coverage-ci.yaml`) and starts **non-blocking**:
+measure a baseline, then ratchet. The Tier 1-2 pipeline is `kit/cicd/ci.snippet.yaml`, whose jobs call the
 same `just` recipes — a command CI has and the justfile does not is drift the agent's
 local loop cannot see.
 
