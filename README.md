@@ -100,6 +100,7 @@ npx github:dohrm/claude-rules init                     # assemble justfile + lef
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: ALL)
+npx github:dohrm/claude-rules add ts portal-flat --module apps/web   # monorepo: anchor to a directory
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
 npx github:dohrm/claude-rules remove cqrs              # delete a profile's files, update the lock
 npx github:dohrm/claude-rules remove all               # full uninstall
@@ -144,6 +145,44 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   `AGENTS.md` managed block, and updates the lock. It never touches your
   `justfile`/`lefthook` wiring — delete those recipes yourself. Review with
   `git status` before committing.
+
+### `--module` — the globs a monorepo actually needs
+
+A rule ships an extension-level glob (`**/*.ts`) because the library cannot know
+your layout. In a monorepo that is too coarse: `**/*.ts` makes the Fastify rules
+and the `backend` error contract load on a React component — roughly **30 % of the
+per-file context, spent on guidance that is wrong for that file**.
+
+`--module` anchors the profiles of that invocation to a directory:
+
+```bash
+npx github:dohrm/claude-rules add rust hexagonal api backend --module apps/api
+npx github:dohrm/claude-rules add ts portal-flat            --module apps/web
+npx github:dohrm/claude-rules add testing cicd product      # no --module: repo-wide
+```
+
+It lands in the lock, so `update` replays it:
+
+```json
+"modules": { "apps/api": ["rust", "hexagonal", "api", "backend"], "apps/web": ["ts", "portal-flat"] }
+```
+
+and emission rewrites the globs — `**/*.ts` becomes `apps/api/**/*.ts` for Claude's
+`paths:` and Cursor's `globs:` alike. A profile no module claims stays repo-wide, and
+a lock with **no** `modules` behaves exactly as before: the installer only rewrites
+what it is asked to. Destinations do not change — a rule shared by two modules is
+still **one file**, carrying both prefixes.
+
+**Language filtering comes free with it.** A rule declares the languages it is about
+in its own `paths:`; if every glob it carries targets a language the lock does not
+have, it can never fire and is not emitted at all — `api/go.md` has no business in a
+repo with no Go. The filter works at the *rule* level, never at the glob level: a rule
+that also covers a locked language keeps its dead globs, because they cost nothing and
+start working the day that language arrives.
+
+Because both of those can drop a file the previous install wrote, **rule directories
+are cleared before they are rewritten** — they are library-owned and never
+hand-edited. `kit/` is deliberately not: it is the copy-and-own surface.
 
 ### `doctor` — is the install still true?
 

@@ -340,3 +340,82 @@ test('doctor without a lock exits 1', () => {
     assert.match(r.stderr, /nothing to audit/)
   })
 })
+
+// -------------------------------------------------------------- module scope
+// `**/*.ts` is too coarse in a monorepo: it makes the Fastify rules load on a
+// React component. `--module` anchors a profile's globs to a directory.
+
+test('--module anchors the profile globs, for Claude and Cursor alike', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', '--agent', 'claude,cursor', '--module', 'apps/api'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust', 'api'] })
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /paths:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(read(dir, '.cursor/rules/api/rust.mdc'), /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+  })
+})
+
+test('a profile no module claims stays repo-wide', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'testing'], dir))
+
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(read(dir, '.claude/rules/testing/strategy.md'), /- "\*\*\/\*\.rs"/, 'unscoped profile must not be anchored')
+  })
+})
+
+test('a rule whose every glob targets an unlocked language is not emitted', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', 'backend', '--agent', 'claude'], dir))
+
+    assert.ok(has(dir, '.claude/rules/api/rust.md'), 'the locked language must be emitted')
+    assert.ok(!has(dir, '.claude/rules/api/go.md'), 'no Go here — the rule can never fire')
+    assert.ok(!has(dir, '.claude/rules/api/node.md'))
+    // A rule that ALSO covers a locked language stays whole: its dead glob costs
+    // nothing and starts working the day that language arrives.
+    assert.match(read(dir, '.claude/rules/backend/config.md'), /- "\*\*\/\*\.go"/)
+  })
+})
+
+test('an install with no --module writes a lock with no modules key', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    assert.ok(!('modules' in lockOf(dir)), 'an unscoped install must stay byte-compatible with older locks')
+  })
+})
+
+test('--module extends the map instead of replacing it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'], 'apps/web': ['ts'] })
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/, 'the first module must survive')
+    assert.match(read(dir, '.claude/rules/ts/code-style.md'), /- "apps\/web\/\*\*\/\*\.ts"/)
+  })
+})
+
+test('remove drops the module bindings of the profiles it removes', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['remove', 'api'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'] })
+  })
+})
+
+test('update clears a rule directory instead of leaving orphans in it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, '.claude/rules/rust/dropped-upstream.md'), '---\ntitle: x\n---\nstale\n')
+
+    ok(runCli(['update'], dir))
+    assert.ok(!has(dir, '.claude/rules/rust/dropped-upstream.md'), 'a rule dir is library-owned; update must not leave orphans')
+    assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
+    // kit is the "copy and own" surface — update must NOT wipe what the repo added.
+    writeFileSync(join(dir, '.claude/kit/rust/mine.toml'), 'x = 1\n')
+    ok(runCli(['update'], dir))
+    assert.ok(has(dir, '.claude/kit/rust/mine.toml'), 'kit is owned by the repo, not the installer')
+  })
+})

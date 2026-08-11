@@ -9,7 +9,7 @@
 // portable as-is; rules and agents are transformed per target.
 //
 // Usage:
-//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,codex,opencode] [--ref v1.2.0]
+//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,codex,opencode] [--module apps/api] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml (if absent)
@@ -33,8 +33,9 @@ const flag = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1]
 const refFlag = flag('--ref')
 const agentFlag = flag('--agent')
 const localFlag = flag('--local')
+const moduleFlag = flag('--module')
 const strictFlag = argv.includes('--strict')
-const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--strict'].filter(Boolean))
+const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--strict'].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 // Default is ALL agents — narrowing to a subset is a deliberate --agent choice.
@@ -93,16 +94,62 @@ function dumpFm(obj) {
   return lines.join('\n')
 }
 
+// ---------------------------------------------------------------- module scope
+// A rule ships an extension-level glob (`**/*.ts`) because the library cannot know
+// your layout. In a monorepo that is too coarse: `**/*.ts` makes the Fastify rules
+// load on a React component. `modules` in the lock says which profiles belong to
+// which directory, and emission anchors their globs there.
+//
+//   "modules": { "apps/api": ["rust", "api"], "apps/web": ["ts", "portal-flat"] }
+//
+// A profile named by no module stays repo-wide, and a lock with no `modules` at all
+// behaves exactly as before — the installer only rewrites what it is asked to.
+const prefixesFor = (profile, modules) =>
+  Object.entries(modules || {}).filter(([, ps]) => ps.includes(profile)).map(([dir]) => dir.replace(/\/+$/, ''))
+const scopeGlobs = (globs, prefixes) =>
+  prefixes.length ? prefixes.flatMap(p => globs.map(g => `${p}/${g}`)) : globs
+
+// A rule declares the languages it is about, in its own `paths:` — no new metadata
+// needed. If every glob it carries targets a language this repo did not lock, the
+// rule can never fire, so it is not emitted at all: `api/go.md` has no business in
+// a repo with no Go. Anything the table does not claim (yaml, CHANGELOG…) is never
+// filtered, and a repo that locked no language at all is left alone.
+const LANG_EXT = { rust: ['rs'], ts: ['ts', 'tsx'], go: ['go'], godot: ['cs', 'tscn', 'tres', 'gd'] }
+function isLanguageDead(globs, profiles) {
+  if (!Array.isArray(globs) || !globs.length) return false
+  const locked = new Set(profiles.flatMap(p => LANG_EXT[p] || []))
+  if (!locked.size) return false
+  const known = new Set(Object.values(LANG_EXT).flat())
+  const exts = globs.map(g => (g.match(/\.([a-z0-9]+)$/i) || [])[1]).filter(Boolean).map(e => e.toLowerCase())
+  if (exts.length !== globs.length) return false          // a non-language glob in the set — leave the rule alone
+  if (!exts.every(e => known.has(e))) return false        // an extension no profile claims
+  return !exts.some(e => locked.has(e))
+}
+
+// Rules are library-owned and never hand-edited (that is the whole point of the
+// per-agent emitters), so a rule directory is cleared before it is rewritten:
+// otherwise a rule dropped upstream — or skipped by the language filter — survives
+// on disk as an orphan that `update` can never reach. Kit is deliberately NOT
+// cleared: it is the "copy and own" surface, and the repo may have added to it.
+function resetDir(dir) { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) }
+
 // ----------------------------------------------------------------- transforms
 // Claude rule (.md, `paths:`/`title:`) → Cursor rule (.mdc, `globs:`/`alwaysApply`).
-function toMdcText(text) {
+function toMdcText(text, prefixes = []) {
   const { fm, body } = splitFm(text)
   const out = {}
   const desc = fm.description || fm.title
   if (desc) out.description = desc
-  if (Array.isArray(fm.paths) && fm.paths.length) { out.globs = fm.paths; out.alwaysApply = false }
+  if (Array.isArray(fm.paths) && fm.paths.length) { out.globs = scopeGlobs(fm.paths, prefixes); out.alwaysApply = false }
   else out.alwaysApply = true
   return `---\n${dumpFm(out)}\n---\n${body}`
+}
+// Claude rule, module-anchored. Returns null when nothing changes, so an unscoped
+// install keeps copying byte-for-byte.
+function toScopedRuleText(text, prefixes) {
+  const { fm, body } = splitFm(text)
+  if (!prefixes.length || !Array.isArray(fm.paths) || !fm.paths.length) return null
+  return `---\n${dumpFm({ ...fm, paths: scopeGlobs(fm.paths, prefixes) })}\n---\n${body}`
 }
 // Claude subagent (name/description/model/color/memory) → opencode agent (description/mode).
 function toOpencodeAgentText(text) {
@@ -142,15 +189,31 @@ function emitKit(s, entry, agent) {
   for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
-function emitClaudeRaw(s, entry) {   // rules & agents for Claude: verbatim copy to entry.to
-  for (const f of stagedFiles(s)) { const t = s.isFile ? entry.to : join(entry.to, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
-  logCopy(entry.from, entry.to); return null
+// Rules & agents for Claude. Verbatim, unless the profile is anchored to modules —
+// then only the `paths:` list is rewritten. Agents carry no `paths:` and are untouched.
+function emitClaudeRaw(s, entry, agent, ctx) {
+  const { prefixes, langProfiles } = ctx.scope
+  if (entry.kind === 'rule' && !s.isFile) resetDir(entry.to)
+  let n = 0
+  for (const f of stagedFiles(s)) {
+    const text = f.rel.endsWith('.md') ? readFileSync(f.abs, 'utf8') : null
+    if (entry.kind === 'rule' && text && isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
+    const t = s.isFile ? entry.to : join(entry.to, f.rel); ensureDir(dirname(t))
+    const scoped = entry.kind === 'rule' && text ? toScopedRuleText(text, prefixes) : null
+    if (scoped) writeFileSync(t, scoped); else copyFileSync(f.abs, t)
+    n++
+  }
+  logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
 }
-function emitCursorRule(s, entry) {
+function emitCursorRule(s, entry, agent, ctx) {
+  const { prefixes, langProfiles } = ctx.scope
   const root = '.cursor/rules'
+  if (!s.isFile) resetDir(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
+    const text = readFileSync(f.abs, 'utf8')
+    if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
     const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, '.mdc')
-    const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(readFileSync(f.abs, 'utf8')))
+    const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(text, prefixes))
   }
   logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
 }
@@ -160,13 +223,17 @@ function emitCursorRule(s, entry) {
 function emitAgentsRule(s, entry, agent, ctx) {
   if (ctx.seen.has(entry.from)) return null
   ctx.seen.add(entry.from)
+  const { prefixes, langProfiles } = ctx.scope
+  if (!s.isFile) resetDir(join('.agents/rules', basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8'); const { fm, body } = splitFm(text)
     if (Array.isArray(fm.paths) && fm.paths.length) {
+      if (isLanguageDead(fm.paths, langProfiles)) continue
       const rel = s.isFile ? f.rel : join(basename(entry.from), f.rel)
       const target = join('.agents/rules', rel)
-      ensureDir(dirname(target)); copyFileSync(f.abs, target)
-      ctx.refs.push({ globs: fm.paths, path: target, title: fm.title || fm.description || rel })
+      ensureDir(dirname(target))
+      writeFileSync(target, toScopedRuleText(text, prefixes) || text)
+      ctx.refs.push({ globs: scopeGlobs(fm.paths, prefixes), path: target, title: fm.title || fm.description || rel })
     } else {
       ctx.inline.push(body.trim())
     }
@@ -294,7 +361,12 @@ function remove(profilesArg) {
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
   } else {
-    writeLock(lock.ref, remaining, agents)
+    // A removed profile leaves its module bindings behind too, or the next
+    // `update` would anchor globs to a profile that is no longer installed.
+    const modules = Object.fromEntries(Object.entries(lock.modules || {})
+      .map(([dir, ps]) => [dir, ps.filter(p => remaining.includes(p))])
+      .filter(([, ps]) => ps.length))
+    writeLock(lock.ref, remaining, agents, modules)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
@@ -303,8 +375,12 @@ function remove(profilesArg) {
 
 // -------------------------------------------------------------------- install
 function readLock() { return existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, 'utf8')) : null }
-function writeLock(ref, profiles, agents) {
-  writeFileSync(LOCK, JSON.stringify({ repo: registry.repo, ref, profiles, agents }, null, 2) + '\n')
+function writeLock(ref, profiles, agents, modules) {
+  const lock = { repo: registry.repo, ref, profiles, agents }
+  // Absent rather than empty: a lock with no modules must stay byte-identical to
+  // what earlier versions wrote, so an unscoped install never grows a field.
+  if (modules && Object.keys(modules).length) lock.modules = modules
+  writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
 
 const FINAL_MSG = {
@@ -314,18 +390,28 @@ const FINAL_MSG = {
   opencode: 'opencode: rules in AGENTS.md (+ .agents/rules/); agents in .opencode/agent/; skills in .opencode/skills/.',
 }
 
-async function install(profiles, ref, agents) {
+async function install(profiles, ref, agents, modules) {
   const unknown = profiles.filter(p => !registry.profiles[p])
   if (unknown.length) {
     console.error(`Unknown profile(s): ${unknown.join(', ')}. Available: ${Object.keys(registry.profiles).join(', ')}`)
     process.exit(1)
   }
-  const entries = [...registry.shared, ...profiles.flatMap(p => registry.profiles[p])]
-  console.log(`Installing [${profiles.join(', ')}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}\n`)
-  const ctx = { inline: [], refs: [], seen: new Set() }
+  // Carry the profile each entry came from: it is what maps an entry to the
+  // module(s) that asked for it, and therefore to its glob prefixes.
+  const owned = [
+    ...registry.shared.map(e => ({ e, profile: null })),
+    ...profiles.flatMap(p => registry.profiles[p].map(e => ({ e, profile: p }))),
+  ]
+  const scopes = Object.entries(modules || {}).map(([d, ps]) => `${d} → ${ps.join(', ')}`)
+  console.log(`Installing [${profiles.join(', ')}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
+  if (scopes.length) console.log(`Modules: ${scopes.join(' · ')}`)
+  console.log()
+  const langProfiles = profiles.filter(p => LANG_EXT[p])
+  const ctx = { inline: [], refs: [], seen: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
-  for (const entry of entries) {
+  for (const { e: entry, profile } of owned) {
     const s = await makeStaged(ref, entry)
+    ctx.scope = { prefixes: profile ? prefixesFor(profile, modules) : [], langProfiles }
     for (const agent of agents) {
       const emit = EMITTERS[agent][entry.kind]
       if (!emit) { console.error(`  ! no emitter for kind "${entry.kind}" (${entry.from})`); continue }
@@ -335,7 +421,7 @@ async function install(profiles, ref, agents) {
     if (s.temp) rmSync(s.dir, { recursive: true, force: true })
   }
   flushAgentsMd(ctx)
-  writeLock(ref, profiles, agents)
+  writeLock(ref, profiles, agents, modules)
   console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
@@ -551,7 +637,7 @@ function doctor() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,codex,opencode] [--ref <ref>]'); process.exit(1) }
+      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,codex,opencode] [--module <dir>] [--ref <ref>]'); process.exit(1) }
       // `add` EXTENDS the install; it never redefines it. Writing only the new
       // profiles would leave the previous ones on disk but out of the lock —
       // invisible to `update`, and orphaned by `remove all`, which then deletes
@@ -562,14 +648,22 @@ async function main() {
       // (never silently widen to all four); an explicit --agent adds a target.
       const locked = lock && lock.agents ? lock.agents : []
       const agents = [...new Set([...locked, ...parseAgents(locked.join(','))])]
+      // --module anchors the profiles named in THIS invocation to a directory.
+      // Like the rest of `add` it extends: a profile keeps the modules it already
+      // had, and re-running with a second path adds it rather than moving it.
+      const modules = { ...(lock && lock.modules ? lock.modules : {}) }
+      if (moduleFlag) {
+        const dir = moduleFlag.replace(/\/+$/, '')
+        modules[dir] = [...new Set([...(modules[dir] || []), ...positional])]
+      }
       if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-      await install(profiles, refFlag || registry.defaultRef, agents)
+      await install(profiles, refFlag || registry.defaultRef, agents, modules)
       break
     }
     case 'update': {
       const lock = readLock()
       if (!lock) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
-      await install(lock.profiles, refFlag || registry.defaultRef, parseAgents((lock.agents && lock.agents.join(',')) || 'claude'))
+      await install(lock.profiles, refFlag || registry.defaultRef, parseAgents((lock.agents && lock.agents.join(',')) || 'claude'), lock.modules)
       break
     }
     case 'remove': {
@@ -589,7 +683,9 @@ async function main() {
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,cursor,codex,opencode] [--ref <ref>]   install/pin profiles (default: all agents)\n'
+        + '  add <profile...> [--agent claude,cursor,codex,opencode] [--module <dir>] [--ref <ref>]\n'
+        + '                                   install/pin profiles (default: all agents, repo-wide)\n'
+        + '                                   --module anchors those profiles\' globs to a directory (monorepo)\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
