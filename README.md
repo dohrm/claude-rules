@@ -311,25 +311,65 @@ rot on a model bump.
 Claude is the canonical source; each asset is emitted (copied or transformed) per
 target agent.
 
-| Asset | Claude (canonical) | Cursor | Codex | opencode |
-|-------|--------------------|--------|-------|----------|
-| **skill** | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.opencode/skills/` |
-| **kit** | `.claude/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` |
-| **rule** (path-scoped) | `.claude/rules/` (`paths:`) | `.cursor/rules/*.mdc` (`globs:`) | `.agents/rules/` + ref in `AGENTS.md` | `.agents/rules/` + ref in `AGENTS.md` |
-| **rule** (cross-cutting) | `.claude/rules/` | `.cursor/rules/*.mdc` (`alwaysApply`) | inlined in `AGENTS.md` | inlined in `AGENTS.md` |
-| **agent** (subagent) | `.claude/agents/` | — (no file subagents) | — (no file subagents) | `.opencode/agent/` |
+The five targets split into **two families**, and the line between them is the only
+thing that matters: does the tool load a rule because a glob matched?
+
+| Asset | Claude (canonical) | Cursor | Antigravity | Codex | opencode |
+|-------|--------------------|--------|-------------|-------|----------|
+| **skill** | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.opencode/skills/` |
+| **kit** | `.claude/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` |
+| **rule** (path-scoped) | `.claude/rules/` (`paths:`) | `.cursor/rules/*.mdc` (`globs:`) | `.agents/rules/*.md` (`globs:`) | `.dev/rules/` + a row in `AGENTS.md` | `.dev/rules/` + a row in `AGENTS.md` |
+| **rule** (cross-cutting) | `.claude/rules/` | `.cursor/rules/*.mdc` (`alwaysApply`) | `.agents/rules/*.md` (`alwaysApply`) | inlined in `AGENTS.md` | inlined in `AGENTS.md` |
+| **agent** (subagent) | `.claude/agents/` | — (no file subagents) | — (no file subagents) | — (no file subagents) | `.opencode/agent/` |
+
+**Claude, Cursor and Antigravity do.** One file per rule, a glob in the frontmatter,
+loaded on demand. Antigravity converged on Cursor's exact format — `description` +
+`globs` + `alwaysApply` — so one transform serves both; only the home (`.agents/rules/`)
+and the extension (`.md`) differ.
+
+**Codex and opencode do not.** Cross-cutting rules are inlined into an
+installer-owned, idempotent block delimited by `<!-- claude-rules:start -->` …
+`<!-- claude-rules:end -->` (content outside is never touched, so `update` stays
+reviewable in `git diff`). Path-scoped ones are copied to `.dev/rules/` and listed as
+"read this file before editing a match" — **an instruction, not a mechanism.** That is
+the accepted degradation. The index states it once and imperatively, and groups its
+rows by module, so a session working in `apps/api` can skip the rest.
 
 `skills/` is the open [`SKILL.md` standard](https://www.agensi.io/learn/agent-skills-open-standard)
 — read verbatim by 30+ tools — so it is a straight copy. `kit/` is tool config,
 agent-independent by construction.
 
-**AGENTS.md** — Codex and opencode have no per-file path-scoping, so rules land in
-an installer-owned, idempotent block delimited by `<!-- claude-rules:start -->` …
-`<!-- claude-rules:end -->`. Content outside the block is never touched; `update`
-rewrites only the block, so the change stays reviewable in `git diff`. Cross-cutting
-rules are inlined; path-scoped ones are copied to `.agents/rules/` and referenced
-with a "read this file when working on `<glob>`" line — the one accepted degradation
-versus Claude/Cursor, which scope automatically.
+### Why `.dev/rules/` and not `.agents/rules/`
+
+`.agents/` is **Antigravity's native directory** — skills, workflows *and* rules. The
+skills collision is a happy one: a `SKILL.md` is portable, so one copy serves every
+tool that reads the standard. Rules are not: Antigravity reads `.agents/rules/` with
+*its* frontmatter, and the codex/opencode copies carry `paths:`, which means nothing
+to it. Left there they would be silently mis-read. So they live in `.dev/rules/`,
+next to `.dev/kit/`, where nothing claims them.
+
+> **Upgrading an install made before Antigravity was a target:** the codex/opencode
+> rule copies moved from `.agents/rules/` to `.dev/rules/`. Run `update`, then delete
+> the old `.agents/rules/` — `remove` no longer points there, so it cannot do it for
+> you. `doctor` lists exactly which directories to drop.
+
+### Why there is no nested `AGENTS.md`
+
+The obvious idea — `apps/api/AGENTS.md` holding that module's rules — is **not**
+implemented, for two reasons that survived the arithmetic:
+
+- **Codex and opencode disagree about what a nested file means.** Codex concatenates
+  from the repo root down to your **CWD** (32 KiB cap, one file per directory).
+  opencode walks **up** from the CWD and takes the **first** file it finds. So the same
+  nested file *extends* the root for one and *replaces* it for the other — silently
+  dropping every shared rule under opencode.
+- **Inlining a module's rules blows the cap anyway.** For a Rust backend it is ~47 KB
+  against Codex's 32 KiB; what would fit is a narrowed index, which the module
+  grouping already provides at a fraction of the bytes.
+
+The practical consequence for Codex is a **workflow**, not a file: run it from the
+module you are working in (`cd apps/api && codex`), and the root block plus the
+module's own group are what it reads.
 
 ## Structure
 

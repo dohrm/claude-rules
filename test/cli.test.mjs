@@ -68,9 +68,9 @@ test('add --agent codex: AGENTS.md block is idempotent and never touches user co
     assert.match(first, /<!-- claude-rules:start/)
     assert.match(first, /<!-- claude-rules:end -->/)
     // cross-cutting rules are inlined, path-scoped ones are referenced
-    assert.match(first, /Path-scoped rules/)
-    assert.match(first, /\.agents\/rules\/rust\/code-style\.md/)
-    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
+    assert.match(first, /Rules that are NOT loaded for you/)
+    assert.match(first, /\.dev\/rules\/rust\/code-style\.md/)
+    assert.ok(has(dir, ".dev/rules/rust/code-style.md"))
 
     ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
     assert.equal(read(dir, 'AGENTS.md'), first, 'second install must be byte-identical (managed block rewritten in place)')
@@ -90,9 +90,11 @@ test('add product: skills land as <name>/SKILL.md directories', () => {
 test('no --agent installs every known agent', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust'], dir))
-    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'codex', 'opencode'])
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'antigravity', 'codex', 'opencode'])
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     assert.ok(has(dir, '.cursor/rules/rust/code-style.mdc'))
+    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
+    assert.ok(has(dir, '.dev/rules/rust/code-style.md'))
     assert.ok(has(dir, 'AGENTS.md'))
     assert.ok(has(dir, '.opencode/agent/code-reviewer.md'))
     assert.match(read(dir, '.opencode/agent/code-reviewer.md'), /mode: subagent/)
@@ -167,13 +169,13 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
 test('remove <profile> prunes only that profile from the AGENTS.md block', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'codex'], dir))
-    assert.match(read(dir, 'AGENTS.md'), /\.agents\/rules\/hexagonal\//)
+    assert.match(read(dir, 'AGENTS.md'), /\.dev\/rules\/hexagonal\//)
 
     ok(runCliBare(['remove', 'hexagonal'], dir))
     const agentsMd = read(dir, 'AGENTS.md')
-    assert.doesNotMatch(agentsMd, /\.agents\/rules\/hexagonal\//, 'stale reference left behind')
-    assert.match(agentsMd, /\.agents\/rules\/rust\//, 'rust reference must survive')
-    assert.ok(!has(dir, '.agents/rules/hexagonal'))
+    assert.doesNotMatch(agentsMd, /\.dev\/rules\/hexagonal\//, 'stale reference left behind')
+    assert.match(agentsMd, /\.dev\/rules\/rust\//, 'rust reference must survive')
+    assert.ok(!has(dir, ".dev/rules/hexagonal"))
   })
 })
 
@@ -547,5 +549,68 @@ test('budget without an install exits 1', () => {
     const r = runCliBare(['budget'], dir)
     assert.equal(r.status, 1)
     assert.match(r.stderr, /run "add <profile\.\.\.>" first/)
+  })
+})
+
+// --------------------------------------------------------------- antigravity
+// Antigravity converged on Cursor's rule format (description/globs/alwaysApply)
+// but reads them from `.agents/rules/` — the directory claude-rules used for the
+// codex/opencode copies, which therefore moved to `.dev/rules/`.
+
+test('add --agent antigravity: Cursor-shaped rules under .agents/rules/', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'antigravity', '--module', 'apps/api'], dir))
+
+    const scoped = read(dir, '.agents/rules/rust/code-style.md')
+    assert.match(scoped, /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(scoped, /alwaysApply: false/)
+    assert.match(scoped, /description: Rust Code Style/)
+
+    assert.match(read(dir, '.agents/rules/agent/guardrails.md'), /alwaysApply: true/)
+    assert.ok(!has(dir, '.agents/rules/rust/code-style.mdc'), 'Antigravity reads .md, not Cursor\'s .mdc')
+    assert.ok(has(dir, '.agents/skills/rust-add-domain/SKILL.md'), 'skills are portable — the .agents/skills collision is a happy one')
+    assert.match(r.stdout, /no file-based subagents/)
+  })
+})
+
+test('codex/opencode rule copies stay out of Antigravity\'s directory', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex,antigravity'], dir))
+
+    // same rule, two homes, two frontmatter dialects — neither can read the other's
+    assert.match(read(dir, '.dev/rules/rust/code-style.md'), /paths:/)
+    assert.match(read(dir, '.agents/rules/rust/code-style.md'), /globs:/)
+    assert.match(read(dir, 'AGENTS.md'), /read `\.dev\/rules\/rust\/code-style\.md`/)
+    assert.doesNotMatch(read(dir, 'AGENTS.md'), /`\.agents\/rules\//, 'the AGENTS.md index must not send Codex to Antigravity\'s copies')
+  })
+})
+
+test('the AGENTS.md index groups its rows by module', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+    ok(runCli(['add', 'testing'], dir))
+
+    const md = read(dir, 'AGENTS.md')
+    assert.match(md, /### apps\/api\n/)
+    assert.match(md, /### apps\/web\n/)
+    assert.match(md, /### \(repo-wide\)\n/)
+    // the instruction is stated once, imperatively — the index is not a mechanism
+    assert.match(md, /Nothing loads them automatically/)
+    // repo-wide comes last: a session in a module reads its own group first
+    assert.ok(md.indexOf('### apps/api') < md.indexOf('### (repo-wide)'))
+  })
+})
+
+test('removing a module\'s only profile drops its index group too', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+    assert.match(read(dir, 'AGENTS.md'), /### apps\/web/)
+
+    ok(runCliBare(['remove', 'ts'], dir))
+    const md = read(dir, 'AGENTS.md')
+    assert.doesNotMatch(md, /### apps\/web/, 'an empty module heading must go with its rows')
+    assert.match(md, /### apps\/api/)
   })
 })

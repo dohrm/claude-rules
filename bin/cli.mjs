@@ -9,11 +9,12 @@
 // portable as-is; rules and agents are transformed per target.
 //
 // Usage:
-//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,codex,opencode] [--module apps/api] [--ref v1.2.0]
+//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,antigravity,codex,opencode] [--module apps/api] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
-//   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml (if absent)
+//   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
+//   npx github:dohrm/claude-rules budget [<path>]           # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs'
@@ -24,7 +25,7 @@ import { spawnSync } from 'node:child_process'
 
 const registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
-const KNOWN_AGENTS = ['claude', 'cursor', 'codex', 'opencode']
+const KNOWN_AGENTS = ['claude', 'cursor', 'antigravity', 'codex', 'opencode']
 
 // ---------------------------------------------------------------- arg parsing
 const argv = process.argv.slice(2)
@@ -49,8 +50,15 @@ function parseAgents(fallback) {
 }
 
 // ------------------------------------------------------------- destinations
-const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills', codex: '.agents/skills', opencode: '.opencode/skills' }
-const KIT_DIR   = { claude: '.claude/kit',    cursor: '.dev/kit',       codex: '.dev/kit',       opencode: '.dev/kit' }
+// `.agents/` is Antigravity's native directory (skills, workflows AND rules), and
+// the de-facto neutral home the other AGENTS.md-era tools read too. Skills there are
+// a happy collision — a SKILL.md is portable. Rules are NOT: Antigravity reads
+// .agents/rules/ with ITS frontmatter, so the codex/opencode copies (which carry
+// `paths:`, meaningless to it) live in .dev/rules/ instead — same neighbourhood as
+// .dev/kit/, and nothing picks them up by accident.
+const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills', antigravity: '.agents/skills', codex: '.agents/skills', opencode: '.opencode/skills' }
+const KIT_DIR   = { claude: '.claude/kit',    cursor: '.dev/kit',       antigravity: '.dev/kit',       codex: '.dev/kit',       opencode: '.dev/kit' }
+const AGENTS_RULE_DIR = '.dev/rules'
 
 // ------------------------------------------------------------------ fs utils
 const ensureDir = d => mkdirSync(d, { recursive: true })
@@ -205,35 +213,41 @@ function emitClaudeRaw(s, entry, agent, ctx) {
   }
   logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
 }
-function emitCursorRule(s, entry, agent, ctx) {
+// Cursor and Antigravity converged on the same rule format — one file per rule,
+// `description` + `globs` + `alwaysApply` in the frontmatter. Only the home and the
+// extension differ, so one transform serves both.
+const globRuleEmitter = (root, ext) => (s, entry, agent, ctx) => {
   const { prefixes, langProfiles } = ctx.scope
-  const root = '.cursor/rules'
   if (!s.isFile) resetDir(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8')
     if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
-    const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, '.mdc')
+    const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, ext)
     const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(text, prefixes))
   }
-  logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
+  logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + `/*${ext}`); return null
 }
+const emitCursorRule = globRuleEmitter('.cursor/rules', '.mdc')
+const emitAntigravityRule = globRuleEmitter('.agents/rules', '.md')
 // Codex & opencode have no per-file path-scoping: cross-cutting rules are inlined
-// into AGENTS.md, path-scoped rules are copied to .agents/rules/ and referenced.
+// into AGENTS.md, path-scoped rules are copied to .dev/rules/ and referenced.
 // AGENTS.md content is identical for both, so accumulate once (guarded by ctx.seen).
 function emitAgentsRule(s, entry, agent, ctx) {
   if (ctx.seen.has(entry.from)) return null
   ctx.seen.add(entry.from)
   const { prefixes, langProfiles } = ctx.scope
-  if (!s.isFile) resetDir(join('.agents/rules', basename(entry.from)))
+  if (!s.isFile) resetDir(join(AGENTS_RULE_DIR, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8'); const { fm, body } = splitFm(text)
     if (Array.isArray(fm.paths) && fm.paths.length) {
       if (isLanguageDead(fm.paths, langProfiles)) continue
       const rel = s.isFile ? f.rel : join(basename(entry.from), f.rel)
-      const target = join('.agents/rules', rel)
+      const target = join(AGENTS_RULE_DIR, rel)
       ensureDir(dirname(target))
       writeFileSync(target, toScopedRuleText(text, prefixes) || text)
-      ctx.refs.push({ globs: scopeGlobs(fm.paths, prefixes), path: target, title: fm.title || fm.description || rel })
+      // Carry the module so the index can be grouped by it: a Codex session run
+      // from apps/api can then skip every row that is not its own.
+      ctx.refs.push({ globs: scopeGlobs(fm.paths, prefixes), path: target, title: fm.title || fm.description || rel, module: prefixes.length === 1 ? prefixes[0] : null })
     } else {
       ctx.inline.push(body.trim())
     }
@@ -251,22 +265,39 @@ const emitSkip = (s, entry, agent) =>
   `  • ${agent}: no file-based subagents — skipped "${entry.from}" (use ${agent}'s runtime agent feature instead).`
 
 const EMITTERS = {
-  claude:   { skill: emitSkill, kit: emitKit, rule: emitClaudeRaw,   agent: emitClaudeRaw },
-  cursor:   { skill: emitSkill, kit: emitKit, rule: emitCursorRule,  agent: emitSkip },
-  codex:    { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,  agent: emitSkip },
-  opencode: { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,  agent: emitOpencodeAgent },
+  claude:      { skill: emitSkill, kit: emitKit, rule: emitClaudeRaw,        agent: emitClaudeRaw },
+  cursor:      { skill: emitSkill, kit: emitKit, rule: emitCursorRule,       agent: emitSkip },
+  antigravity: { skill: emitSkill, kit: emitKit, rule: emitAntigravityRule,  agent: emitSkip },
+  codex:       { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,       agent: emitSkip },
+  opencode:    { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,       agent: emitOpencodeAgent },
 }
 
 // AGENTS.md: rewrite a delimited, installer-owned block; never touch the user's content.
 const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
 const AGENTS_END = '<!-- claude-rules:end -->'
+const AGENTS_INDEX_HEADING = '## Rules that are NOT loaded for you'
 function flushAgentsMd(ctx) {
   if (!ctx.inline.length && !ctx.refs.length) return
   const parts = [AGENTS_START, '# Project rules (managed by claude-rules)\n']
   if (ctx.inline.length) parts.push(ctx.inline.join('\n\n'))
   if (ctx.refs.length) {
-    parts.push('\n## Path-scoped rules — read the referenced file when working on matching files\n')
-    for (const r of ctx.refs) parts.push(`- **${r.title}** — for \`${r.globs.join('`, `')}\`: read \`${r.path}\``)
+    // Neither Codex nor opencode loads a rule because a glob matched — the index is
+    // an instruction, not a mechanism. So say it once, imperatively, and group the
+    // rows by module: a session working in apps/api can skip everything else.
+    parts.push(`\n${AGENTS_INDEX_HEADING}\n`)
+    parts.push('Before you edit a file, open the rules below whose glob matches it, and')
+    parts.push('follow them. Nothing loads them automatically.\n')
+    const groups = new Map()
+    for (const r of ctx.refs) {
+      const key = r.module || '(repo-wide)'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(r)
+    }
+    const ordered = [...groups.entries()].sort(([a], [b]) => a === '(repo-wide)' ? 1 : b === '(repo-wide)' ? -1 : a.localeCompare(b))
+    for (const [mod, refs] of ordered) {
+      if (groups.size > 1) parts.push(`\n### ${mod}`)
+      for (const r of refs) parts.push(`- \`${r.globs.join('`, `')}\` → read \`${r.path}\` — ${r.title}`)
+    }
   }
   parts.push(AGENTS_END)
   const block = parts.join('\n')
@@ -293,29 +324,45 @@ function destsFor(entry, agent) {
     case 'rule':
       if (agent === 'claude') return [entry.to]                                   // file or dir
       if (agent === 'cursor') return [isFileFrom(entry.from) ? join('.cursor/rules', name.replace(/\.md$/, '.mdc')) : join('.cursor/rules', name)]
-      return [join('.agents/rules', name)]                                        // codex/opencode path-scoped copies
+      if (agent === 'antigravity') return [join('.agents/rules', name)]           // its own frontmatter, its own home
+      return [join(AGENTS_RULE_DIR, name)]                                        // codex/opencode path-scoped copies
     case 'agent':
       if (agent === 'claude')   return [entry.to]                                 // .claude/agents
       if (agent === 'opencode') return ['.opencode/agent']
-      return []                                                                   // cursor/codex: skipped on add
+      return []                                                                   // cursor/antigravity/codex: skipped on add
     default: return []
   }
 }
 
-// Drop stale path-scoped reference bullets from the AGENTS.md managed block.
+// Drop the index rows of removed profiles from the AGENTS.md managed block.
+// `remove` stages no source, so it cannot regenerate the block the way `add` does —
+// this is text surgery, and it is kept STRUCTURAL (a row is a bullet naming the rule
+// directory) rather than keyed on the row's prose, which has already changed once.
 function pruneAgentsRefs(removedRuleDirs) {
   const file = 'AGENTS.md'
   if (!existsSync(file) || !removedRuleDirs.length) return
-  let content = readFileSync(file, 'utf8')
+  const content = readFileSync(file, 'utf8')
   const re = new RegExp(`${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}`)
   const m = content.match(re); if (!m) return
-  const stale = line => /^- \*\*/.test(line) && line.includes('.agents/rules/')
-    && removedRuleDirs.some(d => line.includes(d + '/') || line.includes(d + '`'))
-  let kept = m[0].split('\n').filter(line => !stale(line))
-  if (!kept.some(l => /^- \*\*/.test(l) && l.includes('.agents/rules/')))
-    kept = kept.filter(l => !l.startsWith('## Path-scoped rules'))
-  writeFileSync(file, content.replace(re, kept.join('\n')))
-  console.log('  ✓ AGENTS.md  (pruned path-scoped references)')
+  const isRow = l => l.startsWith('- ') && l.includes(`${AGENTS_RULE_DIR}/`)
+  const lines = m[0].split('\n').filter(l => !(isRow(l) && removedRuleDirs.some(d => l.includes(`${d}/`))))
+
+  // A `### <module>` heading whose rows all went must go with them.
+  const kept = []
+  for (let i = 0; i < lines.length; i++) {
+    if (/^### /.test(lines[i])) {
+      let j = i + 1
+      while (j < lines.length && !/^#{2,3} /.test(lines[j]) && lines[j] !== AGENTS_END) j++
+      if (!lines.slice(i + 1, j).some(isRow)) { i = j - 1; continue }
+    }
+    kept.push(lines[i])
+  }
+  // Nothing left to point at: drop the whole index. It is always last in the block.
+  const head = kept.indexOf(AGENTS_INDEX_HEADING)
+  const out = head >= 0 && !kept.some(isRow) ? [...kept.slice(0, head), AGENTS_END] : kept
+  while (out.length > 1 && out[out.length - 2].trim() === '') out.splice(out.length - 2, 1)
+  writeFileSync(file, content.replace(re, out.join('\n')))
+  console.log('  ✓ AGENTS.md  (pruned index rows)')
 }
 function stripAgentsBlock() {
   const file = 'AGENTS.md'
@@ -347,7 +394,7 @@ function remove(profilesArg) {
   for (const entry of entries) {
     if (entry.kind === 'kit') removedKit = true
     for (const agent of agents) {
-      if (entry.kind === 'rule' && (agent === 'codex' || agent === 'opencode')) removedRuleDirs.push(join('.agents/rules', basename(entry.from)))
+      if (entry.kind === 'rule' && (agent === 'codex' || agent === 'opencode')) removedRuleDirs.push(join(AGENTS_RULE_DIR, basename(entry.from)))
       for (const dest of destsFor(entry, agent)) {
         if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
       }
@@ -386,8 +433,9 @@ function writeLock(ref, profiles, agents, modules) {
 const FINAL_MSG = {
   claude: 'Claude: .claude/rules/ auto-load (language rules path-scoped via `paths:`); .claude/agents/ + .claude/skills/ auto-discovered.',
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
-  codex: 'Codex: rules live in the AGENTS.md managed block (+ .agents/rules/ for path-scoped); skills in .agents/skills/. No file-based subagents.',
-  opencode: 'opencode: rules in AGENTS.md (+ .agents/rules/); agents in .opencode/agent/; skills in .opencode/skills/.',
+  antigravity: 'Antigravity: .agents/rules/*.md activate via globs/alwaysApply (same format as Cursor); skills in .agents/skills/. No file-based subagents.',
+  codex: `Codex: rules live in the AGENTS.md managed block (+ ${AGENTS_RULE_DIR}/ for path-scoped); skills in .agents/skills/. It merges AGENTS.md from the repo root down to your CWD (32 KiB cap), so run it from the module you are working in.`,
+  opencode: `opencode: rules in AGENTS.md (+ ${AGENTS_RULE_DIR}/); agents in .opencode/agent/; skills in .opencode/skills/. It takes the FIRST AGENTS.md walking up from the CWD — do not add a nested one, it would replace the root rather than extend them.`,
 }
 
 async function install(profiles, ref, agents, modules) {
@@ -589,16 +637,22 @@ function repoFiles() {
   return out
 }
 
-// Emitted rules, read back from whichever tree exists. `.agents/rules/` holds
-// ONLY the path-scoped ones (the rest is inlined into AGENTS.md), so it can
-// answer "does this glob match anything" but never "what is always on".
+// Emitted rules, read back from whichever tree exists — in the order that answers
+// the most. `.dev/rules/` holds ONLY the path-scoped ones (codex/opencode inline
+// the rest into AGENTS.md), so it can answer "does this glob match anything" but
+// never "what is always on"; that is what `complete` says.
 function installedRules() {
-  for (const [root, key] of [['.claude/rules', 'paths'], ['.cursor/rules', 'globs'], ['.agents/rules', 'paths']]) {
+  for (const [root, key, complete] of [
+    ['.claude/rules', 'paths', true],
+    ['.cursor/rules', 'globs', true],
+    ['.agents/rules', 'globs', true],       // Antigravity — same format as Cursor
+    [AGENTS_RULE_DIR, 'paths', false],      // codex/opencode — path-scoped only
+  ]) {
     if (!existsSync(root)) continue
     const files = walk(root).filter(f => /\.mdc?$/.test(f.rel))
     return {
       root,
-      complete: root !== '.agents/rules',
+      complete,
       rules: files.map(f => {
         const { fm } = splitFm(readFileSync(f.abs, 'utf8'))
         return { rel: f.rel, path: join(root, f.rel), size: statSync(f.abs).size, title: fm.title || fm.description || f.rel, globs: Array.isArray(fm[key]) ? fm[key] : [] }
@@ -698,7 +752,7 @@ function doctor() {
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
     for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) known.add(d)
   for (const d of known)
-    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently (\`remove\`, or re-\`add\` the profile)`)
+    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
 
   // ---- 3. rules that can never fire here
   const files = repoFiles()
@@ -763,7 +817,7 @@ function doctor() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,codex,opencode] [--module <dir>] [--ref <ref>]'); process.exit(1) }
+      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,antigravity,codex,opencode] [--module <dir>] [--ref <ref>]'); process.exit(1) }
       // `add` EXTENDS the install; it never redefines it. Writing only the new
       // profiles would leave the previous ones on disk but out of the lock —
       // invisible to `update`, and orphaned by `remove all`, which then deletes
@@ -810,7 +864,7 @@ async function main() {
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,cursor,codex,opencode] [--module <dir>] [--ref <ref>]\n'
+        + '  add <profile...> [--agent claude,cursor,antigravity,codex,opencode] [--module <dir>] [--ref <ref>]\n'
         + '                                   install/pin profiles (default: all agents, repo-wide)\n'
         + '                                   --module anchors those profiles\' globs to a directory (monorepo)\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
