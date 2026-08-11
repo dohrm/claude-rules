@@ -98,6 +98,7 @@ npx github:dohrm/claude-rules add product                                   # th
 npx github:dohrm/claude-rules list                     # available & installed
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
+npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that file, and what it costs
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: ALL)
 npx github:dohrm/claude-rules add ts portal-flat --module apps/web   # monorepo: anchor to a directory
@@ -217,6 +218,35 @@ judgments**:
 It also prints the **always-on context budget** — the rules with no `paths:`, the
 skill descriptions, the size of the `AGENTS.md` block — which is what every session
 pays before reading a single line of code.
+
+### `budget` — what does opening this file cost?
+
+The question every context decision turns on, and one nobody could answer without
+reading the tree by hand. Same inputs as `doctor`: the emitted rules and their globs.
+
+```bash
+npx github:dohrm/claude-rules budget apps/web/src/api/client.ts
+npx github:dohrm/claude-rules budget      # no path: the session floor
+```
+
+```
+Context for apps/web/src/api/client.ts
+
+  always-on rules (4)             9.9 KB  (~2.5k tokens)
+      agent/autonomy.md           3.8 KB
+      agent/guardrails.md         3.7 KB
+      agent/decisions.md          2.1 KB
+      common/language.md          0.3 KB
+  skills, descriptions (11)       5.9 KB  (~1.5k tokens)
+  path-scoped rules (7)          27.1 KB  (~6.9k tokens)
+      portal-flat/react.md        5.1 KB    apps/web/**/*.ts
+      …
+  total                          42.9 KB  (~11.0k tokens)
+```
+
+Each path-scoped row names **the glob that matched**, which is what makes a
+mis-anchored module visible: a rule firing on `**/*.ts` when you expected
+`apps/api/**/*.ts` says so on its own line.
 
 One asymmetry is deliberate: for Codex and opencode, a rule destination exists only
 when the profile *has* a path-scoped rule, and `doctor` stages nothing, so it cannot

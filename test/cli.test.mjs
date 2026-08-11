@@ -274,6 +274,10 @@ test('doctor on a coherent install reports nothing and exits 0', () => {
     mkdirSync(join(dir, 'src'), { recursive: true })
     writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
     writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
+    // the shared rules include one scoped to docs/adr/ — without a record, it
+    // legitimately can never fire, and doctor says so
+    mkdirSync(join(dir, 'docs/adr'), { recursive: true })
+    writeFileSync(join(dir, 'docs/adr/0001-x.md'), '- **Status**: Proposed\n')
 
     const r = ok(runCliBare(['doctor'], dir))
     assert.match(r.stdout, /nothing to report/)
@@ -485,6 +489,8 @@ test('doctor reads module-anchored globs against the real tree', () => {
     mkdirSync(join(dir, 'apps/api/src'), { recursive: true })
     writeFileSync(join(dir, 'apps/api/src/main.rs'), 'fn main() {}\n')
     writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
+    mkdirSync(join(dir, 'docs/adr'), { recursive: true })
+    writeFileSync(join(dir, 'docs/adr/0001-x.md'), '- **Status**: Proposed\n')
 
     assert.match(ok(runCliBare(['doctor'], dir)).stdout, /every path-scoped rule matches at least one file/)
 
@@ -493,5 +499,53 @@ test('doctor reads module-anchored globs against the real tree', () => {
     mkdirSync(join(dir, 'elsewhere'), { recursive: true })
     writeFileSync(join(dir, 'elsewhere/main.rs'), 'fn main() {}\n')
     assert.match(runCliBare(['doctor'], dir).stdout, /can never load/)
+  })
+})
+
+// -------------------------------------------------------------------- budget
+// "What does opening this file cost me?" — the question every context decision
+// turns on. Same inputs as doctor: the emitted rules and their globs.
+
+test('budget <path> lists what loads for that file, and what it costs', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'ts', '--agent', 'claude', '--module', 'apps/api'], dir))
+
+    const r = ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir))
+    assert.match(r.stdout, /Context for apps\/api\/src\/main\.rs/)
+    assert.match(r.stdout, /always-on rules \(4\)/)
+    assert.match(r.stdout, /rust\/code-style\.md.*apps\/api\/\*\*\/\*\.rs/)
+    assert.match(r.stdout, /total/)
+    assert.doesNotMatch(r.stdout, /ts\/code-style\.md/, 'a TS rule must not show up for a .rs file')
+  })
+})
+
+test('budget shows the module anchor doing its job', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+
+    assert.match(ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir)).stdout, /rust\/code-style\.md/)
+    // the same extension outside the module gets nothing — that is the whole point
+    const outside = ok(runCliBare(['budget', 'scripts/tool.rs'], dir)).stdout
+    assert.match(outside, /path-scoped rules \(0\)/)
+    assert.match(outside, /no path-scoped rule matches/)
+  })
+})
+
+test('budget with no path reports the session floor', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'product', '--agent', 'claude'], dir))
+
+    const r = ok(runCliBare(['budget'], dir))
+    assert.match(r.stdout, /Session floor/)
+    assert.match(r.stdout, /skills, descriptions \(\d+\)/)
+    assert.doesNotMatch(r.stdout, /path-scoped rules/, 'with no path there is nothing path-scoped to count')
+  })
+})
+
+test('budget without an install exits 1', () => {
+  withTmpRepo(dir => {
+    const r = runCliBare(['budget'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /run "add <profile\.\.\.>" first/)
   })
 })

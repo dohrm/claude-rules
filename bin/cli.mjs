@@ -608,8 +608,55 @@ function installedRules() {
   return { root: null, complete: false, rules: [] }
 }
 
+// Every skill's description is read at session start so the agent can decide
+// whether to open it — a roster is a standing cost, not a free option.
+function skillDescriptions(agent = 'claude') {
+  const root = SKILL_DIR[agent]
+  if (!existsSync(root)) return []
+  return readdirSync(root)
+    .map(n => ({ name: n, file: join(root, n, 'SKILL.md') })).filter(s => existsSync(s.file))
+    .map(s => ({ name: s.name, size: (splitFm(readFileSync(s.file, 'utf8')).fm.description || '').length }))
+}
+
 const kb = n => `${(n / 1024).toFixed(1)} KB`
 const tok = n => `~${Math.round(n / 4 / 100) / 10}k tokens`      // bytes→tokens, the usual ~4:1
+const sum = xs => xs.reduce((n, x) => n + x, 0)
+
+// --------------------------------------------------------------------- budget
+// "What does opening this file cost me?" — the question every context decision
+// turns on, and the one nobody could answer without reading the tree by hand.
+// Same inputs as doctor: the emitted rules and their globs, nothing else.
+function budget(target) {
+  const { root, complete, rules } = installedRules()
+  if (!root) { console.error('No emitted rule tree found — run "add <profile...>" first.'); process.exit(1) }
+  const path = target ? target.replace(/^\.\//, '').replace(`${process.cwd()}/`, '') : null
+  if (path && !existsSync(path)) console.log(`(${path} does not exist here — showing what WOULD load for that path)\n`)
+
+  const always = rules.filter(r => !r.globs.length).sort((a, b) => b.size - a.size)
+  const hit = path
+    ? rules.filter(r => r.globs.some(g => globToRe(g).test(path))).sort((a, b) => b.size - a.size)
+    : []
+  const skills = skillDescriptions()
+  const rows = []
+  const push = (label, size, detail = '') => rows.push([label, size, detail])
+
+  console.log(path ? `Context for ${path}\n` : 'Session floor — what loads before any file is read\n')
+  if (!complete) console.log(`  (measured from ${root}, which holds only path-scoped rules — the always-on ones are inlined elsewhere)\n`)
+  push(`always-on rules (${always.length})`, sum(always.map(r => r.size)))
+  for (const r of always) push(`    ${r.rel}`, r.size)
+  push(`skills, descriptions (${skills.length})`, sum(skills.map(s => s.size)))
+  if (path) {
+    push(`path-scoped rules (${hit.length})`, sum(hit.map(r => r.size)))
+    for (const r of hit) push(`    ${r.rel}`, r.size, r.globs.find(g => globToRe(g).test(path)))
+  }
+  const total = sum(always.map(r => r.size)) + sum(skills.map(s => s.size)) + sum(hit.map(r => r.size))
+
+  const w = Math.max(...rows.map(([l]) => l.length))
+  for (const [label, size, detail] of rows)
+    console.log(`  ${label.padEnd(w)}  ${kb(size).padStart(9)}  ${label.startsWith('    ') ? (detail ? `  ${detail}` : '') : `(${tok(size)})`}`.trimEnd())
+  console.log(`  ${'total'.padEnd(w)}  ${kb(total).padStart(9)}  (${tok(total)})`)
+  if (path && !hit.length) console.log('\n  • no path-scoped rule matches — either nothing covers this file, or a glob is anchored to the wrong module.')
+}
 
 function doctor() {
   const lock = readLock()
@@ -669,7 +716,7 @@ function doctor() {
   else if (!dead.length) console.log('  ✓ every path-scoped rule matches at least one file')
   else {
     for (const r of dead) console.log(`  ! ${r.rel}  —  ${r.globs.join(', ')}`)
-    warn.push(`${dead.length} rule(s) match no file here and can never load: ${dead.map(r => r.rel).join(', ')} — drop the profile, or the repo lost the code they cover`)
+    warn.push(`${dead.length} rule(s) match no file here and can never load: ${dead.map(r => r.rel).join(', ')} — drop the profile that ships them, or the repo does not (yet) hold what they cover`)
   }
 
   // ---- 4. what every session pays before reading a line of code
@@ -682,13 +729,10 @@ function doctor() {
       console.log(`  rules       ${String(on.length).padStart(3)} files  ${kb(total).padStart(9)}  (${tok(total)})`)
       for (const r of on.slice(0, 3)) console.log(`                ${r.rel} — ${kb(r.size)}${total ? ` (${Math.round(r.size / total * 100)}%)` : ''}`)
     }
-    const skillRoot = SKILL_DIR.claude
-    if (existsSync(skillRoot)) {
-      const descs = readdirSync(skillRoot)
-        .map(n => join(skillRoot, n, 'SKILL.md')).filter(existsSync)
-        .map(f => (splitFm(readFileSync(f, 'utf8')).fm.description || '').length)
-      const total = descs.reduce((a, b) => a + b, 0)
-      console.log(`  skills      ${String(descs.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
+    const skills = skillDescriptions()
+    if (skills.length) {
+      const total = sum(skills.map(s => s.size))
+      console.log(`  skills      ${String(skills.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
     }
     if (!existsSync('CLAUDE.md') && !existsSync(join('.claude', 'CLAUDE.md')))
       warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md, so it starts every session with no project map (`init` writes a skeleton)')
@@ -755,6 +799,7 @@ async function main() {
     }
     case 'init': initRepo(); break
     case 'doctor': doctor(); break
+    case 'budget': budget(positional[0]); break
     case 'list': {
       const lock = readLock()
       console.log('Available profiles:')
@@ -772,6 +817,7 @@ async function main() {
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
+        + '  budget [<path>]                  what loads when that file is opened, and what it costs (no path: the session floor)\n'
         + '  list                             show available & installed profiles')
   }
 }
