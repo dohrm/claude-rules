@@ -4,7 +4,7 @@
 // emitters, and they cover the per-agent transforms end to end.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync } from 'node:fs'
+import { writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 
@@ -68,9 +68,9 @@ test('add --agent codex: AGENTS.md block is idempotent and never touches user co
     assert.match(first, /<!-- claude-rules:start/)
     assert.match(first, /<!-- claude-rules:end -->/)
     // cross-cutting rules are inlined, path-scoped ones are referenced
-    assert.match(first, /Path-scoped rules/)
-    assert.match(first, /\.agents\/rules\/rust\/code-style\.md/)
-    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
+    assert.match(first, /Rules that are NOT loaded for you/)
+    assert.match(first, /\.dev\/rules\/rust\/code-style\.md/)
+    assert.ok(has(dir, ".dev/rules/rust/code-style.md"))
 
     ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
     assert.equal(read(dir, 'AGENTS.md'), first, 'second install must be byte-identical (managed block rewritten in place)')
@@ -90,9 +90,11 @@ test('add product: skills land as <name>/SKILL.md directories', () => {
 test('no --agent installs every known agent', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust'], dir))
-    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'codex', 'opencode'])
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'antigravity', 'codex', 'opencode'])
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     assert.ok(has(dir, '.cursor/rules/rust/code-style.mdc'))
+    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
+    assert.ok(has(dir, '.dev/rules/rust/code-style.md'))
     assert.ok(has(dir, 'AGENTS.md'))
     assert.ok(has(dir, '.opencode/agent/code-reviewer.md'))
     assert.match(read(dir, '.opencode/agent/code-reviewer.md'), /mode: subagent/)
@@ -167,13 +169,13 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
 test('remove <profile> prunes only that profile from the AGENTS.md block', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'codex'], dir))
-    assert.match(read(dir, 'AGENTS.md'), /\.agents\/rules\/hexagonal\//)
+    assert.match(read(dir, 'AGENTS.md'), /\.dev\/rules\/hexagonal\//)
 
     ok(runCliBare(['remove', 'hexagonal'], dir))
     const agentsMd = read(dir, 'AGENTS.md')
-    assert.doesNotMatch(agentsMd, /\.agents\/rules\/hexagonal\//, 'stale reference left behind')
-    assert.match(agentsMd, /\.agents\/rules\/rust\//, 'rust reference must survive')
-    assert.ok(!has(dir, '.agents/rules/hexagonal'))
+    assert.doesNotMatch(agentsMd, /\.dev\/rules\/hexagonal\//, 'stale reference left behind')
+    assert.match(agentsMd, /\.dev\/rules\/rust\//, 'rust reference must survive')
+    assert.ok(!has(dir, ".dev/rules/hexagonal"))
   })
 })
 
@@ -261,5 +263,354 @@ test('no args prints usage without failing', () => {
     const r = ok(runCliBare([], dir))
     assert.match(r.stdout, /claude-rules — usage:/)
     assert.ok(!existsSync(join(dir, '.claude-rules.lock')))
+  })
+})
+
+// ------------------------------------------------------------------- doctor
+// `doctor` is offline and deterministic: it reads the lock, the registry and the
+// files on disk. These tests drive it through each verdict it can reach.
+
+test('doctor on a coherent install reports nothing and exits 0', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
+    writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
+    // the shared rules include one scoped to docs/adr/ — without a record, it
+    // legitimately can never fire, and doctor says so
+    mkdirSync(join(dir, 'docs/adr'), { recursive: true })
+    writeFileSync(join(dir, 'docs/adr/0001-x.md'), '- **Status**: Proposed\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /nothing to report/)
+    assert.match(r.stdout, /every path-scoped rule matches at least one file/)
+  })
+})
+
+test('doctor fails when the lock promises a destination that is not on disk', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    rmSync(join(dir, '.claude/rules/rust'), { recursive: true })
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/rust — promised by "rust" for claude, missing on disk/)
+  })
+})
+
+test('doctor fails on assets no locked profile explains', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    // What a pre-80c5344 `add` left behind: files on disk, absent from the lock.
+    mkdirSync(join(dir, '.claude/rules/go'), { recursive: true })
+    writeFileSync(join(dir, '.claude/rules/go/logging.md'), '---\npaths:\n  - "**/*.go"\n---\nx\n')
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/go — on disk but nothing in the lock explains it/)
+  })
+})
+
+test('doctor warns (not fails) on rules whose globs match no file, and --strict promotes it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'go', '--agent', 'claude'], dir))   // a repo with no .go file
+    writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /can never load/)
+    assert.match(r.stdout, /go\/quality-gates\.md/)
+    assert.match(r.stdout, /0 problem\(s\), 1 warning\(s\)/)
+
+    assert.equal(runCliBare(['doctor', '--strict'], dir).status, 1, '--strict must fail on warnings')
+  })
+})
+
+test('doctor reports the always-on budget and a missing CLAUDE.md', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /Context budget \(always-on\)/)
+    assert.match(r.stdout, /rules\s+\d+ files/)
+    assert.match(r.stdout, /agent\/decisions\.md/, 'the heaviest always-on rule should be named')
+    assert.match(r.stdout, /no CLAUDE\.md/)
+  })
+})
+
+test('doctor without a lock exits 1', () => {
+  withTmpRepo(dir => {
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /nothing to audit/)
+  })
+})
+
+// -------------------------------------------------------------- module scope
+// `**/*.ts` is too coarse in a monorepo: it makes the Fastify rules load on a
+// React component. `--module` anchors a profile's globs to a directory.
+
+test('--module anchors the profile globs, for Claude and Cursor alike', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', '--agent', 'claude,cursor', '--module', 'apps/api'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust', 'api'] })
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /paths:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(read(dir, '.cursor/rules/api/rust.mdc'), /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+  })
+})
+
+test('a profile no module claims stays repo-wide', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'testing'], dir))
+
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(read(dir, '.claude/rules/testing/strategy.md'), /- "\*\*\/\*\.rs"/, 'unscoped profile must not be anchored')
+  })
+})
+
+test('a rule whose every glob targets an unlocked language is not emitted', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', 'backend', '--agent', 'claude'], dir))
+
+    assert.ok(has(dir, '.claude/rules/api/rust.md'), 'the locked language must be emitted')
+    assert.ok(!has(dir, '.claude/rules/api/go.md'), 'no Go here — the rule can never fire')
+    assert.ok(!has(dir, '.claude/rules/api/node.md'))
+    // A rule that ALSO covers a locked language stays whole: its dead glob costs
+    // nothing and starts working the day that language arrives.
+    assert.match(read(dir, '.claude/rules/backend/config.md'), /- "\*\*\/\*\.go"/)
+  })
+})
+
+test('an install with no --module writes a lock with no modules key', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    assert.ok(!('modules' in lockOf(dir)), 'an unscoped install must stay byte-compatible with older locks')
+  })
+})
+
+test('--module extends the map instead of replacing it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'], 'apps/web': ['ts'] })
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/, 'the first module must survive')
+    assert.match(read(dir, '.claude/rules/ts/code-style.md'), /- "apps\/web\/\*\*\/\*\.ts"/)
+  })
+})
+
+test('remove drops the module bindings of the profiles it removes', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'api', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['remove', 'api'], dir))
+
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'] })
+  })
+})
+
+test('update clears a rule directory instead of leaving orphans in it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, '.claude/rules/rust/dropped-upstream.md'), '---\ntitle: x\n---\nstale\n')
+
+    ok(runCli(['update'], dir))
+    assert.ok(!has(dir, '.claude/rules/rust/dropped-upstream.md'), 'a rule dir is library-owned; update must not leave orphans')
+    assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
+    // kit is the "copy and own" surface — update must NOT wipe what the repo added.
+    writeFileSync(join(dir, '.claude/kit/rust/mine.toml'), 'x = 1\n')
+    ok(runCli(['update'], dir))
+    assert.ok(has(dir, '.claude/kit/rust/mine.toml'), 'kit is owned by the repo, not the installer')
+  })
+})
+
+// ---------------------------------------------------------------- init, again
+// `init` owns delimited sections, never whole files: a repo may already have a
+// justfile, and a CLAUDE.md is the human's from the moment it exists.
+
+test('init derives the *_dir block from the lock modules, and nothing outside it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const just = read(dir, 'justfile')
+    assert.match(just, /rust_dir := "apps\/api"/)
+    assert.match(just, /go_dir\s+:= "\."/, 'just fails at parse time on an undefined variable')
+    assert.match(just, /base\s+:= "origin\/main"/, 'content outside the block must survive')
+    assert.match(just, /rust-check: rust-lint/)
+  })
+})
+
+test('init leaves the *_dir defaults alone when no module is declared', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'justfile'), read(REPO, 'kit/common/justfile.snippet'))
+  })
+})
+
+test('init writes a CLAUDE.md once and never rewrites it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const md = read(dir, 'CLAUDE.md')
+    assert.match(md, /\| `apps\/api` \| rust \| `just rust-check` \|/)
+    assert.match(md, /just check/)
+
+    writeFileSync(join(dir, 'CLAUDE.md'), '# mine\n')
+    const r = ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'CLAUDE.md'), '# mine\n', 'the installer must never rewrite CLAUDE.md')
+    assert.match(r.stdout, /left untouched/)
+  })
+})
+
+test('init writes no CLAUDE.md when claude is not a target', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+    ok(runCliBare(['init'], dir))
+    assert.ok(!has(dir, 'CLAUDE.md'))
+  })
+})
+
+test('doctor fails on a module path that does not exist', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/typo'], dir))
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /module "apps\/typo" does not exist/)
+  })
+})
+
+test('doctor reads module-anchored globs against the real tree', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    mkdirSync(join(dir, 'apps/api/src'), { recursive: true })
+    writeFileSync(join(dir, 'apps/api/src/main.rs'), 'fn main() {}\n')
+    writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
+    mkdirSync(join(dir, 'docs/adr'), { recursive: true })
+    writeFileSync(join(dir, 'docs/adr/0001-x.md'), '- **Status**: Proposed\n')
+
+    assert.match(ok(runCliBare(['doctor'], dir)).stdout, /every path-scoped rule matches at least one file/)
+
+    // the same .rs file OUTSIDE the module must not keep the anchored rules alive
+    rmSync(join(dir, 'apps/api/src'), { recursive: true })
+    mkdirSync(join(dir, 'elsewhere'), { recursive: true })
+    writeFileSync(join(dir, 'elsewhere/main.rs'), 'fn main() {}\n')
+    assert.match(runCliBare(['doctor'], dir).stdout, /can never load/)
+  })
+})
+
+// -------------------------------------------------------------------- budget
+// "What does opening this file cost me?" — the question every context decision
+// turns on. Same inputs as doctor: the emitted rules and their globs.
+
+test('budget <path> lists what loads for that file, and what it costs', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'ts', '--agent', 'claude', '--module', 'apps/api'], dir))
+
+    const r = ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir))
+    assert.match(r.stdout, /Context for apps\/api\/src\/main\.rs/)
+    assert.match(r.stdout, /always-on rules \(4\)/)
+    assert.match(r.stdout, /rust\/code-style\.md.*apps\/api\/\*\*\/\*\.rs/)
+    assert.match(r.stdout, /total/)
+    assert.doesNotMatch(r.stdout, /ts\/code-style\.md/, 'a TS rule must not show up for a .rs file')
+  })
+})
+
+test('budget shows the module anchor doing its job', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+
+    assert.match(ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir)).stdout, /rust\/code-style\.md/)
+    // the same extension outside the module gets nothing — that is the whole point
+    const outside = ok(runCliBare(['budget', 'scripts/tool.rs'], dir)).stdout
+    assert.match(outside, /path-scoped rules \(0\)/)
+    assert.match(outside, /no path-scoped rule matches/)
+  })
+})
+
+test('budget with no path reports the session floor', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'product', '--agent', 'claude'], dir))
+
+    const r = ok(runCliBare(['budget'], dir))
+    assert.match(r.stdout, /Session floor/)
+    assert.match(r.stdout, /skills, descriptions \(\d+\)/)
+    assert.doesNotMatch(r.stdout, /path-scoped rules/, 'with no path there is nothing path-scoped to count')
+  })
+})
+
+test('budget without an install exits 1', () => {
+  withTmpRepo(dir => {
+    const r = runCliBare(['budget'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /run "add <profile\.\.\.>" first/)
+  })
+})
+
+// --------------------------------------------------------------- antigravity
+// Antigravity converged on Cursor's rule format (description/globs/alwaysApply)
+// but reads them from `.agents/rules/` — the directory claude-rules used for the
+// codex/opencode copies, which therefore moved to `.dev/rules/`.
+
+test('add --agent antigravity: Cursor-shaped rules under .agents/rules/', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'antigravity', '--module', 'apps/api'], dir))
+
+    const scoped = read(dir, '.agents/rules/rust/code-style.md')
+    assert.match(scoped, /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.match(scoped, /alwaysApply: false/)
+    assert.match(scoped, /description: Rust Code Style/)
+
+    assert.match(read(dir, '.agents/rules/agent/guardrails.md'), /alwaysApply: true/)
+    assert.ok(!has(dir, '.agents/rules/rust/code-style.mdc'), 'Antigravity reads .md, not Cursor\'s .mdc')
+    assert.ok(has(dir, '.agents/skills/rust-add-domain/SKILL.md'), 'skills are portable — the .agents/skills collision is a happy one')
+    assert.match(r.stdout, /no file-based subagents/)
+  })
+})
+
+test('codex/opencode rule copies stay out of Antigravity\'s directory', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex,antigravity'], dir))
+
+    // same rule, two homes, two frontmatter dialects — neither can read the other's
+    assert.match(read(dir, '.dev/rules/rust/code-style.md'), /paths:/)
+    assert.match(read(dir, '.agents/rules/rust/code-style.md'), /globs:/)
+    assert.match(read(dir, 'AGENTS.md'), /read `\.dev\/rules\/rust\/code-style\.md`/)
+    assert.doesNotMatch(read(dir, 'AGENTS.md'), /`\.agents\/rules\//, 'the AGENTS.md index must not send Codex to Antigravity\'s copies')
+  })
+})
+
+test('the AGENTS.md index groups its rows by module', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+    ok(runCli(['add', 'testing'], dir))
+
+    const md = read(dir, 'AGENTS.md')
+    assert.match(md, /### apps\/api\n/)
+    assert.match(md, /### apps\/web\n/)
+    assert.match(md, /### \(repo-wide\)\n/)
+    // the instruction is stated once, imperatively — the index is not a mechanism
+    assert.match(md, /Nothing loads them automatically/)
+    // repo-wide comes last: a session in a module reads its own group first
+    assert.ok(md.indexOf('### apps/api') < md.indexOf('### (repo-wide)'))
+  })
+})
+
+test('removing a module\'s only profile drops its index group too', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+    assert.match(read(dir, 'AGENTS.md'), /### apps\/web/)
+
+    ok(runCliBare(['remove', 'ts'], dir))
+    const md = read(dir, 'AGENTS.md')
+    assert.doesNotMatch(md, /### apps\/web/, 'an empty module heading must go with its rows')
+    assert.match(md, /### apps\/api/)
   })
 })
