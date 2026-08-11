@@ -96,7 +96,7 @@ npx github:dohrm/claude-rules add ops k8s incident                          # + 
 npx github:dohrm/claude-rules add product                                   # the product-lifecycle skills
 
 npx github:dohrm/claude-rules list                     # available & installed
-npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml from the kit
+npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: ALL)
@@ -135,6 +135,11 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   merge the `just`/lefthook snippets, move the configs into place. The installer
   **never merges your build config** and prints exactly what is left to do — see
   [`kit/README.md`](./kit/README.md). `init` does the assembling for you.
+- `init` owns **delimited sections, never whole files**. It creates a `justfile`,
+  a `lefthook.yml` and a `CLAUDE.md` when they are absent; when they already exist
+  it touches only the `# claude-rules:start … end` block holding the `*_dir`
+  variables, which it derives from the lock's `modules`. A `CLAUDE.md` that exists
+  is never rewritten — from the moment it is there, it is yours.
 - The ref and the agent set are pinned in `.claude-rules.lock`, so `update` replays
   your choices. Updates are reviewable: re-run `update` and read the `git diff`.
 - **`add` is additive.** It extends the lock — profiles *and* agents — and re-emits

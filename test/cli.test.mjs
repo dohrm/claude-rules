@@ -419,3 +419,79 @@ test('update clears a rule directory instead of leaving orphans in it', () => {
     assert.ok(has(dir, '.claude/kit/rust/mine.toml'), 'kit is owned by the repo, not the installer')
   })
 })
+
+// ---------------------------------------------------------------- init, again
+// `init` owns delimited sections, never whole files: a repo may already have a
+// justfile, and a CLAUDE.md is the human's from the moment it exists.
+
+test('init derives the *_dir block from the lock modules, and nothing outside it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const just = read(dir, 'justfile')
+    assert.match(just, /rust_dir := "apps\/api"/)
+    assert.match(just, /go_dir\s+:= "\."/, 'just fails at parse time on an undefined variable')
+    assert.match(just, /base\s+:= "origin\/main"/, 'content outside the block must survive')
+    assert.match(just, /rust-check: rust-lint/)
+  })
+})
+
+test('init leaves the *_dir defaults alone when no module is declared', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'justfile'), read(REPO, 'kit/common/justfile.snippet'))
+  })
+})
+
+test('init writes a CLAUDE.md once and never rewrites it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const md = read(dir, 'CLAUDE.md')
+    assert.match(md, /\| `apps\/api` \| rust \| `just rust-check` \|/)
+    assert.match(md, /just check/)
+
+    writeFileSync(join(dir, 'CLAUDE.md'), '# mine\n')
+    const r = ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'CLAUDE.md'), '# mine\n', 'the installer must never rewrite CLAUDE.md')
+    assert.match(r.stdout, /left untouched/)
+  })
+})
+
+test('init writes no CLAUDE.md when claude is not a target', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+    ok(runCliBare(['init'], dir))
+    assert.ok(!has(dir, 'CLAUDE.md'))
+  })
+})
+
+test('doctor fails on a module path that does not exist', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/typo'], dir))
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /module "apps\/typo" does not exist/)
+  })
+})
+
+test('doctor reads module-anchored globs against the real tree', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    mkdirSync(join(dir, 'apps/api/src'), { recursive: true })
+    writeFileSync(join(dir, 'apps/api/src/main.rs'), 'fn main() {}\n')
+    writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
+
+    assert.match(ok(runCliBare(['doctor'], dir)).stdout, /every path-scoped rule matches at least one file/)
+
+    // the same .rs file OUTSIDE the module must not keep the anchored rules alive
+    rmSync(join(dir, 'apps/api/src'), { recursive: true })
+    mkdirSync(join(dir, 'elsewhere'), { recursive: true })
+    writeFileSync(join(dir, 'elsewhere/main.rs'), 'fn main() {}\n')
+    assert.match(runCliBare(['doctor'], dir).stdout, /can never load/)
+  })
+})

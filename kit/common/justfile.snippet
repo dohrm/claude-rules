@@ -7,9 +7,14 @@
 # `just` is the cross-platform task runner (install: cargo/brew/scoop install just).
 # Adapt the dirs to your layout (default: repo root). Enable the techs you have.
 
+# Between the markers: `claude-rules init` derives these from the `modules` map in
+# .claude-rules.lock, so the layout has ONE home. Edit them by hand if you prefer —
+# but the next `init` rewrites the block, and nothing outside it is ever touched.
+# claude-rules:start (managed — derived from .claude-rules.lock)
 rust_dir := "."      # e.g. "api"                       for a backend under api/
 ts_dir   := "."      # e.g. "apps/web"
 go_dir   := "."      # e.g. "workflows/orchestration"
+# claude-rules:end
 base     := "origin/main"   # branch a feature is measured against (Tier 3)
 
 # Full local self-verify (Tiers 1-2) across the techs you have — the command an

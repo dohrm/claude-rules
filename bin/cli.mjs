@@ -440,16 +440,91 @@ function genLefthook(techs) {
     + `pre-commit:\n  parallel: true\n  commands:\n${cmds('lint')}\n\n`
     + `pre-push:\n  parallel: true\n  commands:\n${cmds('check')}\n`
 }
+// The `*_dir` variables, derived from the lock's `modules`. `just` fails at parse
+// time on an undefined variable, so all three are always emitted — an unclaimed
+// tech simply points at the repo root, exactly as the snippet ships it.
+const JUST_START = '# claude-rules:start (managed — derived from .claude-rules.lock)'
+const JUST_END = '# claude-rules:end'
+const DIR_VAR = { rust: 'rust_dir', ts: 'ts_dir', go: 'go_dir' }
+function genDirsBlock(modules) {
+  const notes = []
+  const lines = Object.entries(DIR_VAR).map(([profile, name]) => {
+    const claims = Object.entries(modules || {}).filter(([, ps]) => ps.includes(profile)).map(([d]) => d)
+    // `modules` allows a language in several places; a `*_dir` is one directory.
+    // Two claimants means the recipe has to cover both, so it runs from the root.
+    if (claims.length > 1) notes.push(`${name}: ${claims.join(', ')} both hold ${profile} — set to "." so the recipe covers both`)
+    return `${name.padEnd(8)} := "${claims.length === 1 ? claims[0] : '.'}"`
+  })
+  return { block: [JUST_START, ...lines, JUST_END].join('\n'), notes }
+}
+function writeManagedDirs(file, modules) {
+  // Nothing declared, nothing derived: the snippet's defaults and their examples
+  // are more useful than three lines of `"."`. Same principle as the glob
+  // rewriting — the installer only touches what it was asked to.
+  if (!modules || !Object.keys(modules).length) return
+  const content = readFileSync(file, 'utf8')
+  const re = new RegExp(`${reEsc(JUST_START)}[\\s\\S]*?${reEsc(JUST_END)}`)
+  if (!re.test(content)) {
+    console.log(`• ${file}: no managed block — wrap your *_dir variables in "${JUST_START}" / "${JUST_END}" for init to keep them in sync with the lock.`)
+    return
+  }
+  const { block, notes } = genDirsBlock(modules)
+  writeFileSync(file, content.replace(re, block))
+  console.log(`✓ ${file}: *_dir block derived from the lock's modules.`)
+  for (const n of notes) console.log(`  • ${n}`)
+}
+
+// A CLAUDE.md the installer writes ONCE and never touches again. The conventions
+// already live in .claude/rules/ and load on their own — what belongs here is the
+// part only this repo knows: what each module is, and where its documents are.
+// Claude reads CLAUDE.md and never AGENTS.md, so without this file a Claude-first
+// repo starts every session with no map at all.
+function genClaudeMd(lock) {
+  const name = basename(process.cwd())
+  const mods = Object.entries(lock.modules || {})
+  const out = [`# ${name}`, '',
+    '<!-- Written once by `claude-rules init` — yours from here, the installer never',
+    '     rewrites it. Conventions live in .claude/rules/ and auto-load (language',
+    '     rules only when you touch matching files). Keep this file short: it is in',
+    '     context for every session. -->', '', '## Modules', '']
+  if (mods.length) {
+    out.push('| Path | Profiles | Gate |', '|---|---|---|')
+    for (const [dir, ps] of mods) {
+      const tech = ps.find(p => DIR_VAR[p])
+      out.push(`| \`${dir}\` | ${ps.join(', ')} | ${tech ? `\`just ${tech}-check\`` : '—'} |`)
+    }
+  } else {
+    out.push('<!-- One line per module: what it is, and what it is for. Declare them to the',
+      '     installer too (`add <profile...> --module <dir>`) so its rules stop loading',
+      '     everywhere your language happens to appear. -->')
+  }
+  out.push('', '## The gate', '',
+    'Run `just check` and read the exit code before handing back — a green gate is',
+    'the authority, never your own say-so (`.claude/rules/agent/autonomy.md`).', '')
+  const docs = ['docs/PRD.md', 'docs/ARCHITECTURE.md', 'docs/PLAN.md', 'docs/adr'].filter(existsSync)
+  if (docs.length) out.push('## Documents', '', ...docs.map(d => `- \`${d}\``), '')
+  return out.join('\n')
+}
+
 function initRepo() {
   const lock = readLock()
   if (!lock) { console.error(`No ${LOCK} — run "add <profile...>" first.`); process.exit(1) }
   const techs = lock.profiles.filter(p => GLOB[p])
   const kitBase = KIT_DIR[(lock.agents && lock.agents[0]) || 'claude']
   const snippet = join(kitBase, 'common', 'justfile.snippet')
-  if (existsSync('justfile') || existsSync('Justfile'))
-    console.log(`• justfile exists — merge ${snippet} into it, then set the *_dir variables.`)
-  else if (existsSync(snippet)) { copyFileSync(snippet, 'justfile'); console.log(`✓ created justfile (from ${snippet}) — set the *_dir variables to your layout.`) }
+  const justfile = ['justfile', 'Justfile'].find(existsSync)
+  if (justfile) console.log(`• ${justfile} exists — merge ${snippet} into it (the installer only owns the block below).`)
+  else if (existsSync(snippet)) { copyFileSync(snippet, 'justfile'); console.log(`✓ created justfile (from ${snippet}).`) }
   else console.log(`• ${snippet} missing — run "add" first.`)
+  const target = justfile || (existsSync('justfile') ? 'justfile' : null)
+  if (target) writeManagedDirs(target, lock.modules)
+
+  // Written once, then left alone — same contract as the justfile above.
+  if (lock.agents && lock.agents.includes('claude')) {
+    if (existsSync('CLAUDE.md') || existsSync(join('.claude', 'CLAUDE.md')))
+      console.log('• CLAUDE.md exists — left untouched (the installer never rewrites it).')
+    else { writeFileSync('CLAUDE.md', genClaudeMd(lock)); console.log('✓ created CLAUDE.md — fill in what only you know; Claude reads it, never AGENTS.md.') }
+  }
 
   if (existsSync('lefthook.yml') || existsSync('lefthook.yaml'))
     console.log(`• lefthook.yml exists — merge ${kitBase}/<tech>/lefthook.snippet.yml (thin triggers) into it.`)
@@ -550,6 +625,13 @@ function doctor() {
   for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
   for (const a of unknownA) bad.push(`lock references unknown agent "${a}"`)
   console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${agents.join(', ')}] @ ${lock.ref}`)
+  // A module path that does not exist anchors every one of its globs to nothing —
+  // the rules are emitted, look installed, and can never match a file.
+  for (const [dir, ps] of Object.entries(lock.modules || {})) {
+    if (!existsSync(dir)) bad.push(`module "${dir}" does not exist — [${ps.join(', ')}] are anchored to a path that is not there`)
+    else console.log(`  ✓ module ${dir}: ${ps.join(', ')}`)
+    for (const p of ps.filter(p => !lock.profiles.includes(p))) bad.push(`module "${dir}" claims "${p}", which is not in the lock's profiles`)
+  }
 
   // ---- 2. what the lock promises vs what is on disk
   // Asymmetry, on purpose: for codex/opencode a rule destination is created only
@@ -609,7 +691,7 @@ function doctor() {
       console.log(`  skills      ${String(descs.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
     }
     if (!existsSync('CLAUDE.md') && !existsSync(join('.claude', 'CLAUDE.md')))
-      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md, so it starts every session with no project map')
+      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md, so it starts every session with no project map (`init` writes a skeleton)')
   }
   if (agents.includes('codex') || agents.includes('opencode')) {
     const block = existsSync('AGENTS.md')
