@@ -4,7 +4,7 @@
 // emitters, and they cover the per-agent transforms end to end.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync } from 'node:fs'
+import { writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 
@@ -261,5 +261,82 @@ test('no args prints usage without failing', () => {
     const r = ok(runCliBare([], dir))
     assert.match(r.stdout, /claude-rules — usage:/)
     assert.ok(!existsSync(join(dir, '.claude-rules.lock')))
+  })
+})
+
+// ------------------------------------------------------------------- doctor
+// `doctor` is offline and deterministic: it reads the lock, the registry and the
+// files on disk. These tests drive it through each verdict it can reach.
+
+test('doctor on a coherent install reports nothing and exits 0', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
+    writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /nothing to report/)
+    assert.match(r.stdout, /every path-scoped rule matches at least one file/)
+  })
+})
+
+test('doctor fails when the lock promises a destination that is not on disk', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    rmSync(join(dir, '.claude/rules/rust'), { recursive: true })
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/rust — promised by "rust" for claude, missing on disk/)
+  })
+})
+
+test('doctor fails on assets no locked profile explains', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    // What a pre-80c5344 `add` left behind: files on disk, absent from the lock.
+    mkdirSync(join(dir, '.claude/rules/go'), { recursive: true })
+    writeFileSync(join(dir, '.claude/rules/go/logging.md'), '---\npaths:\n  - "**/*.go"\n---\nx\n')
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/go — on disk but nothing in the lock explains it/)
+  })
+})
+
+test('doctor warns (not fails) on rules whose globs match no file, and --strict promotes it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'go', '--agent', 'claude'], dir))   // a repo with no .go file
+    writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /can never load/)
+    assert.match(r.stdout, /go\/quality-gates\.md/)
+    assert.match(r.stdout, /0 problem\(s\), 1 warning\(s\)/)
+
+    assert.equal(runCliBare(['doctor', '--strict'], dir).status, 1, '--strict must fail on warnings')
+  })
+})
+
+test('doctor reports the always-on budget and a missing CLAUDE.md', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    mkdirSync(join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /Context budget \(always-on\)/)
+    assert.match(r.stdout, /rules\s+\d+ files/)
+    assert.match(r.stdout, /agent\/decisions\.md/, 'the heaviest always-on rule should be named')
+    assert.match(r.stdout, /no CLAUDE\.md/)
+  })
+})
+
+test('doctor without a lock exits 1', () => {
+  withTmpRepo(dir => {
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /nothing to audit/)
   })
 })

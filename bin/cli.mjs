@@ -13,6 +13,7 @@
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml (if absent)
+//   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs'
@@ -32,7 +33,8 @@ const flag = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1]
 const refFlag = flag('--ref')
 const agentFlag = flag('--agent')
 const localFlag = flag('--local')
-const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag].filter(Boolean))
+const strictFlag = argv.includes('--strict')
+const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--strict'].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 // Default is ALL agents — narrowing to a subset is a deliberate --agent choice.
@@ -373,6 +375,178 @@ function initRepo() {
   console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN); adapt eslint globalIgnores; enable your techs — and \`adr-check\`/\`docs-check\` — in the justfile \`check\` recipe.`)
 }
 
+// --------------------------------------------------------------------- doctor
+// Audits an install against the repo it lives in. Offline and deterministic —
+// no network, no LLM, no staging: everything it needs is the lock, the registry
+// and the files on disk. Wireable into `just check`.
+//
+// Like the other gates (adr-check, docs-check): it FAILS on facts (the install
+// contradicts the lock) and WARNS on judgments (a rule that can never trigger,
+// a context budget). `--strict` promotes the warnings.
+
+// Minimal glob → RegExp. Covers the syntax the shipped `paths:` actually use:
+// `**/`, `**`, `*`, `?`, `{a,b}`. Not a general globber — a rule using anything
+// else is reported as unmatched rather than silently mis-evaluated.
+const GLOB_UNSUPPORTED = /[[\]!()+@]/
+function globToRe(glob) {
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let re = '', i = 0
+  while (i < glob.length) {
+    const c = glob[i]
+    if (c === '*' && glob[i + 1] === '*') {
+      if (glob[i + 2] === '/') { re += '(?:.*/)?'; i += 3 } else { re += '.*'; i += 2 }
+    } else if (c === '*') { re += '[^/]*'; i += 1 }
+    else if (c === '?') { re += '[^/]'; i += 1 }
+    else if (c === '{' && glob.includes('}', i)) {
+      const end = glob.indexOf('}', i)
+      re += '(?:' + glob.slice(i + 1, end).split(',').map(esc).join('|') + ')'
+      i = end + 1
+    } else { re += esc(c); i += 1 }
+  }
+  return new RegExp(`^${re}$`)
+}
+
+// The repo's own files. The installer's own output is excluded on purpose:
+// `.claude/kit/portal-flat/openapi-ts.config.ts` must not make a `**/*.ts`
+// rule look alive in a repo that has no TypeScript.
+const SCAN_SKIP = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'vendor', 'coverage', '.next',
+  '.claude', '.agents', '.cursor', '.opencode', '.dev'])
+function repoFiles() {
+  const git = spawnSync('git', ['ls-files', '-co', '--exclude-standard'], { encoding: 'utf8' })
+  const fromGit = !git.error && git.status === 0 ? git.stdout.split('\n').filter(Boolean) : null
+  if (fromGit) return fromGit.filter(f => !SCAN_SKIP.has(f.split('/')[0]))
+  const out = []
+  const rec = (dir, prefix) => {
+    for (const name of readdirSync(dir)) {
+      if (SCAN_SKIP.has(name)) continue
+      const abs = join(dir, name), rel = prefix ? `${prefix}/${name}` : name
+      let st; try { st = statSync(abs) } catch { continue }        // broken symlink
+      if (st.isDirectory()) rec(abs, rel); else out.push(rel)
+    }
+  }
+  rec('.', '')
+  return out
+}
+
+// Emitted rules, read back from whichever tree exists. `.agents/rules/` holds
+// ONLY the path-scoped ones (the rest is inlined into AGENTS.md), so it can
+// answer "does this glob match anything" but never "what is always on".
+function installedRules() {
+  for (const [root, key] of [['.claude/rules', 'paths'], ['.cursor/rules', 'globs'], ['.agents/rules', 'paths']]) {
+    if (!existsSync(root)) continue
+    const files = walk(root).filter(f => /\.mdc?$/.test(f.rel))
+    return {
+      root,
+      complete: root !== '.agents/rules',
+      rules: files.map(f => {
+        const { fm } = splitFm(readFileSync(f.abs, 'utf8'))
+        return { rel: f.rel, path: join(root, f.rel), size: statSync(f.abs).size, title: fm.title || fm.description || f.rel, globs: Array.isArray(fm[key]) ? fm[key] : [] }
+      }),
+    }
+  }
+  return { root: null, complete: false, rules: [] }
+}
+
+const kb = n => `${(n / 1024).toFixed(1)} KB`
+const tok = n => `~${Math.round(n / 4 / 100) / 10}k tokens`      // bytes→tokens, the usual ~4:1
+
+function doctor() {
+  const lock = readLock()
+  if (!lock) { console.error(`No ${LOCK} — nothing to audit. Run "add <profile...>" first.`); process.exit(1) }
+  const agents = lock.agents || ['claude']
+  const bad = [], warn = []
+  console.log(`claude-rules doctor — ${process.cwd()}\n`)
+
+  // ---- 1. the lock itself
+  console.log('Install')
+  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
+  const unknownA = agents.filter(a => !KNOWN_AGENTS.includes(a))
+  for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
+  for (const a of unknownA) bad.push(`lock references unknown agent "${a}"`)
+  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${agents.join(', ')}] @ ${lock.ref}`)
+
+  // ---- 2. what the lock promises vs what is on disk
+  // Asymmetry, on purpose: for codex/opencode a rule destination is created only
+  // when the profile HAS a path-scoped rule (rules/agent/ has none), and doctor
+  // stages nothing, so it cannot tell a legitimate absence from a broken one.
+  // It proves presence-that-should-not-be, never absence-that-should-be.
+  const expected = new Map()
+  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, registry.profiles[p] || []])]
+  for (const [profile, entries] of lockedEntries)
+    for (const e of entries) for (const a of agents)
+      for (const d of destsFor(e, a)) expected.set(d, { profile, agent: a, inferable: !(e.kind === 'rule' && (a === 'codex' || a === 'opencode')) })
+
+  for (const [dest, meta] of expected)
+    if (meta.inferable && !existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
+
+  const known = new Set()
+  for (const entries of [registry.shared, ...Object.values(registry.profiles)])
+    for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) known.add(d)
+  for (const d of known)
+    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently (\`remove\`, or re-\`add\` the profile)`)
+
+  // ---- 3. rules that can never fire here
+  const files = repoFiles()
+  const { root, complete, rules } = installedRules()
+  const dead = []
+  if (root) {
+    for (const r of rules) {
+      if (!r.globs.length) continue
+      if (r.globs.some(g => GLOB_UNSUPPORTED.test(g))) continue          // not ours to judge
+      if (!r.globs.some(g => { const re = globToRe(g); return files.some(f => re.test(f)) })) dead.push(r)
+    }
+  }
+  console.log(`\nCoverage — ${files.length} repo files scanned against ${rules.filter(r => r.globs.length).length} path-scoped rules`)
+  if (!root) console.log('  • no emitted rule tree found — nothing to check')
+  else if (!dead.length) console.log('  ✓ every path-scoped rule matches at least one file')
+  else {
+    for (const r of dead) console.log(`  ! ${r.rel}  —  ${r.globs.join(', ')}`)
+    warn.push(`${dead.length} rule(s) match no file here and can never load: ${dead.map(r => r.rel).join(', ')} — drop the profile, or the repo lost the code they cover`)
+  }
+
+  // ---- 4. what every session pays before reading a line of code
+  console.log('\nContext budget (always-on)')
+  if (agents.includes('claude')) {
+    if (!complete) console.log('  • claude is locked but .claude/rules/ is absent — cannot measure')
+    else {
+      const on = rules.filter(r => !r.globs.length).sort((a, b) => b.size - a.size)
+      const total = on.reduce((n, r) => n + r.size, 0)
+      console.log(`  rules       ${String(on.length).padStart(3)} files  ${kb(total).padStart(9)}  (${tok(total)})`)
+      for (const r of on.slice(0, 3)) console.log(`                ${r.rel} — ${kb(r.size)}${total ? ` (${Math.round(r.size / total * 100)}%)` : ''}`)
+    }
+    const skillRoot = SKILL_DIR.claude
+    if (existsSync(skillRoot)) {
+      const descs = readdirSync(skillRoot)
+        .map(n => join(skillRoot, n, 'SKILL.md')).filter(existsSync)
+        .map(f => (splitFm(readFileSync(f, 'utf8')).fm.description || '').length)
+      const total = descs.reduce((a, b) => a + b, 0)
+      console.log(`  skills      ${String(descs.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
+    }
+    if (!existsSync('CLAUDE.md') && !existsSync(join('.claude', 'CLAUDE.md')))
+      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md, so it starts every session with no project map')
+  }
+  if (agents.includes('codex') || agents.includes('opencode')) {
+    const block = existsSync('AGENTS.md')
+      ? (readFileSync('AGENTS.md', 'utf8').match(new RegExp(`${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}`)) || [''])[0]
+      : ''
+    if (!block) bad.push('codex/opencode are locked but AGENTS.md has no managed block (run `update`)')
+    else {
+      const CODEX_CAP = 32 * 1024                                        // Codex `project_doc_max_bytes`
+      const pct = Math.round(block.length / CODEX_CAP * 100)
+      console.log(`  AGENTS.md   block      ${kb(block.length).padStart(9)}  (${tok(block.length)}, ${pct}% of Codex's 32 KiB cap)`)
+      if (pct >= 40) warn.push(`the AGENTS.md managed block eats ${pct}% of Codex's 32 KiB instruction cap before any repo content`)
+    }
+  }
+
+  // ---- verdict
+  const fail = bad.length + (strictFlag ? warn.length : 0)
+  if (bad.length) { console.log('\nProblems'); for (const b of bad) console.log(`  ✗ ${b}`) }
+  if (warn.length) { console.log('\nWarnings'); for (const w of warn) console.log(`  ! ${w}`) }
+  if (!bad.length && !warn.length) console.log('\n✓ nothing to report.')
+  else console.log(`\n${bad.length} problem(s), ${warn.length} warning(s)${strictFlag ? ' (--strict: warnings fail)' : ''}.`)
+  if (fail) process.exit(1)
+}
+
 // ----------------------------------------------------------------------- main
 async function main() {
   switch (cmd) {
@@ -404,6 +578,7 @@ async function main() {
       break
     }
     case 'init': initRepo(); break
+    case 'doctor': doctor(); break
     case 'list': {
       const lock = readLock()
       console.log('Available profiles:')
@@ -418,6 +593,7 @@ async function main() {
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
+        + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  list                             show available & installed profiles')
   }
 }

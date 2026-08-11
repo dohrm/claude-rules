@@ -97,6 +97,7 @@ npx github:dohrm/claude-rules add product                                   # th
 
 npx github:dohrm/claude-rules list                     # available & installed
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml from the kit
+npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: ALL)
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
@@ -143,6 +144,40 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   `AGENTS.md` managed block, and updates the lock. It never touches your
   `justfile`/`lefthook` wiring — delete those recipes yourself. Review with
   `git status` before committing.
+
+### `doctor` — is the install still true?
+
+An install drifts: a profile is removed by hand, an `update` leaves an orphan, the
+repo loses the code a rule covered. None of that is visible — the agent just keeps
+loading files nobody can account for. `doctor` audits it, offline and without an
+LLM: the lock, the registry, and the files on disk are all it reads, so it belongs
+in `just check`.
+
+```bash
+npx github:dohrm/claude-rules doctor            # 0 unless something is broken
+npx github:dohrm/claude-rules doctor --strict   # warnings fail too
+```
+
+Same split as `adr-check` and `docs-check` — it **fails on facts** and **warns on
+judgments**:
+
+| | Reported as | Because |
+|---|---|---|
+| An asset the lock promises is missing on disk | **fail** | the install contradicts its own lock |
+| An asset on disk that no locked profile explains | **fail** | agents load it every session and nothing records why |
+| The lock names an unknown profile or agent | **fail** | `update` cannot replay it |
+| A path-scoped rule whose globs match **no file** here | warn | it can never fire — dead weight, or the repo lost that code |
+| Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` — the project map is missing |
+| The `AGENTS.md` managed block past 40% of Codex's 32 KiB cap | warn | every KB there is one the repo's own instructions cannot use |
+
+It also prints the **always-on context budget** — the rules with no `paths:`, the
+skill descriptions, the size of the `AGENTS.md` block — which is what every session
+pays before reading a single line of code.
+
+One asymmetry is deliberate: for Codex and opencode, a rule destination exists only
+when the profile *has* a path-scoped rule, and `doctor` stages nothing, so it cannot
+tell a legitimate absence from a broken one. There it proves
+presence-that-should-not-be, never absence-that-should-be.
 
 ---
 

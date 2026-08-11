@@ -116,3 +116,12 @@ adr-check:
 # script, which an update overwrites):  { "prd": { "indexCeiling": 1500 } }
 docs-check:
     node scripts/docs-check.mjs
+
+# ── The agent install itself ───────────────────────────────────────────────
+# Opt-in: add `rules-check` to `check` above once the install has settled. It audits
+# .claude-rules.lock against what is actually on disk and in this repo — an asset the
+# lock does not explain, a rule whose globs match no file here, the always-on context
+# budget. Offline and deterministic (npx fetches the CLI once, then npm caches it).
+# Fails on facts, warns on judgments; `--strict` promotes the warnings.
+rules-check:
+    npx --yes github:dohrm/claude-rules doctor
