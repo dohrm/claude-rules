@@ -117,7 +117,7 @@ exact command. Install `product` first, or read the table in
 | Group | Profiles | What you get |
 |---|---|---|
 | **Language baseline** | `rust` `ts` `go` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates |
-| **Architecture** | `hexagonal` `cqrs` `portal-flat` `tauri` `api` `backend` | ports/adapters, event sourcing, flat-domain React, Tauri IPC, the HTTP stack, the cross-language backend contracts |
+| **Architecture** | `hexagonal` `cqrs` `react` `portal-flat` `tauri` `api` `backend` | ports/adapters, event sourcing, the React framework gates, flat-domain React portal, Tauri IPC, the HTTP stack, the cross-language backend contracts |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contract tests, the mutation ratchet · pipeline & release doctrine, reference workflows, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | what to emit & what you promise (SLO, error budget), migrations & rollback, `/observability` · the manifest layer · `/runbook` + `/postmortem` |
 | **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills + the living-documents rule · a 4-phase debug methodology · framing a self-terminating agent loop |
