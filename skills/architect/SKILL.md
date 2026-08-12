@@ -30,6 +30,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
 | `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
 | `incident` | `/runbook` (one per failure mode) + `/postmortem` (blameless, hands off deltas) | someone is on call for it — the natural pair of `ops` |
+| `react` | React framework gates (Rules of Hooks, purity, RTL, a11y) | anything with a React tree — web, React Native, a component library |
 | `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
 | `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
@@ -39,9 +40,19 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 Examples:
 - Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
-- React frontend → `npx github:dohrm/claude-rules add ts testing cicd portal-flat`
-- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend portal-flat`
+- React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat`
+- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat`
 - Node/TS backend → `add ts testing cicd api backend` (Fastify; not `portal-flat`)
+
+In a **monorepo**, anchor each profile to the directory it governs (`--module`), and
+keep `react` on every React tree while `portal-flat` stays on the web one:
+
+```
+add rust hexagonal api backend --module apps/api
+add ts react portal-flat       --module apps/web
+add ts react                   --module apps/mobile     # Expo: React, but not a portal
+add testing cicd product                                # repo-wide
+```
 
 Add `cqrs` only if the user confirms they want event sourcing. Say so explicitly: *"CQRS is non-standard and pulls in a home library — do you want it, or a plain repository?"*
 

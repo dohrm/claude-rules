@@ -32,9 +32,11 @@
     "cqrs": [
       { "from": "rules/cqrs", "to": ".claude/rules/cqrs", "kind": "rule", "_note": "Architecture pattern — gate: EXPLICIT opt-in only (non-standard). The rust variant assumes the home library `cqrs-rust-lib` (github.com/dohrm/cqrs-rust-lib). Add explicitly: `add cqrs`." }
     ],
+    "react": [
+      { "from": "rules/react", "to": ".claude/rules/react", "kind": "rule", "_note": "React framework quality gates (Rules of Hooks, purity, RTL, a11y) — the FRAMEWORK baseline, true of any React tree: a web portal, a React Native screen, a component library. Its own profile precisely so it can be anchored somewhere `portal-flat` is not: in a monorepo with a web app and an Expo app, `add react --module apps/web` then `add react --module apps/mobile` (add extends the map) keeps the hook rules everywhere React runs, while the portal architecture stays on the web side. Install alongside `ts`." }
+    ],
     "portal-flat": [
-      { "from": "rules/react", "to": ".claude/rules/react", "kind": "rule", "_note": "React framework quality gates (Rules of Hooks, purity, RTL, a11y) — decoupled from the flat-domain architecture, applies to any React app." },
-      { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline)." },
+      { "from": "rules/portal-flat", "to": ".claude/rules/portal-flat", "kind": "rule", "_note": "Frontend architecture — gate: frontend. Flat-domain modular React portal: agnostic principle + React idioms (OpenAPI-generated client, TanStack Query, contexts). Leptos support was dropped. Pairs with `ts` (language baseline) and `react` (framework baseline) — those two are NOT bundled here on purpose: this profile is the architecture of a web portal, and anchoring it to `apps/web` must not also strip the Rules-of-Hooks rules off a React Native app next door." },
       { "from": "kit/portal-flat", "to": ".claude/kit/portal-flat", "kind": "kit", "wire": "Copy openapi-ts.config.ts to your frontend root. Install: `npm i -D @hey-api/openapi-ts` + `npm i @hey-api/client-axios @tanstack/react-query zod`. Add package.json scripts `generate:api` (\"openapi-ts\", live backend) and `generate:api:file` (same, CI sets OPENAPI_SPEC to the spec artifact). Create src/config/hey-api.ts exporting the client runtimeConfig (base URL + auth interceptor). Ensure eslint globalIgnores and tsconfig exclude src/api/generated. NOT a hook tier — codegen is a dev/CI step, not a gate." }
     ],
     "testing": [

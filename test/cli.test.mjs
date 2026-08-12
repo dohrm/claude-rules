@@ -614,3 +614,19 @@ test('removing a module\'s only profile drops its index group too', () => {
     assert.match(md, /### apps\/api/)
   })
 })
+
+test('react is its own profile, so it can be anchored where portal-flat is not', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'ts', 'react', 'portal-flat', '--agent', 'claude', '--module', 'apps/web'], dir))
+    ok(runCli(['add', 'ts', 'react', '--module', 'apps/mobile'], dir))
+
+    // Rules of Hooks apply to every React tree — web portal AND React Native
+    const react = read(dir, '.claude/rules/react/quality-gates.md')
+    assert.match(react, /- "apps\/web\/\*\*\/\*\.tsx"/)
+    assert.match(react, /- "apps\/mobile\/\*\*\/\*\.tsx"/)
+    // the portal architecture stays on the web side
+    const portal = read(dir, '.claude/rules/portal-flat/react.md')
+    assert.doesNotMatch(portal, /apps\/mobile/, 'a React Native app is not a flat-domain web portal')
+    assert.deepEqual(lockOf(dir).modules, { 'apps/web': ['ts', 'react', 'portal-flat'], 'apps/mobile': ['ts', 'react'] })
+  })
+})
