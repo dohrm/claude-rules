@@ -2,6 +2,7 @@
 paths:
   - "**/*.rs"
   - "**/*.go"
+  - "**/*.py"
   - "**/*.ts"
   - "**/*.tsx"
 title: "Ops — SLOs, Error Budgets & Alerting"

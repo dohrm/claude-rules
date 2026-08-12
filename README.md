@@ -116,7 +116,7 @@ exact command. Install `product` first, or read the table in
 
 | Group | Profiles | What you get |
 |---|---|---|
-| **Language baseline** | `rust` `ts` `go` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates |
+| **Language baseline** | `rust` `ts` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates |
 | **Architecture** | `hexagonal` `cqrs` `react` `portal-flat` `tauri` `api` `backend` | ports/adapters, event sourcing, the React framework gates, flat-domain React portal, Tauri IPC, the HTTP stack, the cross-language backend contracts |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contract tests, the mutation ratchet · pipeline & release doctrine, reference workflows, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | what to emit & what you promise (SLO, error budget), migrations & rollback, `/observability` · the manifest layer · `/runbook` + `/postmortem` |
@@ -286,7 +286,7 @@ git hooks, you or the agent, and CI. No command is defined twice.
 Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
 a laptop that the PR job computes on a runner, so the agent runs it before pushing
 and CI re-runs it as a witness. It ships per language (`kit/rust/mutation-ci.yaml`,
-`kit/ts/mutation-ci.yaml`, `kit/go/coverage-ci.yaml`) and starts **non-blocking**:
+`kit/ts/mutation-ci.yaml`, `kit/python/mutation-ci.yaml`, `kit/go/coverage-ci.yaml`) and starts **non-blocking**:
 measure a baseline, then ratchet. The Tier 1-2 pipeline is `kit/cicd/ci.snippet.yaml`, whose jobs call the
 same `just` recipes — a command CI has and the justfile does not is drift the agent's
 local loop cannot see.
@@ -377,10 +377,10 @@ module's own group are what it reads.
 claude-rules/
 ├── registry.json    # drives the installer: profile → source dirs → destinations
 ├── bin/cli.mjs      # the npx installer (giget-based; dumb by design, data-driven)
-├── rules/           # language (rust ts go godot-csharp) · architecture (hexagonal cqrs
+├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent
-├── kit/             # common (just, adr-check, docs-check) · rust ts go godot portal-flat · cicd
+├── kit/             # common (just, adr-check, docs-check) · rust ts go python godot portal-flat · cicd
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)

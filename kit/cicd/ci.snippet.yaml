@@ -90,6 +90,28 @@ jobs:
       - name: just go-check
         run: just go-check
 
+  python:                        # DELETE if no Python
+    runs-on: ubuntu-latest       # ADAPT
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version-file: .python-version   # ADAPT to your python_dir
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install the project
+        run: uv sync --locked          # fails if uv.lock drifted from pyproject.toml
+      # No "install the Tier-2 tools" step: ruff, mypy, pip-audit and deptry are
+      # dev dependencies, so the sync above installs the exact pinned versions the
+      # gate was written for — no `@latest` drifting between runs.
+      - name: just python-check
+        run: just python-check
+
   # Documents gate — OPT-IN, only if the repo keeps ADRs (docs/adr/) or a PRD/PLAN.
   # An agent proposes a decision, a human accepts it (rules/agent/decisions.md); a document
   # that grows stays units + a compacted index (rules/product/documents.md).
@@ -108,7 +130,7 @@ jobs:
   # counts as green — see the "skipped required check" rule.
   ci-ok:
     if: always()
-    needs: [rust, ts, go]        # ADAPT to the jobs you kept
+    needs: [rust, ts, go, python]   # ADAPT to the jobs you kept
     runs-on: ubuntu-latest       # ADAPT
     steps:
       - name: Every gate must have actually succeeded

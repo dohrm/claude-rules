@@ -11,7 +11,7 @@ This directory is its executable counterpart — reference implementations you
 copy and adapt.
 
 **Cross-platform (Windows/mac/linux):** every default command is a cross-platform
-binary — `just`, `lefthook`, `cargo`/`clippy`/`deny`/`machete`, `npm`, `go`. A
+binary — `just`, `lefthook`, `cargo`/`clippy`/`deny`/`machete`, `npm`, `go`, `uv`. A
 repo handed to a Windows client runs `just check` unchanged. The **one** exception
 is `rust/rust-fmt.sh` (bash), needed ONLY by repos with a generated member crate
 — see its header for the portable fallback. (`common/adr-check.mjs` is Node rather
@@ -62,8 +62,10 @@ the PR job computes, so `just mutate-diff` runs it before the push and CI re-run
 it as a witness. It is scoped to changed code and ratcheted from a baseline (a
 healthy repo often sits ~70%, so it starts non-blocking). Per language:
 `rust/mutation-ci.yaml` (cargo-mutants), `ts/mutation-ci.yaml` (Stryker —
-`--incremental` locally, it has no `--since`), and `go/coverage-ci.yaml` — a
-coverage ratchet, because Go has no production-grade mutation tool. A survivor has
+`--incremental` locally, it has no `--since`), `python/mutation-ci.yaml` (mutmut —
+path-scoped, so local scopes by path + its cache and CI by the PR's changed files),
+and `go/coverage-ci.yaml` — a coverage ratchet, because Go has no production-grade
+mutation tool. A survivor has
 three possible answers (delete the code / assert it / exclude it), which is why the
 doctrine matters more than the tool: `../rules/testing/ratchet.md` (install it with
 the `testing` profile).
@@ -95,6 +97,7 @@ installed snippets, or do it by hand:
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
    move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
+   merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml`;
    adapt eslint `globalIgnores`; then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): move `common/adr-check.mjs`
    to `scripts/` and add `adr-check` to the `check` recipe. The gate makes
@@ -131,6 +134,10 @@ kit/
 │   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
 │   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
 │   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
+├── python/                     # COMPLETE
+│   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
+│   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
+│   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
 └── portal-flat/                # COMPLETE (frontend, pairs with the portal-flat profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```

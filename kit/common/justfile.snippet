@@ -11,9 +11,10 @@
 # .claude-rules.lock, so the layout has ONE home. Edit them by hand if you prefer —
 # but the next `init` rewrites the block, and nothing outside it is ever touched.
 # claude-rules:start (managed — derived from .claude-rules.lock)
-rust_dir := "."      # e.g. "api"                       for a backend under api/
-ts_dir   := "."      # e.g. "apps/web"
-go_dir   := "."      # e.g. "workflows/orchestration"
+rust_dir   := "."    # e.g. "api"                       for a backend under api/
+ts_dir     := "."    # e.g. "apps/web"
+go_dir     := "."    # e.g. "workflows/orchestration"
+python_dir := "."    # e.g. "services/ingest"
 # claude-rules:end
 base     := "origin/main"   # branch a feature is measured against (Tier 3)
 
@@ -23,7 +24,7 @@ base     := "origin/main"   # branch a feature is measured against (Tier 3)
 # (`just mutate-diff`), not per iteration.
 # Add the checks your repo needs:
 check: rust-check
-# check: rust-check ts-check go-check adr-check docs-check
+# check: rust-check ts-check go-check python-check adr-check docs-check
 
 # ── Rust ─────────────────────────────────────────────────────────────────
 # Each line runs in its own shell, so `cd {{dir}} &&` per line (portable: works
@@ -51,6 +52,28 @@ go-check: go-lint
     cd {{go_dir}} && go build ./...
     cd {{go_dir}} && govulncheck ./...
 
+# ── Python ─────────────────────────────────────────────────────────────────
+# Every command goes through `uv run`, so the gate runs against the LOCKED
+# environment and not whatever is on this machine (rules/python/environment.md).
+#
+# `--locked` on EVERY line, and it is not decoration: a bare `uv run` silently
+# re-locks when pyproject.toml has drifted from uv.lock, so the gate would repair
+# the very thing it is supposed to catch and still go green. `--locked` makes the
+# drift an error instead. (`uv lock --check` is the same check, standalone.)
+#
+# `mypy` takes no path: it reads `files` from [tool.mypy] in pyproject.toml, so
+# the scope has one home (and `mypy .` would walk .venv). Same for pytest.
+# On poetry/pdm, swap the runner and keep the rest — the invariant is the
+# lockfile, not the tool.
+python-lint:
+    cd {{python_dir}} && uv run --locked ruff format --check .
+    cd {{python_dir}} && uv run --locked ruff check .
+python-check: python-lint
+    cd {{python_dir}} && uv run --locked mypy
+    cd {{python_dir}} && uv run --locked pytest
+    cd {{python_dir}} && uv run --locked pip-audit
+    cd {{python_dir}} && uv run --locked deptry .
+
 # ── Tier 3 — do the tests ASSERT, or do they merely execute? ───────────────
 # Coverage cannot answer that; mutation can. Minutes, not seconds — so this is
 # NEVER a git hook and never part of `check`. Run it when a coherent block is
@@ -62,7 +85,7 @@ go-check: go-lint
 # is absent is a valid answer: the agent reports mutation as not-run rather
 # than pretending. Add `pr.diff` and `coverage.out` to .gitignore.
 mutate-diff: rust-mutate
-# mutate-diff: rust-mutate ts-mutate go-cover
+# mutate-diff: rust-mutate ts-mutate go-cover python-mutate
 
 # `git diff <base>...HEAD` = changes since the merge-base, i.e. the same set the
 # PR job computes. `--relative` inside {{rust_dir}} rewrites the paths so they
@@ -86,6 +109,17 @@ ts-mutate:
 go-cover:
     cd {{go_dir}} && go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
     cd {{go_dir}} && go tool cover -func=coverage.out
+
+# mutmut has no diff mode (no `--in-diff`, no `--since`) — it is path-scoped. It
+# does cache its results, so a re-run only re-tests what actually changed, which
+# is the same outcome as Stryker's `--incremental`: first run long, every one
+# after it minutes. Scope comes from [tool.mutmut] source_paths in pyproject.toml;
+# narrow it with `--paths-to-mutate src/billing` when the package gets big. CI
+# scopes to the PR's changed files instead (kit/python/mutation-ci.yaml).
+# Needs: uv add --dev mutmut. Gitignore `mutants/`.
+python-mutate:
+    cd {{python_dir}} && uv run mutmut run
+    cd {{python_dir}} && uv run mutmut results
 
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop

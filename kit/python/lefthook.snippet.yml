@@ -1,0 +1,21 @@
+# Python hooks — MERGE into the repo's root lefthook.yml.
+#
+# Thin triggers only: commands live in the justfile recipes (python-lint / python-check),
+# which hold the path via the `python_dir` variable. Layout-agnostic glob.
+# Aligned with rules/python/quality-gates.md (ruff / mypy --strict / pytest / audit).
+# `uv` must be installed (or baked into the runner image); everything else comes
+# from the project's dev dependency group, so the hooks need no other binary.
+
+pre-commit:
+  parallel: true
+  commands:
+    python:
+      glob: "**/*.py"
+      run: just python-lint
+
+pre-push:
+  parallel: true
+  commands:
+    python:
+      glob: "**/*.py"
+      run: just python-check

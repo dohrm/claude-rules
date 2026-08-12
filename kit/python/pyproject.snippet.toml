@@ -1,0 +1,101 @@
+# Python tool configuration — MERGE these sections into your `pyproject.toml`.
+# Mirrors rules/python/quality-gates.md (single source of doctrine); the commands
+# that run them live in the justfile (`just py-lint` / `py-check`).
+#
+# One file holds all of it on purpose: ruff, mypy, pytest and mutmut all read
+# pyproject.toml, so the repo has ONE place where "what counts as correct" lives.
+#
+# The dev tooling belongs in a dev group, never in the runtime dependencies:
+#   uv add --dev ruff mypy pytest pytest-cov pip-audit deptry
+#   uv add --dev mutmut          # Tier 3 only, see the justfile's mutate-diff
+
+# ── Interpreter ────────────────────────────────────────────────────────────
+# In [project]. "Python 3" is not a version — pin the floor, and commit a
+# matching .python-version so every machine resolves the same interpreter.
+# requires-python = ">=3.12"
+
+# ── Ruff — format + lint ───────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]          # ADAPT if the package is not under src/
+target-version = "py312"        # ADAPT to your requires-python floor
+
+[tool.ruff.lint]
+# A curated set, not "everything": each family below is a rule in
+# rules/python/ that a machine can check instead of a reviewer.
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes — the undefined name, the unused import
+    "I",        # isort — import order, so a diff never argues about it
+    "N",        # pep8-naming — code-style.md's naming section
+    "UP",       # pyupgrade — no syntax kept alive for a version you dropped
+    "B",        # bugbear — mutable default args, and friends
+    "A",        # no shadowing of builtins
+    "C4",       # comprehensions
+    "SIM",      # simplifications
+    "RET",      # return-path consistency
+    "PTH",      # pathlib over os.path
+    "ARG",      # unused arguments
+    "TID",      # tidy imports — bans relative imports beyond the package
+    "S",        # bandit: security anti-patterns (the `gosec` counterpart)
+    "TRY",      # tryceratops: the error-handling.md rules, mechanically
+    "LOG", "G", # logging: no f-string in the message, no bare exception logging
+    "RUF",      # ruff's own
+]
+ignore = [
+    "TRY003",   # long messages in raise — allowed; the CONTRACT is the attributes
+]
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is the point of a test, and a hardcoded password in a fixture is not
+# a finding. Narrow the exemption to the test tree, never repo-wide.
+"tests/**" = ["S101", "S105", "S106", "ARG"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"    # `.sibling` fine, `..other_package` not
+
+# ── mypy — the compiler this language does not have ────────────────────────
+[tool.mypy]
+strict = true                   # the whole point; do not soften it to pass
+warn_unreachable = true
+warn_unused_ignores = true      # a `# type: ignore` that stopped being needed is noise
+show_error_codes = true         # so a suppression can name its code
+files = ["src", "tests"]        # ADAPT
+
+# LEGACY REPOS ONLY — the ratchet (rules/python/quality-gates.md). Baseline the
+# modules that fail today, then move them out one at a time. This list may only
+# ever SHRINK; a `check` that passes because the list grew is not a gate.
+# [[tool.mypy.overrides]]
+# module = ["legacy.billing.*", "legacy.reports.*"]
+# disallow_untyped_defs = false
+
+# ── pytest ─────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -q quiet, --strict-markers so a typo'd marker fails instead of silently
+# selecting nothing, and a failed test is never a warning.
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error"]      # a DeprecationWarning is tomorrow's breakage
+
+# ── Coverage — a symptom, never the gate (rules/testing/ratchet.md) ────────
+[tool.coverage.run]
+branch = true
+source = ["src"]                # ADAPT
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+# ── deptry — the `cargo machete` counterpart ───────────────────────────────
+[tool.deptry]
+# DEP001 missing, DEP002 unused, DEP003 transitive, DEP004 misplaced dev dep.
+# Nothing ignored by default: add an entry here WITH a reason when a package is
+# genuinely used in a way static analysis cannot see (a plugin, an entry point).
+ignore = []
+
+# ── mutmut — Tier 3, run per block, never in a hook ────────────────────────
+# mutmut has no diff mode: scope it to the package you touched with
+# `--paths-to-mutate`, or narrow source_paths here. Doctrine: rules/testing/ratchet.md.
+[tool.mutmut]
+source_paths = ["src"]                              # ADAPT
+pytest_add_cli_args_test_selection = ["tests"]      # ADAPT

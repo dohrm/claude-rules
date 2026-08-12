@@ -2,6 +2,7 @@
 paths:
   - "**/*.rs"
   - "**/*.go"
+  - "**/*.py"
   - "**/*.ts"
 title: "Backend — API Error Contract (problem+json)"
 ---

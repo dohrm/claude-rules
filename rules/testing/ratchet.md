@@ -2,6 +2,7 @@
 paths:
   - "**/*.rs"
   - "**/*.go"
+  - "**/*.py"
   - "**/*.ts"
   - "**/*.tsx"
 title: "Testing — Coverage, Mutation & the Ratchet"
@@ -95,6 +96,12 @@ re-runs it on the PR. Both ship in the kit.
   previous report, re-tests what changed), and in CI `--mutate` on the changed
   files, with `thresholds.break` set from the baseline once calibrated.
   Local: `just ts-mutate`. Reference job: `kit/ts/mutation-ci.yaml`.
+- **Python** — mutmut. It has no diff mode at all (no `--in-diff`, no `--since`):
+  it is path-scoped, and it caches, so locally you re-run it and only what changed
+  is re-tested, while CI passes the PR's changed files to `--paths-to-mutate`.
+  Mutation is therefore measured per *file*, not per hunk — a two-line change in a
+  large module still mutates the whole module.
+  Local: `just python-mutate`. Reference job: `kit/python/mutation-ci.yaml`.
 - **Go** — mutation tooling is not production-grade; use a **coverage ratchet on
   changed packages** plus `go test -race -count=1` instead, and be explicit that it
   is the weaker signal. Locally the useful output is the map of uncovered

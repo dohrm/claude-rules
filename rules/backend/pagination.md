@@ -2,6 +2,7 @@
 paths:
   - "**/*.rs"
   - "**/*.go"
+  - "**/*.py"
   - "**/*.ts"
 title: "Backend — Pagination, Sorting & Filtering"
 ---
