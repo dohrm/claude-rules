@@ -20,7 +20,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 | Profile | What | Install when |
 |---------|------|--------------|
-| `rust` / `go` / `ts` | language baseline (style, gates, logging) | always, per language in use |
+| `rust` / `go` / `ts` / `python` | language baseline (style, gates, logging) | always, per language in use |
 | `godot` | Godot 4 + C# game (co-location, typed EventBus, data in `.tres`) | shape is **gamedev** |
 | `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | always, as soon as the repo has tests |
 | `cicd` | pipeline + release doctrine, reference workflows, `/ci-setup` | as soon as the repo has a forge — i.e. always, in practice |
@@ -43,6 +43,12 @@ Examples:
 - React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat`
 - Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat`
 - Node/TS backend → `add ts testing cicd api backend` (Fastify; not `portal-flat`)
+- Python service → `add python testing cicd ops backend` (`api` ships no Python variant yet — name the framework in an ADR)
+
+`python` carries one decision the others don't: it assumes a **committed lockfile
+and a runner that installs from it** (uv by default). On a brownfield repo still
+on `pip install -r requirements.txt`, say so out loud — adopting the profile means
+adopting that, and it is worth its own ADR.
 
 In a **monorepo**, anchor each profile to the directory it governs (`--module`), and
 keep `react` on every React tree while `portal-flat` stays on the web one:

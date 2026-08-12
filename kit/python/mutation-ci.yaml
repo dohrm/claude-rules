@@ -1,0 +1,82 @@
+name: Mutation (Python)
+
+# Tier 3 quality gate: are the tests meaningful, or do they just execute code
+# without asserting? Coverage says nothing about this; mutation score does. This
+# is the gate that lets AI-written unit tests be trusted without reading every
+# assertion by hand. Doctrine: rules/testing/ratchet.md.
+#
+# This job is the WITNESS, not the first observation: the same tool runs locally
+# via `just python-mutate` before the push.
+#
+# HOW IT SCOPES, and why it is not the Rust job: mutmut has no diff mode — no
+# `--in-diff` like cargo-mutants, no `--since`. It is path-scoped, so the job
+# below computes the PR's changed source files and passes them to
+# `--paths-to-mutate`. Consequence to know: mutation is measured on the files you
+# touched, not on the hunks — a large file with a two-line change still mutates
+# whole. Narrow `source_paths` in pyproject.toml if that gets slow.
+#
+# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose, and
+# mutmut has no built-in threshold flag. First establish a baseline, triage real
+# gaps vs equivalent mutants, THEN decide what number you defend — and enforce it
+# in the last step rather than by hand. Never a round number: see the ratchet rule.
+#
+# COPY to .gitea/workflows/mutation-python.yaml (or .github/workflows/). The
+# syntax is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g.
+# `linux`; GitHub: `ubuntu-latest`) and working-directory to your python_dir.
+#
+# One-time setup: `uv add --dev mutmut`, then the [tool.mutmut] section from
+# pyproject.snippet.toml. Add `.mutmut-cache` and `mutants/` to .gitignore.
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest             # ADAPT to your runner label
+    continue-on-error: true            # ← remove once the baseline is ratcheted
+    defaults:
+      run:
+        working-directory: .           # ADAPT to your python_dir (e.g. services/api)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # need the base branch to compute the diff
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --locked          # fails if uv.lock drifted from pyproject.toml
+
+      - name: Compute changed source files
+        id: changed
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
+                  | grep -E '\.py$' | grep -v -E '(^|/)(tests?|conftest)' | paste -sd, -)
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          echo "Mutating: ${FILES:-<none>}"
+
+      - name: Mutation testing (changed files only)
+        if: steps.changed.outputs.files != ''
+        run: uv run mutmut run --paths-to-mutate "${{ steps.changed.outputs.files }}"
+
+      - name: Surviving mutants
+        if: always() && steps.changed.outputs.files != ''
+        # The part worth reading: each survivor is a mutation no test noticed.
+        # Locally, `uv run mutmut browse` is the interactive triage view.
+        run: uv run mutmut results
+
+# ---------------------------------------------------------------------------
+# Nightly full sweep (enable when ready): track the score over time and catch
+# erosion outside changed files.
+#   on:
+#     schedule:
+#       - cron: '0 3 * * *'
+#   then run: uv run mutmut run   ([tool.mutmut] source_paths still scopes it)
+# ---------------------------------------------------------------------------

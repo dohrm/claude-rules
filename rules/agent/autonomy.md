@@ -68,8 +68,8 @@ A gate you bypass is a gate you no longer have.
   must always be true.
 - **Soft — traced bypass allowed.** Minor style/lint only, and ONLY with a
   justification comment on the same line — as `//nolint` requires in
-  `go/quality-gates`. No bare `#[allow(...)]` / `// eslint-disable` without a
-  stated reason.
+  `go/quality-gates`. No bare `#[allow(...)]` / `// eslint-disable` /
+  `# noqa` / `# type: ignore` without a stated reason.
 
 **Declare every bypass.** Even a permitted (soft) one. No silent TODO, skipped
 test, placeholder, or stubbed mock slipped into a hand-back — if you defer or

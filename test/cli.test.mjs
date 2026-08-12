@@ -436,8 +436,9 @@ test('init derives the *_dir block from the lock modules, and nothing outside it
     ok(runCliBare(['init'], dir))
 
     const just = read(dir, 'justfile')
-    assert.match(just, /rust_dir := "apps\/api"/)
+    assert.match(just, /rust_dir\s+:= "apps\/api"/)
     assert.match(just, /go_dir\s+:= "\."/, 'just fails at parse time on an undefined variable')
+    assert.match(just, /python_dir\s+:= "\."/, 'every DIR_VAR is emitted, claimed or not')
     assert.match(just, /base\s+:= "origin\/main"/, 'content outside the block must survive')
     assert.match(just, /rust-check: rust-lint/)
   })
