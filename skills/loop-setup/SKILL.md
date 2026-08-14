@@ -1,9 +1,9 @@
 ---
 name: loop-setup
-description: "Frame and write a self-terminating agent loop before running it: check the 4 preconditions, bound the objective, pin a measurable done-command, set budget/iteration guardrails, and produce PLAN.md + MEMORY.md + the ready-to-run loop prompt. Use on /loop-setup, \"set up a loop\", \"automate a repetitive task\", \"run an agent until it's done\", \"loop until the tests pass\", \"make this run autonomously\", \"how do I use /loop\". Helps CADRE a loop for the current host — Claude Code /loop, Codex /goal, or a Cursor automation — it does not replace those commands. Not for one-off tasks."
+description: "Frame and write a self-terminating agent loop before running it: check the 4 preconditions, bound the objective, pin a measurable done-command, set budget/iteration guardrails, and produce `.work/loop.md` + the ready-to-run loop prompt. Use on /loop-setup, \"set up a loop\", \"automate a repetitive task\", \"run an agent until it's done\", \"loop until the tests pass\", \"make this run autonomously\", \"how do I use /loop\". Helps CADRE a loop for the current host — Claude Code /loop, Codex /goal, or a Cursor automation — it does not replace those commands. Not for one-off tasks."
 ---
 
-You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state files, then hand the exact command to run.
+You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state file, then hand the exact command to run.
 
 ## Process
 
@@ -38,15 +38,19 @@ Every loop carries all four:
 - **Escalation point** — on cap/budget exhaustion → STOP and surface state to the human, **never** silent failure or fake-green.
 - **Divergence guard** — "if N consecutive turns pass with no measurable progress (done-command no closer), STOP and escalate." This is the loop analog of the *three-strikes rule* in `skills/investigate` (if present).
 
-### 4. Write the artifacts
+### 4. Write the state file
 
-Create/overwrite in the working dir (extension mode: if a file exists, read it and fill only the deltas — don't clobber validated content):
+The loop's state is **one file under `.work/`** — working memory, gitignored, deleted when the work lands. Not a document, and never under `docs/`.
 
-- `PLAN.md` from `<plan-template>` — the bounded objective + ordered checklist of remaining work (the loop's manager reads this to pick the next item).
-- `MEMORY.md` from `<memory-template>` — running log of wins/failures so the loop doesn't repeat a dead end.
-- The **loop prompt** from `<loop-prompt-template>` — self-contained and self-terminating.
+**First, look for a file that already exists:**
 
-Confirm *"✓ written PLAN.md, MEMORY.md; loop prompt ready"*.
+- **`.work/phase-NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3. Everything else is `/tasks`' and stays untouched.
+- **Nothing there** — write `.work/loop.md` from `<loop-file-template>`.
+- **A file exists from an earlier run** — read it and fill only the deltas; don't clobber validated content.
+
+Then add `.work/` to `.gitignore` if it isn't there, and build the **loop prompt** from `<loop-prompt-template>`, pointing at whichever file you settled on.
+
+Confirm *"✓ `.work/<file>` written (guardrails added); loop prompt ready"*.
 
 ### 5. Hand off — per host
 
@@ -58,61 +62,65 @@ Emit the invocation for the user's host (ask which if unclear). Same cadre, diff
 | **Codex CLI** (≥ 0.128) | `/goal <objective + done-command + budget>` | Codex plans/tests internally — feed it the bounded objective and the done-command; the budget/cap is what you add |
 | **Cursor** | a stop-hook loop (`loop_limit`) or an Automation | heavier: emit the hook config alongside the prompt; `loop_limit` = your iteration cap |
 
-Then state **how to interrupt** the loop and where to watch progress (`PLAN.md` checkboxes, `MEMORY.md` tail).
+Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail).
 
-<plan-template>
-# Loop plan — <objective in one line>
+<loop-file-template>
+<!-- `.work/loop.md`. Working memory: rewritten every turn, deleted when the work
+     lands. Never under docs/. A phase worklist from /tasks has this same skeleton,
+     plus its anchors — in that case add the Guardrails section there instead of
+     creating this file. -->
+# Loop — <objective in one line>
 
-**Objective (bounded):** <finite, checkable end state>
-**Done-command:** `<command that exits green when the objective is met>`
-**Type:** closed | open (missing precondition: <which>)
+- **Objective (bounded)**: <finite, checkable end state>
+- **Done-command**: `<command that exits green when the objective is met>`
+- **Type**: closed | open (missing precondition: <which>)
 
 ## Guardrails
-- Iteration cap: <N turns>
-- Token budget: <budget or "n/a (closed)">
-- Escalate when: cap/budget hit, or <M> turns with no measurable progress
-- Out of scope (do NOT touch): <bounds that prevent drift>
 
-## Remaining work (manager reads top-down, does the first unchecked)
+- **Iteration cap**: <N turns>
+- **Token budget**: <budget, or "n/a (closed)">
+- **Escalate when**: cap/budget hit, or <M> turns with no measurable progress
+- **Out of scope**: <bounds that prevent drift — the loop touches nothing else>
+
+## Remaining work
+
+<!-- The manager reads top-down and does the first unchecked item. -->
 - [ ] <item 1>
 - [ ] <item 2>
-- [ ] …
-</plan-template>
 
-<memory-template>
-# Loop memory
+## Log
 
-> Append after each turn. Never repeat a recorded dead end.
+<!-- One line per turn, appended: what landed, or what failed and why. Never retry a
+     recorded dead end. -->
+- <turn>: <win or dead end>
 
-## Wins
-- <turn N>: <what worked>
+## Blocked on the human
 
-## Dead ends
-- <turn N>: <what failed, and why — so it isn't retried>
-
-## Open questions / for the human
-- <blocker that may need escalation>
-</memory-template>
+<!-- Anything the loop cannot decide or access. Non-empty here means the loop
+     stopped and is waiting — it never means "carry on anyway". -->
+- <blocker>
+</loop-file-template>
 
 <loop-prompt-template>
-You are running one turn of a bounded loop toward a fixed objective. Work only from the files below; they are the source of truth, not your memory of prior turns.
+You are running one turn of a bounded loop toward a fixed objective. Work only from the state file below; it is the source of truth, not your memory of prior turns.
 
 **Objective:** <bounded objective>
-**Read first:** `PLAN.md` (remaining work + guardrails) and `MEMORY.md` (what already failed).
+**State file:** `<.work/loop.md or .work/phase-NN-slug.md>` — remaining work, guardrails, and what already failed.
 
 This turn:
-1. Pick the **first unchecked item** in `PLAN.md`. If none remain, go to Done-check.
-2. Do exactly that item — nothing outside the "Out of scope" bounds in `PLAN.md`.
+1. Read the state file. Pick the **first unchecked item**. If none remain, go to Done-check.
+2. Do exactly that item — nothing outside its "Out of scope" bounds.
 3. Run the done-command: `<done-command>`. Read its exit code — do not trust a prior run's claim.
-4. Update `PLAN.md` (check the item only if its own check passed) and append one line to `MEMORY.md` (win or dead end).
+4. Update the state file: check the item only if its own check passed, and append one line to `## Log` (win or dead end).
 
 **Done-check:** if `<done-command>` exits green over the whole objective → state "OBJECTIVE MET", stop the loop, do not start another turn.
 
 **Stop & escalate (never fake green) if:**
 - the iteration cap (<N>) or token budget is reached, or
 - <M> consecutive turns made no measurable progress toward the done-command, or
-- an item needs a decision/access you don't have.
-On any of these: stop, write the reason and current state to `MEMORY.md` → "Open questions", and surface it to the human.
+- an item needs a decision, an access, or a scope change you don't have.
+
+On any of these: stop, write the reason and current state under `## Blocked on the human`, and surface it.
 </loop-prompt-template>
 
 ## Rules
@@ -120,7 +128,9 @@ On any of these: stop, write the reason and current state to `MEMORY.md` → "Op
 - **"Done" is a green command, never your own say-so** — re-run the done-command and read the exit code each turn (see `rules/agent/autonomy.md` if installed).
 - **No loop without a cap and an escalation point.** Exhaustion escalates loudly; it never silently passes or fakes green.
 - **The agent is never the authority on "finished"** — the done-command is. An agent's "looks done" is a proposal, not permission.
-- **Bound the scope** — the loop touches only what `PLAN.md` lists; no opportunistic refactors, no scope creep (see `rules/agent/guardrails.md` if installed).
+- **Bound the scope** — the loop touches only what the state file lists; no opportunistic refactors, no scope creep (see `rules/agent/guardrails.md` if installed).
 - **Refuse the wander** — if the objective can't be made measurable, don't scaffold a loop; say why and stop.
-- **State lives in files, not context** — `PLAN.md`/`MEMORY.md` are the memory, so a fresh turn (or a restarted loop) resumes correctly.
-- Plan mode: `PLAN.md` and `MEMORY.md` are read-only planning artifacts — writing them is allowed.
+- **State lives in a file, not in context** — so a fresh turn, or a restarted loop, resumes correctly.
+- **One state file, under `.work/`, gitignored.** It is working memory: it dies with the work. If it holds something worth keeping, that thing belongs in a document or an ADR — move it there rather than promoting the file.
+- **Never write a second plan next to `/tasks`'** — a phase worklist already is the plan; you add the guardrails to it.
+- Plan mode: `.work/*` are read-only planning artifacts — writing them is allowed.

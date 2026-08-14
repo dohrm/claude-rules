@@ -74,6 +74,13 @@ Create `docs/` if absent. **Two shapes, one threshold** (`product/documents.md`)
 
 In extension mode, add units; never touch a shipped phase. Confirm what was written and, if you migrated, that the phase contents moved unchanged.
 
+### 8. Hand off to /tasks
+
+A phase is a promise, which is why nothing here names a file or a symbol. Turning ONE
+phase into something an agent can execute — anchors in the real code, tasks cut at the
+green boundary, a branch — is `/tasks`, at the moment that phase starts. Not now, and
+not for every phase at once: the code will have moved.
+
 <plan-index-template>
 # Plan: <project name>
 

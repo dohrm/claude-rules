@@ -80,7 +80,7 @@ test('add --agent codex: AGENTS.md block is idempotent and never touches user co
 test('add product: skills land as <name>/SKILL.md directories', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
-    for (const name of ['prd', 'architect', 'plan', 'pre-mortem']) {
+    for (const name of ['prd', 'architect', 'plan', 'tasks', 'pre-mortem']) {
       assert.ok(has(dir, `.claude/skills/${name}/SKILL.md`), `skill ${name} not installed`)
     }
     assert.equal(read(dir, '.claude/skills/prd/SKILL.md'), read(REPO, 'skills/prd/SKILL.md'))

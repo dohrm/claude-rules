@@ -25,7 +25,8 @@ flowchart LR
   A --> PL["/plan"]
   P --> DS["/design-system"] & EX["/experience"]
   DS & EX --> UP["/ui-prompt"]
-  PL --> B["build<br/>rules + just check"]
+  PL --> T["/tasks"]
+  T --> B["build<br/>rules + just check"]
   B --> G["gate<br/>hooks + CI"]
   G --> R["release<br/>tag"]
   R --> O["/observability"]
@@ -42,6 +43,7 @@ flowchart LR
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
 | **Slice** | `/plan` | `docs/PLAN.md` (+ `docs/plan/` once it grows) | human validates the granularity |
+| **Cut one phase** | `/tasks` | `.work/phase-NN-*.md` — anchors + tasks sized to the green boundary (gitignored, dies with the branch) | human validates the cut |
 | **Build** | (no command — rules auto-load) | code + tests, `just check` green | **the gate**, not an opinion |
 | **Gate** | `/ci-setup` | the pipeline, calling the same `just` recipes | human sets branch protection |
 | **Ship** | — | a tag | **human pushes the tag** |
@@ -267,7 +269,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` `hexagonal` | `/investigate` `/loop-setup` `/rust-add-domain` |
 

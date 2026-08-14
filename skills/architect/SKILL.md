@@ -34,7 +34,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
 | `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
-| `product` | the product-lifecycle skills (`/prd`, `/architect`, `/plan`, `/pre-mortem`, …) | the team wants the framing chain in-repo (it is how you got here) |
+| `product` | the product-lifecycle skills (`/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo (it is how you got here) |
 | `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 

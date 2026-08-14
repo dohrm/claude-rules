@@ -95,6 +95,19 @@ test('document-producing skills name a path under docs/', () => {
   }
 })
 
+// The mirror of the map above. These two skills produce scaffolding, not documents:
+// it lives in .work/, it is gitignored, it dies with the branch. A root-level PLAN.md
+// would collide head-on with the durable docs/PLAN.md that /plan owns — the two have
+// opposite lifetimes, and one name for both is how they get confused.
+test('working-memory skills write under .work/, never a bare PLAN.md', () => {
+  for (const name of ['tasks', 'loop-setup']) {
+    const text = read(join(REPO, 'skills', name, 'SKILL.md'))
+    assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
+    assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,
+      `skills/${name}: names a bare PLAN.md/MEMORY.md — working memory goes under .work/`)
+  }
+})
+
 // An eval case costs tokens to run and nothing to validate. Catch the authoring
 // mistakes here rather than three minutes into a headless session.
 test('eval cases are well formed', () => {
