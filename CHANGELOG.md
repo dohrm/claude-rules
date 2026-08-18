@@ -12,7 +12,66 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Fixed
+
+- **`just code-review` could not run, and the gate it feeds could lock a repo out of
+  pushing.** Everything here was found by wiring the review into a real repo and using
+  it; each one is one line of evidence, not a review of the code.
+
+  - **The prompt never reached the CLI.** It was passed as a trailing positional after
+    `--allowedTools`, which is variadic — so the prompt's words were eaten as tool
+    rules and the run died with "Input must be provided either through stdin or as a
+    prompt argument". It goes in on stdin now.
+  - **A failed review blocked every push.** `>` truncates the report before the CLI
+    runs, so a CLI that dies (absent, no key, rate-limited, Ctrl-C) left a 0-byte file
+    — which `review-guard` read as *malformed*, not *absent*. The hook has no glob, so
+    that state blocked every push on the machine, and the documented "no report →
+    passes" escape was unreachable because the file existed. The report is now written
+    to `.part` and moved into place, and an empty report reads as "not run".
+  - **A report that QUOTES the verdict markers was read as malformed.** Any review
+    whose fix suggestion shows the output contract — which is exactly what happens when
+    the diff touches `review-prompt.md` or the reviewer agent — emitted a second
+    `CI_VERDICT` line and was rejected for having two verdicts, reproducibly. The
+    markers are now read from the tail of the report; earlier ones are prose.
+  - **The "read-only reviewer" was not read-only.** `--allowedTools` ADDS to the rules
+    the subprocess inherits from `settings.json` and `settings.local.json`; it does not
+    replace them. Measured in a worked-in repo: with `--allowedTools 'Read,Glob,Grep'`
+    the reviewer ran `just --version`. Denied `Bash`, it reached for `Monitor` — which
+    runs a command — and said so in its answer. The recipe now hands the reviewer its
+    diff and its sha, so it needs no shell at all, and denies the enumerated executor
+    surface. **This is a denylist over a surface a CLI release can grow** — the recipe
+    carries the re-enumeration command and says so; the structural half is what holds.
+
+- **`bash-guard` blocked five commands an agent runs on an ordinary day**, and two of
+  them were denies, where the only move left is to escalate over a non-issue:
+  `git merge --no-verify-signatures` (a GPG flag, nothing to do with hooks),
+  `git push --force-with-lease origin feat/fix-main-nav` (the trunk is a whole ref, not
+  the word "main" inside a branch name), `cat justfile 2>/dev/null` (an fd redirect is
+  not a write to what is being read), `sed -n '1,20p' lefthook.yml` (`sed` writes only
+  with `-i` — and the same bug denied reading the review report, so an agent could not
+  look at the verdict blocking its push), and `git config --get core.hooksPath` (the
+  diagnostic the hooks README tells you to run). The write test is now correlated with
+  the gate file instead of matched independently over the whole command.
+
+### Added
+
+- **The git hook files are part of the gate layer.** `lefthook uninstall` was covered;
+  emptying the files it installs was not — and that is both the cheaper move and the
+  one git cannot see. `bash-guard` denies `rm`/`sed -i`/redirects aimed at
+  `.git/hooks/`, and `edit-guard` denies writing one.
+- **`edit-guard` denies what has no legitimate hand-edit.** It was an ask-only guard,
+  so `Write` to `.work/review-report.md` escalated while `bash-guard` denied the shell
+  spelling of the same act — the hardest rule in the doctrine enforced by the weaker
+  half. The report and `.git/hooks/` now deny; the ask list keeps the files whose edit
+  is sometimes the task (justfile, workflows, baselines).
+
 ### Changed
+
+- **The review prompt's sha instruction moved out of the shared contract block.** The
+  headless reviewer has no shell and is handed `{{sha}}`; the subagent runs
+  `git rev-parse HEAD` itself. Keeping both inside the block would have made the two
+  copies drift, which is the one thing `registry.test.mjs` exists to prevent — so the
+  sourcing is per-variant and the block stays byte-identical.
 
 - **BREAKING — `/loop-setup` keeps its state in one file under `.work/`.** It used to
   write `PLAN.md` and `MEMORY.md` at the repo root; it now writes a single

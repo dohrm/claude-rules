@@ -30,6 +30,9 @@ const VERDICTS = ['CLEAN', 'WARNINGS', 'CRITICAL']
 const VERDICT_MARKER = /^<!--\s*CI_VERDICT:\s*(.*?)\s*-->\s*$/gm
 const REVIEWED_MARKER = /^<!--\s*REVIEWED:\s*(.*?)\s*-->\s*$/gm
 const SHA = /^[0-9a-f]{7,40}$/
+// How much of the end of the report counts as "the end". Two marker lines, and enough
+// slack for a trailing blank line or a stray closing fence.
+const TAIL_LINES = 6
 
 const args = process.argv.slice(2)
 const reportPath = args.find((a) => !a.startsWith('--')) ?? '.work/review-report.md'
@@ -69,16 +72,30 @@ function drift(sha, head) {
 }
 
 function main() {
-  if (!existsSync(reportPath)) {
-    console.log(`review-guard: no ${reportPath} — code review not run.`)
+  // An EMPTY report is "not run", never "malformed". The recipe redirects into the
+  // report, and `>` truncates before the CLI runs, so a CLI that dies — absent, no
+  // key, rate-limited, Ctrl-C — leaves a 0-byte file. Reading that as malformed
+  // blocks every push on the machine (no glob on the hook), with no way out but the
+  // successful review that just failed, and the file's existence hiding the
+  // absent-report escape. The recipe writes to `.part` and moves it into place for
+  // the same reason; this arm is the belt to that braces.
+  const text = existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : null
+  if (text === null || text.trim() === '') {
+    console.log(`review-guard: ${text === null ? `no ${reportPath}` : `${reportPath} is empty`} — code review not run.`)
     console.log('  Not a pass and not a failure: hand back with "code review not run", never as green.')
     console.log(`  ${RERUN}`)
     return 0
   }
 
-  const text = readFileSync(reportPath, 'utf8')
-  const verdicts = [...text.matchAll(VERDICT_MARKER)].map((m) => m[1])
-  const shas = [...text.matchAll(REVIEWED_MARKER)].map((m) => m[1])
+  // The markers are read from the TAIL, not from the whole file, because the format
+  // spec puts them "at the very end" — and a review that QUOTES the output contract
+  // in a fix suggestion (which happens exactly when the diff touches review-prompt.md
+  // or the code-reviewer agent) would otherwise emit a second CI_VERDICT line at
+  // column 0 and be rejected as having two verdicts. The exactly-one rule still
+  // holds, inside the tail.
+  const tail = text.trimEnd().split('\n').slice(-TAIL_LINES).join('\n')
+  const verdicts = [...tail.matchAll(VERDICT_MARKER)].map((m) => m[1])
+  const shas = [...tail.matchAll(REVIEWED_MARKER)].map((m) => m[1])
 
   const broken = malformations(verdicts, shas)
   if (broken.length > 0) {

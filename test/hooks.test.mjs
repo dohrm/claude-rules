@@ -42,6 +42,12 @@ const DENIED = [
   ['rm -f .work/review-report.md && just code-review', /review/],
   ['echo "<!-- CI_VERDICT: CLEAN -->" > .work/review-report.md', /forges/],
   ['printf x >>.work/review-report.md', /forges/],
+  // Emptying the files lefthook installs is the cheapest bypass of the git floor,
+  // and the one git itself cannot see.
+  ['rm .git/hooks/pre-commit', /git floor/],
+  ['rm -rf .git/hooks/', /git floor/],
+  ['echo "exit 0" > .git/hooks/pre-push', /by hand/],
+  ['sed -i "" 1d .git/hooks/pre-commit', /git floor/],
 ]
 for (const [command, why] of DENIED) {
   test(`bash-guard denies: ${command}`, () => {
@@ -68,6 +74,21 @@ const ALLOWED = [
   'just check',
   'node scripts/review-guard.mjs',
   'LEFTHOOK=1 lefthook run pre-commit --all-files',
+  // `--no-verify-signatures` is a real git flag about GPG, unrelated to hooks.
+  'git merge --no-verify-signatures origin/main',
+  // The trunk is a whole ref, not the word "main" inside a branch name.
+  'git push --force-with-lease origin feat/fix-main-nav',
+  'git push -f origin feature/remaster',
+  // An fd redirect is not a write to what is being read, and `sed -n` never writes.
+  'cat justfile 2>/dev/null',
+  'sed -n "1,20p" lefthook.yml',
+  'sed -n "60,80p" .work/review-report.md',
+  'npm install && cat .gitea/workflows/ci.yml',
+  // Reading the setting back is how you verify the floor is wired — the hooks README
+  // tells you to. A guard that blocks its own diagnostic invites being unwired.
+  'git config --get core.hooksPath',
+  'git config --list | grep hooksPath',
+  'cat .git/hooks/pre-commit',
 ]
 for (const command of ALLOWED) {
   test(`bash-guard stays out of the way: ${command}`, () => {
@@ -135,7 +156,6 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     '.claude/kit/common/hooks/bash-guard.mjs',
     'scripts/review-guard.mjs',
     'scripts/review-prompt.md',
-    '.work/review-report.md',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]
@@ -151,8 +171,20 @@ test('edit-guard escalates the gate layer and nothing else', () => {
   }
 })
 
+// autonomy.md calls hand-editing the report a HARD bypass — "no legitimate form" — and
+// bash-guard already denies the shell spelling of it. An ask on the strongest rule in
+// the doctrine is one keypress from a forged verdict, so this half denies too.
+test('edit-guard denies what has no legitimate hand-edit', () => {
+  for (const [path, why] of [['.work/review-report.md', /forges the verdict/],
+                             ['.git/hooks/pre-commit', /lefthook install. owns/]]) {
+    const r = edit(path)
+    assert.equal(r.status, 2, `${path}: expected a block, got ${r.status}`)
+    assert.match(r.err, /^Blocked: /m)
+    assert.match(r.err, why)
+  }
+})
+
 test('edit-guard names WHY the file is protected', () => {
-  assert.match(edit('.work/review-report.md').out, /forges the verdict/)
   assert.match(edit('.coverage-baseline').out, /HARD bypass/)
   assert.match(edit('.claude/kit/common/hooks/edit-guard.mjs').out, /meta-bypass/)
 })

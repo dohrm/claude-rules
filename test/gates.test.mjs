@@ -285,7 +285,9 @@ test('review-guard: a report whose markers cannot be parsed blocks', () => {
       'the template verbatim': '<!-- CI_VERDICT: CRITICAL|WARNINGS|CLEAN -->\n<!-- REVIEWED: ' + head + ' -->\n',
       'no REVIEWED marker': '<!-- CI_VERDICT: CLEAN -->\n',
       'a sha that is not one': report('CLEAN', 'HEAD'),
-      'two verdicts': report('CLEAN', head) + report('CRITICAL', head),
+      // Two markers inside the tail: still no verdict. (Two whole reports back to
+      // back is a different case — see the quoted-contract test below.)
+      'two verdicts in the tail': '<!-- CI_VERDICT: CLEAN -->\n<!-- CI_VERDICT: CRITICAL -->\n<!-- REVIEWED: ' + head + ' -->\n',
     }
     for (const [name, body] of Object.entries(cases)) {
       write(dir, '.work/review-report.md', body)
@@ -293,6 +295,40 @@ test('review-guard: a report whose markers cannot be parsed blocks', () => {
       assert.equal(r.status, 1, `${name}: a malformed report is a falsifiable report — ${r.out}`)
       assert.match(r.out, /is malformed/)
     }
+  })
+})
+
+// The recipe redirects into the report, and `>` truncates before the CLI runs — so a
+// review that dies leaves a 0-byte file. Read as malformed, that blocked every push on
+// the machine (the hook has no glob) with no way out but the review that just failed.
+test('review-guard: an empty report is "not run", never malformed', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    for (const body of ['', '\n\n', '   \n']) {
+      write(dir, '.work/review-report.md', body)
+      const r = run(REVIEW_GUARD, [], dir)
+      assert.equal(r.status, 0, `an empty report must not block: ${r.out}`)
+      assert.match(r.out, /is empty — code review not run/)
+    }
+  })
+})
+
+// A review that QUOTES the output contract in a fix suggestion — which happens exactly
+// when the diff touches the prompt or the reviewer agent — used to be read as having
+// two verdicts, and blocked. The markers live at the END of the report; anything
+// earlier is prose about markers.
+test('review-guard: a report that quotes the contract is judged on its tail', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    const quoted = '## Code Review\n\nFix: end the report with\n\n```\n'
+      + '<!-- CI_VERDICT: CRITICAL|WARNINGS|CLEAN -->\n<!-- REVIEWED: <full sha of HEAD> -->\n```\n\n'
+    write(dir, '.work/review-report.md', quoted + report('CLEAN', head))
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, `the real verdict is the one at the end: ${r.out}`)
+    assert.match(r.out, /CLEAN/)
+
+    write(dir, '.work/review-report.md', quoted + report('CRITICAL', head))
+    assert.equal(run(REVIEW_GUARD, [], dir).status, 1, 'and a CRITICAL at the end still blocks')
   })
 })
 

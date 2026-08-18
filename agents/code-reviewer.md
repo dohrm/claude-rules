@@ -34,6 +34,12 @@ The gates (fmt / lint / type-check / tests / mutation) are the authority on
 mechanical correctness — assume CI runs them. Your job is what a gate cannot
 see: judgment.
 
+## The commit under review
+
+Run `git rev-parse HEAD` before you start reading. That sha goes in the `REVIEWED`
+marker, and it is what makes the verdict falsifiable later: the gate can tell whether
+the code moved under it.
+
 <!-- The block below is byte-identical in kit/common/review-prompt.md, the headless
      twin of this agent (`just code-review`) — test/registry.test.mjs fails when the
      two drift. Edit both, or neither. -->
@@ -85,9 +91,11 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 ```
 
 `CI_VERDICT` = `CRITICAL` if any 🔴, `WARNINGS` if only 🟡/🔵, `CLEAN` if none.
-`REVIEWED` = `git rev-parse HEAD`, read before you start — it pins which code the
-verdict describes. Both lines are mandatory, exactly one of each, at the very end:
-the `review-guard` gate parses them, and a report it cannot parse blocks the push.
+`REVIEWED` = the full sha of the commit under review — **The commit under review**
+above says where to get it — because a verdict that does not name its code cannot be
+judged stale. Both lines are mandatory, exactly one of each, and they go at the VERY
+END: `review-guard` reads the tail of the report, so a verdict quoted mid-report (in
+a fix suggestion, say) is data, and only the last one counts.
 Each issue: **Location** (file+line) · **Problem** (what & why) · **Fix** (concrete,
 snippet if useful). Skip empty sections. Don't pad.
 

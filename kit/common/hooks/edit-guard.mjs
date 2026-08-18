@@ -26,6 +26,15 @@
 
 import { readFileSync } from 'node:fs'
 
+// DENY, not ask: hand-writing the report forges the verdict `review-guard` reads, and
+// `bash-guard` already denies the shell spelling of the same act. A guard whose two
+// halves disagree about the hardest rule is a guard nobody trusts. The git hook files
+// join it — `lefthook install` owns them, an agent never writes them by hand.
+const DENIED = [
+  /(^|\/)\.work\/review-report\.md$/,
+  /(^|\/)\.git\/hooks\//,
+]
+
 const PROTECTED = [
   /(^|\/)lefthook\.ya?ml$/,
   /(^|\/)[Jj]ustfile$/,
@@ -37,7 +46,6 @@ const PROTECTED = [
   /(^|\/)(bash|edit)-guard\.mjs$/,
   /(^|\/)(adr-check|docs-check|review-guard)\.mjs$/,
   /(^|\/)review-prompt\.md$/,
-  /(^|\/)\.work\/review-report\.md$/,
   /(^|\/)\.coverage-baseline$/,
   /(^|\/)mutants\.toml$/,
   /(^|\/)deny\.toml$/,
@@ -48,11 +56,13 @@ const WHY = {
   'review-report.md': 'the report is written by a review and by nothing else — hand-editing it forges the verdict `review-guard` reads',
   baseline: 'lowering a ratchet to turn a run green is a HARD bypass (rules/agent/autonomy.md)',
   guard: 'this file IS the guard — editing it is the meta-bypass',
+  hooks: '`lefthook install` owns .git/hooks/ — hand-writing one replaces the git floor with whatever you put there',
 }
 function reason(path) {
   if (/review-report\.md$/.test(path)) return WHY['review-report.md']
   if (/(\.coverage-baseline|mutants\.toml)$/.test(path)) return WHY.baseline
   if (/(bash|edit)-guard\.mjs$/.test(path)) return WHY.guard
+  if (/\.git\/hooks\//.test(path)) return WHY.hooks
   return 'it is part of the gate layer, and a green gate is only worth its exit code if an agent cannot redefine it'
 }
 
@@ -66,7 +76,15 @@ function main() {
   }
 
   const path = input.tool_input?.file_path ?? input.tool_input?.path ?? ''
-  if (!path || !PROTECTED.some((re) => re.test(path))) return 0
+  if (!path) return 0
+
+  if (DENIED.some((re) => re.test(path))) {
+    console.error(`Blocked: ${path} — ${reason(path)}`)
+    console.error('  If the gate is genuinely wrong, say so and escalate — do not route around it.')
+    return 2
+  }
+
+  if (!PROTECTED.some((re) => re.test(path))) return 0
 
   console.log(JSON.stringify({
     hookSpecificOutput: {
