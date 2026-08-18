@@ -214,7 +214,7 @@ judgments**:
 | An asset on disk that no locked profile explains | **fail** | agents load it every session and nothing records why |
 | The lock names an unknown profile or agent | **fail** | `update` cannot replay it |
 | A path-scoped rule whose globs match **no file** here | warn | it can never fire — dead weight, or the repo lost that code |
-| Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` — the project map is missing |
+| Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` ([why, and why not to bridge it](./guidelines/claude-md-hierarchy.md#agentsmd)) — the project map is missing |
 | The `AGENTS.md` managed block past 40% of Codex's 32 KiB cap | warn | every KB there is one the repo's own instructions cannot use |
 | A `lefthook.yml` git was never told about | **fail** | it looks installed and every hook in it is inert (`lefthook install`) |
 | A hook wired to a guard script that is not on disk | **fail** | the hook fires, finds nothing, and guards exactly as much as no hook at all |
@@ -451,8 +451,7 @@ evaluated; the ones that are pure dialogue or pure judgment deliberately never w
 
 ## Guidelines
 
-- [How to use these rules in a project](./guidelines/how-to-use-rules.md)
-- [CLAUDE.md hierarchy in multi-module projects](./guidelines/claude-md-hierarchy.md)
+- [CLAUDE.md hierarchy, rule precedence, and why `AGENTS.md` is not a Claude channel](./guidelines/claude-md-hierarchy.md)
 - [Prompting Claude — practical guide](./guidelines/prompting.md)
 - [Tooling — Tech Radar](./guidelines/tooling.md)
 

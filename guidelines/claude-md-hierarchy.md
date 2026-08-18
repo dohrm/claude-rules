@@ -83,13 +83,56 @@ This module handles real-time audio processing. Latency is a hard constraint —
 | `.claude/rules/*.md` (with `paths`) | On matching file open | On demand |
 | Subdirectory `CLAUDE.md` | On file access in that dir | On demand |
 
+## Rule Precedence
+
+Two axes, and they are independent.
+
+**Depth wins.** Across the directory tree, files are concatenated from the filesystem
+root down to the working directory, so the deeper file is read last and overrides the
+parent on conflict. Load order, broadest to narrowest: managed policy → user
+(`~/.claude/`) → project (`./CLAUDE.md`, `.claude/rules/`) → local
+(`CLAUDE.local.md`). User-level rules load before project rules, which is why a
+project rule beats a personal one.
+
+**Within a file, later wins.** When a project rule contradicts a rule pulled in by
+`@`-import, put the override *after* the import in the same file:
+
+```markdown
+<!-- .claude/rules/code-style.md -->
+@../claude-rules/rules/rust/code-style.md
+
+## Project Overrides
+- Function size hard limit: 80 lines (stricter than the library default)
+```
+
+This is the one case where `@`-import still earns its place under the installer
+model: the installer copies rules in verbatim, so a repo that wants to *amend* a
+shipped rule rather than fork it keeps a thin local file that imports and then
+overrides. Everything else needs no import — `.claude/rules/` auto-loads.
+
+Contradictions Claude cannot resolve by depth or order are resolved arbitrarily.
+Two rules that disagree is a bug in the rules, not a precedence question.
+
+## AGENTS.md
+
+**Claude Code reads `CLAUDE.md`, not `AGENTS.md`** — not as a fallback when
+`CLAUDE.md` is absent, and not in addition to it. A repo with only an `AGENTS.md`
+starts every Claude session with no project map at all. The documented bridges are
+an `@AGENTS.md` import from `CLAUDE.md`, or a symlink; `/import` (and `/init` under
+`CLAUDE_CODE_NEW_INIT=1`) will also copy an `AGENTS.md` in once, as a one-shot.
+
+Do not reach for those bridges in a repo installed for both Claude *and*
+Codex/opencode. There, `AGENTS.md` carries an installer-managed block that is those
+tools' *copy* of rules Claude already auto-loads from `.claude/rules/` — importing it
+pays for the same conventions twice. Keep the channels separate: `CLAUDE.md` is the
+project map, the managed block is the other tools' rule delivery.
+
 ## Other
 
-- `@path/to/file.md` imports are recursive up to 5 levels deep
-- More specific (deeper) files override parent instructions on conflict
+- `@path/to/file.md` imports are expanded at launch, recursively, up to 4 hops deep
 - In large monorepos, use `claudeMdExcludes` in `.claude/settings.local.json` to skip irrelevant CLAUDE.md files
 
 ## Sources
 
-- [Memory & CLAUDE.md — Claude Code Docs](https://code.claude.com/docs/en/memory)
+- [Memory & CLAUDE.md — Claude Code Docs](https://code.claude.com/docs/en/memory) — including the [AGENTS.md](https://code.claude.com/docs/en/memory#agents-md) section this page cites
 - [Settings — Claude Code Docs](https://docs.anthropic.com/en/docs/claude-code/settings)

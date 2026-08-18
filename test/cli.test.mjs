@@ -729,6 +729,60 @@ test('removing a module\'s only profile drops its index group too', () => {
   })
 })
 
+// --- pruneAgentsRefs surveillance -------------------------------------------
+// `remove` cannot regenerate the AGENTS.md block (it stages no source), so it does
+// text surgery on the two shapes flushAgentsMd can emit: an index grouped by `###`
+// module headings, and a block with no index at all. These two tests are here to
+// break loudly the day either shape changes — not to specify the surgery.
+
+test('pruning a grouped index keeps the surviving group, its rows, and the preamble', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
+
+    ok(runCliBare(['remove', 'ts'], dir))
+    const md = read(dir, 'AGENTS.md')
+
+    // the surviving group is a heading AND the rows under it
+    assert.match(md, /### apps\/api\n/)
+    assert.match(md, /^- `apps\/api\/\*\*\/\*\.rs`.* → read `\.dev\/rules\/rust\/code-style\.md`/m)
+    // the index survives its own pruning: heading + the imperative preamble
+    assert.match(md, /## Rules that are NOT loaded for you/)
+    assert.match(md, /Nothing loads them automatically/)
+    // repo-wide (the shared agent rules) is still last
+    assert.ok(md.indexOf('### apps/api') < md.indexOf('### (repo-wide)'))
+    // …and nothing of the removed profile is left, anywhere
+    assert.doesNotMatch(md, /\.dev\/rules\/ts\//)
+    assert.doesNotMatch(md, /apps\/web/)
+    // the block is still a block
+    assert.equal(md.match(/<!-- claude-rules:start/g).length, 1)
+    assert.equal(md.match(/<!-- claude-rules:end -->/g).length, 1)
+    // the terminator still follows a row directly — the surgery leaves no debris behind
+    assert.match(md, /\n- `[^\n]+\n<!-- claude-rules:end -->/)
+  })
+})
+
+test('pruning a managed block that carries no index is a no-op', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'ts', '--agent', 'codex'], dir))
+
+    // Rewrite the block into its other legal shape: inline rules only, no index —
+    // what flushAgentsMd emits when no locked rule is path-scoped.
+    const block = [
+      '<!-- claude-rules:start (managed — do not edit inside this block) -->',
+      '# Project rules (managed by claude-rules)',
+      '',
+      'A cross-cutting rule, inlined because it has no `paths:`.',
+      '<!-- claude-rules:end -->',
+    ].join('\n')
+    const before = `# My repo\n\nHand-written.\n\n${block}\n\n## Mine again\n`
+    writeFileSync(join(dir, 'AGENTS.md'), before)
+
+    ok(runCliBare(['remove', 'ts'], dir))
+    assert.equal(read(dir, 'AGENTS.md'), before, 'nothing to prune must mean nothing touched')
+  })
+})
+
 test('react is its own profile, so it can be anchored where portal-flat is not', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'ts', 'react', 'portal-flat', '--agent', 'claude', '--module', 'apps/web'], dir))

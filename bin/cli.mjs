@@ -566,8 +566,12 @@ function reportCheckDrift(file, techs) {
 // A CLAUDE.md the installer writes ONCE and never touches again. The conventions
 // already live in .claude/rules/ and load on their own — what belongs here is the
 // part only this repo knows: what each module is, and where its documents are.
-// Claude reads CLAUDE.md and never AGENTS.md, so without this file a Claude-first
-// repo starts every session with no map at all.
+// Claude reads CLAUDE.md and never AGENTS.md — not as a fallback, not in addition
+// (code.claude.com/docs/en/memory, "AGENTS.md"; re-verified 2026-08). So without this
+// file a Claude-first repo starts every session with no map at all. The doc offers an
+// `@AGENTS.md` import as the bridge; deliberately NOT what init writes — here AGENTS.md
+// holds Codex/opencode's copy of rules Claude already auto-loads from .claude/rules/,
+// so importing it would pay for the same conventions twice.
 function genClaudeMd(lock) {
   const name = basename(process.cwd())
   const mods = Object.entries(lock.modules || {})
@@ -934,7 +938,7 @@ function doctor() {
       console.log(`  skills      ${String(skills.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
     }
     if (!existsSync('CLAUDE.md') && !existsSync(join('.claude', 'CLAUDE.md')))
-      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md, so it starts every session with no project map (`init` writes a skeleton)')
+      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md (no fallback), so it starts every session with no project map. Run `init` for a skeleton; do not bridge it with an `@AGENTS.md` import — that block is the Codex/opencode copy of rules .claude/rules/ already auto-loads.')
   }
   if (agents.includes('codex') || agents.includes('opencode')) {
     const block = existsSync('AGENTS.md')
