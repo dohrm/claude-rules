@@ -522,6 +522,36 @@ function writeManagedDirs(file, modules) {
   for (const n of notes) console.log(`  • ${n}`)
 }
 
+// `check` is THE recipe — the one an agent closes its loop on. The snippet has to
+// ship some version of it and ships the Rust one, so a python-only repo got a gate
+// that runs cargo and never runs `python-check`: the locked tech was not in the gate
+// at all. The lock knows which techs exist, so derive the line from it on creation.
+// An existing justfile is the repo's own file and is never rewritten — there the
+// drift is only reported, because the deps a repo added (adr-check, docs-check…)
+// are exactly what a rewrite would silently drop.
+const CHECK_RE = /^check:[ \t]*(.*)$/m
+const checkDep = t => `${t}-check`
+const isTechDep = d => Object.keys(GLOB).some(t => checkDep(t) === d)
+function writeCheckRecipe(file, techs) {
+  if (!techs.length) return                     // no language locked: nothing to derive
+  const content = readFileSync(file, 'utf8')
+  if (!CHECK_RE.test(content)) return
+  writeFileSync(file, content.replace(CHECK_RE, `check: ${techs.map(checkDep).join(' ')}`))
+}
+function reportCheckDrift(file, techs) {
+  const m = readFileSync(file, 'utf8').match(CHECK_RE)
+  const want = techs.map(checkDep)
+  if (!m) {
+    if (want.length) console.log(`  • no \`check\` recipe in ${file} — the agent closes its loop on \`just check\`; add \`check: ${want.join(' ')}\`.`)
+    return
+  }
+  const deps = m[1].split(/\s+/).filter(Boolean)
+  const missing = want.filter(d => !deps.includes(d))
+  const stale = deps.filter(d => isTechDep(d) && !want.includes(d))
+  if (missing.length) console.log(`  • \`check\` does not run ${missing.join(', ')} — the lock has [${techs.join(', ')}], so that tech's gate never runs.`)
+  if (stale.length) console.log(`  • \`check\` runs ${stale.join(', ')}, which no locked profile provides — it fails on a toolchain this repo does not have.`)
+}
+
 // A CLAUDE.md the installer writes ONCE and never touches again. The conventions
 // already live in .claude/rules/ and load on their own — what belongs here is the
 // part only this repo knows: what each module is, and where its documents are.
@@ -561,9 +591,14 @@ function initRepo() {
   const kitBase = KIT_DIR[(lock.agents && lock.agents[0]) || 'claude']
   const snippet = join(kitBase, 'common', 'justfile.snippet')
   const justfile = ['justfile', 'Justfile'].find(existsSync)
-  if (justfile) console.log(`• ${justfile} exists — merge ${snippet} into it (the installer only owns the block below).`)
-  else if (existsSync(snippet)) { copyFileSync(snippet, 'justfile'); console.log(`✓ created justfile (from ${snippet}).`) }
-  else console.log(`• ${snippet} missing — run "add" first.`)
+  if (justfile) {
+    console.log(`• ${justfile} exists — merge ${snippet} into it (the installer only owns the block below).`)
+    reportCheckDrift(justfile, techs)
+  } else if (existsSync(snippet)) {
+    copyFileSync(snippet, 'justfile')
+    writeCheckRecipe('justfile', techs)
+    console.log(`✓ created justfile (from ${snippet})${techs.length ? `, \`check\` runs: ${techs.map(checkDep).join(' ')}` : ''}.`)
+  } else console.log(`• ${snippet} missing — run "add" first.`)
   const target = justfile || (existsSync('justfile') ? 'justfile' : null)
   if (target) writeManagedDirs(target, lock.modules)
 
@@ -581,7 +616,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN); adapt eslint globalIgnores; enable your techs — and \`adr-check\`/\`docs-check\` — in the justfile \`check\` recipe.`)
+  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN); adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\` in the justfile \`check\` recipe (the locked techs are already wired).`)
 }
 
 // --------------------------------------------------------------------- doctor

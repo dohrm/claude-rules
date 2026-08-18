@@ -242,7 +242,11 @@ test('init assembles justfile + lefthook from the installed kit', () => {
     ok(runCli(['add', 'rust', 'ts', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
 
-    assert.equal(read(dir, 'justfile'), read(REPO, 'kit/common/justfile.snippet'))
+    // Byte-for-byte the snippet, except the ONE line init owns: `check` is derived
+    // from the locked techs, so the gate runs ts as well as rust.
+    const just = read(dir, 'justfile')
+    assert.match(just, /^check: rust-check ts-check$/m)
+    assert.equal(just.replace(/^check:.*$/m, 'check: rust-check'), read(REPO, 'kit/common/justfile.snippet'))
     const lefthook = read(dir, 'lefthook.yml')
     assert.match(lefthook, /pre-commit:/)
     assert.match(lefthook, /run: just rust-lint/)
@@ -465,6 +469,35 @@ test('init writes a CLAUDE.md once and never rewrites it', () => {
     const r = ok(runCliBare(['init'], dir))
     assert.equal(read(dir, 'CLAUDE.md'), '# mine\n', 'the installer must never rewrite CLAUDE.md')
     assert.match(r.stdout, /left untouched/)
+  })
+})
+
+// The snippet ships `check: rust-check`, so a repo with no Rust used to get a gate
+// that ran cargo and never ran its own tech's check — the locked profile was absent
+// from the one command the agent closes its loop on.
+test('init derives the check recipe from the locked language profiles', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'python', 'testing', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const just = read(dir, 'justfile')
+    assert.match(just, /^check: python-check$/m, 'the locked tech must be in the gate')
+    assert.ok(!/^check:.*rust-check/m.test(just), 'a repo with no Rust must not run cargo')
+    assert.match(just, /^python-check: python-lint$/m, 'the recipes themselves are untouched')
+    assert.match(read(dir, 'lefthook.yml'), /just python-check/)
+  })
+})
+
+test('init reports check drift instead of rewriting an existing justfile', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'python', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, 'justfile'), 'check: rust-check adr-check\nrust-check:\n    @echo mine\n')
+
+    const r = ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'justfile'), 'check: rust-check adr-check\nrust-check:\n    @echo mine\n', "the repo's justfile is never rewritten")
+    assert.match(r.stdout, /does not run python-check/)
+    assert.match(r.stdout, /runs rust-check, which no locked profile provides/)
+    assert.ok(!/adr-check, which no locked/.test(r.stdout), 'a non-language dep the repo added is not drift')
   })
 })
 
