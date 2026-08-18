@@ -284,6 +284,8 @@ git hooks, you or the agent, and CI. No command is defined twice.
 | `just adr-check` | 2 — a decision was taken by a human (+ ADR size/section advisories) | opt-in, with `docs/adr/` |
 | `just docs-check` | 2 — an index and its units agree (+ budget advisories) | opt-in, with a PRD/PLAN |
 | `just mutate-diff` | 3 — mutation / coverage ratchet, on the merge-base diff | per coherent block, before the push; minutes; never a hook |
+| `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | same cadence as `mutate-diff`; writes `.work/review-report.md` |
+| `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
 
 Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
 a laptop that the PR job computes on a runner, so the agent runs it before pushing
@@ -382,7 +384,7 @@ claude-rules/
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent
-├── kit/             # common (just, adr-check, docs-check) · rust ts go python godot portal-flat · cicd
+├── kit/             # common (just, adr-check, docs-check, review-guard) · rust ts go python godot portal-flat · cicd
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)

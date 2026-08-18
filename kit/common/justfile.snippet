@@ -123,6 +123,39 @@ python-mutate:
     cd {{python_dir}} && uv run mutmut run
     cd {{python_dir}} && uv run mutmut results
 
+# ── Code review (Tier 3 — judgment, not correctness) ───────────────────────
+# Same cadence as mutate-diff: once per coherent block, BEFORE the push. One
+# reviewer, one process, one prompt (scripts/review-prompt.md) — any agent CLI runs
+# it. stdout IS the report, and the recipe parks it in .work/review-report.md, so
+# gitignore `.work/`: a report is working memory, never a committed artifact.
+#
+# Permissions are the point: a reviewer that can edit the code becomes its author,
+# and then nobody reviewed it. Read + git, nothing that writes. Only the claude form
+# below enforces that in the CLI; on the others the read-only rule is the prompt's.
+review_cmd := "claude -p --allowedTools 'Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git rev-parse:*)'"
+#   codex:      codex exec -s read-only
+#   opencode:   opencode run --auto
+#   cursor:     cursor-agent -p
+#
+# `{{{{base}}` is how a justfile writes the literal string `{{base}}` (an opening
+# `{{` is escaped by doubling it; the closing `}}` needs nothing): sed swaps that
+# placeholder in the prompt for this repo's base branch before the CLI sees it.
+# The guard runs at the end so the verdict comes back as an exit code, not as
+# something you have to remember to go and read. Needs a POSIX shell.
+code-review:
+    mkdir -p .work
+    {{review_cmd}} "$(sed 's|{{{{base}}|{{base}}|g' scripts/review-prompt.md)" > .work/review-report.md
+    node scripts/review-guard.mjs
+
+# The deterministic half of the review — pure Node, no LLM, milliseconds. THAT is
+# why it can be a hook (pre-push; never pre-commit, the cadence is per push). It
+# reads the two markers at the end of the report: CRITICAL blocks whatever the sha,
+# an absent report passes with a notice (declared, never simulated), a stale
+# CLEAN/WARNINGS passes, a malformed one blocks. Full table: the header of
+# scripts/review-guard.mjs; doctrine: rules/agent/autonomy.md.
+review-guard:
+    node scripts/review-guard.mjs
+
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop
 # indicator" from rules/agent/guardrails.md a machine can measure. jscpd is

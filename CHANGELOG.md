@@ -34,6 +34,29 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`just code-review` + `just review-guard`** (shared `kit/common`) — a local code
+  review with teeth. `just code-review` runs a reviewer as its own **read-only**
+  process over `git diff <base>...HEAD` (any agent CLI — set `review_cmd`: `claude -p`,
+  `codex exec`, `opencode run`, `cursor-agent -p`) and parks its report in
+  `.work/review-report.md`. The report ends with two machine-readable markers,
+  `CI_VERDICT` and `REVIEWED: <sha>`, and `just review-guard` — pure Node, no LLM,
+  milliseconds, so it can be a **pre-push hook** — reads them: a `CRITICAL` blocks the
+  push **whatever sha it was written against**, a malformed report blocks, an absent
+  one passes with a "not run" notice (declared, never simulated), and a stale
+  `CLEAN`/`WARNINGS` passes with a notice.
+
+  The hole this closes: a verdict that expires with HEAD is a verdict you defeat by
+  committing once more. The only way out of a `CRITICAL` is a fix and a NEW review —
+  and hand-editing or deleting the report is now a hard "never fake green" bypass
+  (`rules/agent/autonomy.md`, where the review joins `mutate-diff` at the second
+  speed of the loop).
+
+  **Wiring** (opt-in, like `adr-check`): move `review-guard.mjs` **and**
+  `review-prompt.md` to `scripts/`, merge `common/lefthook.snippet.yml` (pre-push,
+  no glob) into `lefthook.yml`, gitignore `.work/`. The prompt is the same review
+  contract as the `code-reviewer` subagent — one block, duplicated on purpose,
+  test-enforced identical.
+
 - **`/tasks`** (profile `product`) — the missing step between a plan and code. It takes
   **one** phase of `docs/PLAN.md` and cuts it into tasks an agent loop can execute:
   the anchors in your existing code (where each layer attaches, and the nearest

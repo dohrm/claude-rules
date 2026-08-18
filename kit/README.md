@@ -104,7 +104,13 @@ installed snippets, or do it by hand:
    accepting an ADR a human act — it fails when a new ADR is not `Proposed`, or
    when a status line moved without a commit. Doctrine: `../rules/agent/decisions.md`.
    It is a no-op in a repo with no `docs/adr/`.
-5. **Generated code** (only if present): a Rust generated *member* crate — swap
+5. **Code review** (only if an agent CLI is available): move `common/review-guard.mjs`
+   AND `common/review-prompt.md` to `scripts/`, set `review_cmd` in the justfile, and
+   gitignore `.work/`. `just code-review` runs a read-only reviewer once per coherent
+   block; `just review-guard` reads the verdict it left behind and blocks a push on a
+   `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger.
+   Doctrine: `../rules/agent/autonomy.md`.
+6. **Generated code** (only if present): a Rust generated *member* crate — swap
    the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
    to that crate (clippy lints path-dep members; `--exclude` won't silence them).
    TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
@@ -115,8 +121,11 @@ installed snippets, or do it by hand:
 kit/
 ├── common/                     # language-agnostic
 │   ├── justfile.snippet        # `just check` — the one command an agent runs to self-verify
+│   ├── lefthook.snippet.yml    # the one common trigger: review-guard on pre-push
 │   ├── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
-│   └── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
+│   ├── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
+│   ├── review-prompt.md        # the headless reviewer's prompt (`just code-review`, any CLI)
+│   └── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish

@@ -200,3 +200,108 @@ test('adr-check: a conforming record is silent', () => {
     assert.doesNotMatch(r.out, /warning|error/)
   })
 })
+
+// ── review-guard ───────────────────────────────────────────────────────────
+// One test per line of the contract table (kit/common/review-guard.mjs). The
+// review itself is an LLM's judgment; THIS is the part a machine can settle, so
+// it is the part that gets pinned.
+const REVIEW_GUARD = join(REPO, 'kit', 'common', 'review-guard.mjs')
+
+const git = (dir, ...args) => {
+  const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' })
+  if (r.error) throw r.error
+  return (r.stdout || '').trim()
+}
+/** A repo with `n` commits, newest last — returns their shas. */
+const commits = (dir, n = 1) => {
+  git(dir, 'init', '-q')
+  const shas = []
+  for (let i = 0; i < n; i++) {
+    write(dir, `f${i}.txt`, `${i}\n`)
+    git(dir, 'add', '-A')
+    git(dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', `c${i}`)
+    shas.push(git(dir, 'rev-parse', 'HEAD'))
+  }
+  return shas
+}
+const report = (verdict, sha) =>
+  `## Code Review: x\n\n### Verdict\n\nfine.\n\n<!-- CI_VERDICT: ${verdict} -->\n<!-- REVIEWED: ${sha} -->\n`
+
+test('review-guard: an absent report is declared, never simulated', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, 'a missing step must not block — the same contract as mutate-diff')
+    assert.match(r.out, /code review not run/)
+    assert.match(r.out, /never as green/)
+  })
+})
+
+test('review-guard: CLEAN or WARNINGS at HEAD passes', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    for (const verdict of ['CLEAN', 'WARNINGS']) {
+      write(dir, '.work/review-report.md', report(verdict, head))
+      const r = run(REVIEW_GUARD, [], dir)
+      assert.equal(r.status, 0, r.out)
+      assert.match(r.out, new RegExp(`${verdict} at ${head.slice(0, 7)} — the review describes HEAD`))
+    }
+  })
+})
+
+test('review-guard: CLEAN or WARNINGS on an older commit passes, with a stale notice', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 3)
+    write(dir, '.work/review-report.md', report('WARNINGS', first))
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, 'a trivial commit after a review must not cost a new review')
+    assert.match(r.out, /reviewed \w{7} and not HEAD \(2 commit\(s\) since\)/)
+    assert.match(r.out, /Stale, not blocking/)
+  })
+})
+
+test('review-guard: CRITICAL blocks, and one more commit does not expire it', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 1)
+    write(dir, '.work/review-report.md', report('CRITICAL', first))
+    const atHead = run(REVIEW_GUARD, [], dir)
+    assert.equal(atHead.status, 1)
+    assert.match(atHead.out, /found CRITICAL issues/)
+
+    commits(dir, 1) // "commit once more and the CRITICAL goes stale" — the hole this closes
+    const stale = run(REVIEW_GUARD, [], dir)
+    assert.equal(stale.status, 1, 'a CRITICAL does not expire with HEAD')
+    assert.match(stale.out, /does not expire/)
+    assert.match(stale.out, /HEAD has moved.*changes nothing here/)
+  })
+})
+
+test('review-guard: a report whose markers cannot be parsed blocks', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    const cases = {
+      'no markers at all': '## Code Review\n\nlooks fine to me.\n',
+      // The output template, pasted verbatim: three verdicts is no verdict.
+      'the template verbatim': '<!-- CI_VERDICT: CRITICAL|WARNINGS|CLEAN -->\n<!-- REVIEWED: ' + head + ' -->\n',
+      'no REVIEWED marker': '<!-- CI_VERDICT: CLEAN -->\n',
+      'a sha that is not one': report('CLEAN', 'HEAD'),
+      'two verdicts': report('CLEAN', head) + report('CRITICAL', head),
+    }
+    for (const [name, body] of Object.entries(cases)) {
+      write(dir, '.work/review-report.md', body)
+      const r = run(REVIEW_GUARD, [], dir)
+      assert.equal(r.status, 1, `${name}: a malformed report is a falsifiable report — ${r.out}`)
+      assert.match(r.out, /is malformed/)
+    }
+  })
+})
+
+test('review-guard: with no commit yet there is nothing to compare against', () => {
+  withTmpRepo((dir) => {
+    git(dir, 'init', '-q')
+    write(dir, '.work/review-report.md', report('CLEAN', 'abc1234'))
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /nothing to compare it against/)
+  })
+})

@@ -143,3 +143,24 @@ test('registry references a real repo and default ref', () => {
   assert.ok(registry.defaultRef)
   assert.ok(statSync(join(REPO, 'bin', 'cli.mjs')).isFile())
 })
+
+// One review contract, two invocations: the Claude subagent (agents/code-reviewer.md)
+// and the headless prompt every CLI can run (kit/common/review-prompt.md). Generating
+// one from the other would buy an emitter for two files; duplicating the block is
+// cheaper — as long as THIS test is what hurts when the copies drift.
+test('review contract: the shared block is byte-identical in the agent and the headless prompt', () => {
+  const OPEN = '<!-- shared:review-contract -->'
+  const CLOSE = '<!-- /shared:review-contract -->'
+  const block = rel => {
+    const text = read(REPO, ...rel.split('/'))
+    const start = text.indexOf(OPEN), end = text.indexOf(CLOSE)
+    assert.ok(start !== -1 && end > start, `${rel}: no "${OPEN} … ${CLOSE}" block`)
+    return text.slice(start + OPEN.length, end)
+  }
+  const agent = block('agents/code-reviewer.md')
+  assert.match(agent, /<!-- CI_VERDICT: CRITICAL\|WARNINGS\|CLEAN -->/,
+    'the shared block is where the report contract lives — review-guard parses that marker')
+  assert.match(agent, /<!-- REVIEWED: /, 'a verdict without the sha it describes cannot be judged stale')
+  assert.equal(block('kit/common/review-prompt.md'), agent,
+    'agents/code-reviewer.md and kit/common/review-prompt.md have drifted — edit both, or neither')
+})

@@ -14,8 +14,8 @@ to the boundary: the machine enforces correctness, the human judges design.
    tiers directly: `lefthook run pre-commit --all-files && lefthook run pre-push --all-files`.
 3. Read the failure, fix the ROOT CAUSE, re-run. Iterate until green.
 4. Once the block of work stands on its own — and before pushing — run the
-   Tier 3 gate if the repo has one (`just mutate-diff`). Kill the survivors that
-   deserve it, then loop back to 2.
+   Tier 3 gates the repo has: `just mutate-diff`, then `just code-review`. Kill the
+   survivors that deserve it, fix what the review calls `CRITICAL`, then loop back to 2.
 5. Only then hand back. "Done" means **you re-ran the gate and it exited green** —
    never your own say-so that it "should pass", never "I wrote it". Validation
    passing is the gate; your belief is not. Do not trust a prior run's claim —
@@ -40,19 +40,31 @@ The loop above runs at three cadences. Each one is self-served — none of them 
    mutants come back while the code is still in your head. Triage them per
    `testing/ratchet.md` — the survivor may mean a missing test, an equivalent
    mutant, or dead code.
+
+   Same cadence, same tier: **`just code-review`** — a reviewer run as its own
+   read-only process over the merge-base diff, answering the other question a gate
+   cannot: judgment. A review is an LLM's opinion, so it is a *proposal* like any
+   other; what binds is the deterministic part around it. The review leaves
+   `.work/review-report.md`, and **`just review-guard`** (pre-push, no LLM,
+   milliseconds) reads the two markers at its end: a `CRITICAL` blocks the push
+   **whatever commit it was written against**. Committing on top of a CRITICAL does
+   not expire it — only a NEW review that says something better clears it. A stale
+   `CLEAN`/`WARNINGS` passes with a notice: a trivial commit must not cost a whole
+   review.
 3. **Per push — CI.** A witness, not the loop. It re-runs the same tools on the
    PR diff so the verdict is reproducible by someone other than you. **Waiting
    for CI to learn something you could have learned locally is a broken loop**,
    not a slow one.
 
 **Detect, never assume.** Tier 3 tooling is per-repo and sometimes absent (Go has
-no production-grade mutation tool). Check what the repo actually exposes —
-`just --list` — and:
+no production-grade mutation tool; `code-review` needs an agent CLI on the machine).
+Check what the repo actually exposes — `just --list` — and:
 
 - recipe present → running it is part of "done";
 - recipe absent → say so in the hand-back ("mutation not run: no `mutate-diff`
-  recipe in this repo"). An unrunnable step is reported, never silently skipped
-  and never assumed green.
+  recipe in this repo"; "code review not run: no report"). An unrunnable step is
+  reported, never silently skipped and never assumed green. `review-guard` holds
+  the same line for you: with no report it passes and tells you to declare it.
 
 ## Never fake green (two tiers)
 
@@ -62,7 +74,11 @@ A gate you bypass is a gate you no longer have.
   and behavioral tests. No `--no-verify`, no disabling a gate, no `#[ignore]` /
   `.skip`, no weakening an assertion to make it pass. Tier 3 has its own two
   versions of this move: **excluding a mutant you could have killed**, and
-  **lowering a ratchet baseline** to turn a run green. Both are the hard kind.
+  **lowering a ratchet baseline** to turn a run green. Both are the hard kind. So is
+  **hand-editing or deleting `.work/review-report.md`**: the guard reads that file
+  and nothing else, so touching it by hand forges the verdict. A report is written
+  by a review and by nothing else; the only way past a `CRITICAL` is a fix and a
+  new review.
   If the agent cannot satisfy
   one of these by fixing the cause, it **STOPS and asks the human**. The green
   must always be true.

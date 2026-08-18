@@ -616,7 +616,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN); adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\` in the justfile \`check\` recipe (the locked techs are already wired).`)
+  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN), review-guard.mjs+review-prompt.md→scripts/ (for \`just code-review\`, plus its pre-push trigger from common/lefthook.snippet.yml and \`.work/\` in .gitignore); adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\` in the justfile \`check\` recipe (the locked techs are already wired).`)
 }
 
 // --------------------------------------------------------------------- doctor

@@ -67,7 +67,7 @@ const DEFAULT_RULE_DIRS = ['common', 'agent', 'rust', 'hexagonal', 'testing']
 
 // Default prompt per target. `{file}` is the case fixture, when there is one.
 const PROMPTS = {
-  'code-reviewer': 'You MUST use the code-reviewer subagent to review the file `{file}` in this directory. Return its full review verbatim, including the trailing CI_VERDICT comment line.',
+  'code-reviewer': 'You MUST use the code-reviewer subagent to review the file `{file}` in this directory. Return its full review verbatim, including the trailing CI_VERDICT and REVIEWED comment lines.',
   'code-simplifier': 'You MUST use the code-simplifier subagent to simplify the file `{file}` in this directory. It must edit the file in place, preserving behavior exactly. Return its report verbatim.',
 }
 
