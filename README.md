@@ -216,6 +216,15 @@ judgments**:
 | A path-scoped rule whose globs match **no file** here | warn | it can never fire — dead weight, or the repo lost that code |
 | Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` — the project map is missing |
 | The `AGENTS.md` managed block past 40% of Codex's 32 KiB cap | warn | every KB there is one the repo's own instructions cannot use |
+| A `lefthook.yml` git was never told about | **fail** | it looks installed and every hook in it is inert (`lefthook install`) |
+| A hook wired to a guard script that is not on disk | **fail** | the hook fires, finds nothing, and guards exactly as much as no hook at all |
+| A host config that is not valid JSON | warn | the tool ignores it silently, so nothing wired there is in force |
+| The harness guards installed but nothing wiring them | notice | it is **opt-in** — a gate nobody chose is a decision, not drift, so it never scores |
+
+That last row is the rule for the whole gate-layer section: it separates *"not
+wired"* (a choice, reported once and never counted) from *"wired to nothing"* (drift
+that looks installed). It also names what each tool cannot do — Codex has no hooks,
+Antigravity has no mechanism — rather than pretending the layer is uniform.
 
 It also prints the **always-on context budget** — the rules with no `paths:`, the
 skill descriptions, the size of the `AGENTS.md` block — which is what every session
@@ -343,6 +352,27 @@ rows by module, so a session working in `apps/api` can skip the rest.
 — read verbatim by 30+ tools — so it is a straight copy. `kit/` is tool config,
 agent-independent by construction.
 
+### The gate layer degrades per tool too
+
+`rules/agent/autonomy.md` forbids in prose what `kit/common/hooks/` enforces in code:
+no `--no-verify`, no unwiring the hooks, no hand-writing the review report. That
+enforcement is the one part of the kit that is **not** agent-independent, so it comes
+in two layers:
+
+- **The git floor** — `lefthook` (`kit/common/lefthook.snippet.yml`): `no-commit-on-trunk`
+  plus the pre-push `review-guard`. Portable across all five targets and CI. This is
+  where a guarantee belongs.
+- **The harness layer** — one snippet per tool, opt-in: Claude Code `PreToolUse` hooks
+  (deny + ask, the reference implementation), opencode `permission` patterns
+  (declarative, coarser), Cursor `beforeShellExecution` (shell only — it has no
+  pre-edit hook), Codex `sandbox_mode` + `approval_policy` (a sandbox, not a guard:
+  it has no idea what `--no-verify` means), and for Antigravity nothing at all.
+
+Both guards fail open, and `settings.json` is not fully self-protecting. The honest
+claim is that this makes drift **expensive and loud**, never impossible —
+impossibility is server-side branch protection and the orchestrator that owns the
+merge. `kit/common/hooks/README.md` says so at length; do not sell more.
+
 ### Why `.dev/rules/` and not `.agents/rules/`
 
 `.agents/` is **Antigravity's native directory** — skills, workflows *and* rules. The
@@ -384,7 +414,7 @@ claude-rules/
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent
-├── kit/             # common (just, adr-check, docs-check, review-guard) · rust ts go python godot portal-flat · cicd
+├── kit/             # common (just, adr-check, docs-check, review-guard, hooks) · rust ts go python godot portal-flat · cicd
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)

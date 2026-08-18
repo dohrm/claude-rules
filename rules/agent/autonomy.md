@@ -87,6 +87,13 @@ A gate you bypass is a gate you no longer have.
   `go/quality-gates`. No bare `#[allow(...)]` / `// eslint-disable` /
   `# noqa` / `# type: ignore` without a stated reason.
 
+This section has an executable counterpart, in two layers. The **git floor**
+(`lefthook`) refuses a commit on the trunk and a push over an unanswered `CRITICAL`;
+the **harness layer** (`kit/common/hooks/`, opt-in per tool) denies `--no-verify`,
+`core.hooksPath`, `LEFTHOOK=0` and any hand-write of the review report, and escalates
+an edit of the gate files to the human. Both fail open and neither is a wall — so the
+rule above is still the rule, not the leftovers of what a guard failed to catch.
+
 **Declare every bypass.** Even a permitted (soft) one. No silent TODO, skipped
 test, placeholder, or stubbed mock slipped into a hand-back — if you defer or
 stub anything, say so out loud. A hidden gap is worse than a flagged one.

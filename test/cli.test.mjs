@@ -251,6 +251,20 @@ test('init assembles justfile + lefthook from the installed kit', () => {
     assert.match(lefthook, /pre-commit:/)
     assert.match(lefthook, /run: just rust-lint/)
     assert.match(lefthook, /run: just ts-check/)
+    // The git floor ships with the generated file: a floor nobody wired is not a floor.
+    assert.match(lefthook, /no-commit-on-trunk:/)
+    assert.match(lefthook, /- ref: main/)
+  })
+})
+
+// The trunk guard is not about a language, so it must not wait for one to be locked.
+test('init writes the git floor even with no language in the lock', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'product', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    const lefthook = read(dir, 'lefthook.yml')
+    assert.match(lefthook, /no-commit-on-trunk:/)
+    assert.doesNotMatch(lefthook, /pre-push:/, 'no tech is locked, so there is no -check recipe to trigger')
   })
 })
 
@@ -348,6 +362,72 @@ test('doctor without a lock exits 1', () => {
     const r = runCliBare(['doctor'], dir)
     assert.equal(r.status, 1)
     assert.match(r.stderr, /nothing to audit/)
+  })
+})
+
+// ------------------------------------------------- doctor: the gate layer
+// The audit's whole value is telling "not wired" (a choice) apart from "wired to
+// nothing" (drift that looks installed). So: opt-in absence is a notice and never
+// scores; a reference that resolves to no file is a problem.
+
+test('doctor notices the harness guards are installed but unwired, and confirms them once merged', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+
+    const unwired = ok(runCliBare(['doctor'], dir))
+    assert.match(unwired.stdout, /claude: harness guards installed .* but nothing wires them/)
+    // Opt-in: declining the harness layer is a choice, so it is a notice and never
+    // a scored warning — otherwise `--strict` in `just check` nags about a decision.
+    const warnings = unwired.stdout.split('\nWarnings')[1] || ''
+    assert.doesNotMatch(warnings, /wires them|harness/, 'an opt-in absence must not be scored as a warning')
+
+    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.claude/kit/common/hooks/settings.snippet.json'))
+    const wired = ok(runCliBare(['doctor'], dir))
+    assert.match(wired.stdout, /✓ claude: guards wired in \.claude\/settings\.json/)
+  })
+})
+
+test('doctor fails when a wired guard is not on disk', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.claude/kit/common/hooks/settings.snippet.json'))
+    rmSync(join(dir, '.claude/kit/common/hooks/bash-guard.mjs'))
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /wires .*bash-guard\.mjs, which is not on disk/)
+  })
+})
+
+// opencode DECLARES patterns instead of running a script, and its `edit` map names
+// files to protect — including scripts/review-guard.mjs. Checking those for
+// existence would fail a perfectly correct install.
+test('doctor does not mistake opencode permission patterns for scripts it must find', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'opencode'], dir))
+    writeFileSync(join(dir, 'opencode.json'), read(dir, '.dev/kit/common/hooks/opencode.snippet.json'))
+
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /✓ opencode: guards wired in opencode\.json/)
+    assert.doesNotMatch(r.stdout, /not on disk/)
+  })
+})
+
+test('doctor fails on a lefthook.yml git was never told about', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    mkdirSync(join(dir, '.git/hooks'), { recursive: true })
+    writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit:\n  commands:\n    no-commit-on-trunk:\n      run: exit 1\n')
+
+    const inert = runCliBare(['doctor'], dir)
+    assert.equal(inert.status, 1)
+    assert.match(inert.stdout, /git is not calling it/)
+
+    writeFileSync(join(dir, '.git/hooks/pre-commit'), '#!/bin/sh\nlefthook run pre-commit\n')
+    const r = ok(runCliBare(['doctor'], dir))
+    assert.match(r.stdout, /✓ lefthook\.yml \(git calls it\)/)
+    // The floor is opt-out by design, so a missing review-guard trigger only informs.
+    assert.match(r.stdout, /no `review-guard` trigger/)
   })
 })
 

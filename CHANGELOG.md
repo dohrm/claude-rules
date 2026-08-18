@@ -34,6 +34,40 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **The gate layer got teeth, in two layers** (shared `kit/common`). `rules/agent/autonomy.md`
+  said in prose what an agent must never do; now something enforces it.
+
+  **The git floor** — `common/lefthook.snippet.yml` gains a pre-commit
+  `no-commit-on-trunk` (a no-op off `main`/`master` via `only: ref`). Portable across
+  every agent and CI, which is why the guarantee lives here. `claude-rules init` now
+  writes it into a generated `lefthook.yml` — and writes that file even when no
+  language is locked, since the floor holds in a docs-only repo too. **Opt-out:**
+  a solo repo that really commits on `main` deletes the one command; the snippet says so.
+
+  **The harness layer** — new `common/hooks/`, opt-in, one wiring snippet per tool.
+  `bash-guard.mjs` **denies** `--no-verify`, `git commit -n`, `core.hooksPath`,
+  `lefthook uninstall`, `LEFTHOOK=0`/`SKIP=`, force-pushing or deleting the trunk, and
+  any `rm`/`sed`/redirect aimed at `.work/review-report.md`; it **asks** when a command
+  writes to the gate layer itself. `edit-guard.mjs` always asks, never denies —
+  `/ci-setup`'s whole job is editing a workflow. Merge
+  `settings.snippet.json` into `.claude/settings.json` (the installer still never
+  writes it), or the `opencode`/`cursor`/`codex` snippet beside it.
+
+  **`doctor` audits the wiring.** New `Gate layer` section: it **fails** on a
+  `lefthook.yml` git was never told about (`lefthook install` was never run — the file
+  looks installed and every hook in it is inert) and on a hook wired to a guard script
+  that is not on disk; it **warns** on a host config that is not valid JSON; and it
+  reports an unwired harness layer as a **notice that never scores**, because opt-in
+  absence is a decision, not drift. Per agent, so it names `.dev/kit` for Cursor and
+  `.claude/kit` for Claude, and says plainly that Codex has no hooks and Antigravity
+  no mechanism.
+
+  **What it is not:** both guards fail open, `settings.json` is not fully
+  self-protecting, Cursor has no pre-edit hook, Codex has no hooks at all (a sandbox
+  is a different promise), and Antigravity degrades to the git floor. This makes drift
+  expensive and loud, never impossible — impossibility is branch protection.
+  `common/hooks/README.md` is the honest version.
+
 - **`just code-review` + `just review-guard`** (shared `kit/common`) — a local code
   review with teeth. `just code-review` runs a reviewer as its own **read-only**
   process over `git diff <base>...HEAD` (any agent CLI — set `review_cmd`: `claude -p`,

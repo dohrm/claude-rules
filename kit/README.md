@@ -14,8 +14,9 @@ copy and adapt.
 binary — `just`, `lefthook`, `cargo`/`clippy`/`deny`/`machete`, `npm`, `go`, `uv`. A
 repo handed to a Windows client runs `just check` unchanged. The **one** exception
 is `rust/rust-fmt.sh` (bash), needed ONLY by repos with a generated member crate
-— see its header for the portable fallback. (`common/adr-check.mjs` is Node rather
-than bash for exactly this reason; it needs Node >= 18 and no dependencies.)
+— see its header for the portable fallback. (`common/adr-check.mjs`, the hook guards
+and the `no-commit-on-trunk` message are Node rather than bash for exactly this
+reason; they need Node >= 18 and no dependencies.)
 
 ## The tiers (the justfile is the task layer; hooks + `just check` call it)
 
@@ -108,9 +109,17 @@ installed snippets, or do it by hand:
    AND `common/review-prompt.md` to `scripts/`, set `review_cmd` in the justfile, and
    gitignore `.work/`. `just code-review` runs a read-only reviewer once per coherent
    block; `just review-guard` reads the verdict it left behind and blocks a push on a
-   `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger.
+   `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger (it also
+   carries the `no-commit-on-trunk` git floor; a solo repo deletes that one command).
    Doctrine: `../rules/agent/autonomy.md`.
-6. **Generated code** (only if present): a Rust generated *member* crate — swap
+6. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
+   into `.claude/settings.json` — or the opencode / cursor / codex snippet beside it.
+   This is the **harness layer**, and the split matters: `lefthook` is the git floor (portable,
+   every agent), the hooks catch what git never gets to see — the `--no-verify`, the
+   `lefthook uninstall`, the `rm` on the review report. Both guards fail open and
+   neither makes drift impossible; they make it expensive and loud. Read
+   `common/hooks/README.md` for what it does *not* guarantee before relying on it.
+7. **Generated code** (only if present): a Rust generated *member* crate — swap
    the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
    to that crate (clippy lints path-dep members; `--exclude` won't silence them).
    TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
@@ -121,11 +130,15 @@ installed snippets, or do it by hand:
 kit/
 ├── common/                     # language-agnostic
 │   ├── justfile.snippet        # `just check` — the one command an agent runs to self-verify
-│   ├── lefthook.snippet.yml    # the one common trigger: review-guard on pre-push
+│   ├── lefthook.snippet.yml    # the git floor: no-commit-on-trunk + review-guard on pre-push
 │   ├── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
 │   ├── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
 │   ├── review-prompt.md        # the headless reviewer's prompt (`just code-review`, any CLI)
-│   └── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
+│   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
+│   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
+│       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
+│       ├── edit-guard.mjs      #   ask (never deny) on the gate files themselves
+│       └── *.snippet.*         #   one wiring snippet per tool: claude · opencode · cursor · codex
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish
