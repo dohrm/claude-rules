@@ -285,9 +285,10 @@ test('review-guard: a report whose markers cannot be parsed blocks', () => {
       'the template verbatim': '<!-- CI_VERDICT: CRITICAL|WARNINGS|CLEAN -->\n<!-- REVIEWED: ' + head + ' -->\n',
       'no REVIEWED marker': '<!-- CI_VERDICT: CLEAN -->\n',
       'a sha that is not one': report('CLEAN', 'HEAD'),
-      // Two markers inside the tail: still no verdict. (Two whole reports back to
-      // back is a different case — see the quoted-contract test below.)
-      'two verdicts in the tail': '<!-- CI_VERDICT: CLEAN -->\n<!-- CI_VERDICT: CRITICAL -->\n<!-- REVIEWED: ' + head + ' -->\n',
+      // The markers are read LAST-wins, so several of them is not the malformation —
+      // a LAST one that is not a verdict is.
+      'the last verdict is not a verdict':
+        '<!-- CI_VERDICT: CLEAN -->\n<!-- CI_VERDICT: probably fine -->\n<!-- REVIEWED: ' + head + ' -->\n',
     }
     for (const [name, body] of Object.entries(cases)) {
       write(dir, '.work/review-report.md', body)
@@ -329,6 +330,52 @@ test('review-guard: a report that quotes the contract is judged on its tail', ()
 
     write(dir, '.work/review-report.md', quoted + report('CRITICAL', head))
     assert.equal(run(REVIEW_GUARD, [], dir).status, 1, 'and a CRITICAL at the end still blocks')
+  })
+})
+
+// The first attempt at "the markers are at the end" was a fixed 6-line tail window, and
+// it blocked on an ordinary report: a review that signs off with a few lines of prose
+// pushes its own markers out of the window, review-guard reads NO verdict, and every
+// push is refused as malformed. The window also missed what it was for — a contract
+// quoted right next to the real markers stayed inside it and still counted as a second
+// verdict. Last-wins is what the contract promises the reviewer, so it is what runs.
+test('review-guard: markers followed by prose still parse', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    const chatter = '\nDone. Let me know if you want the second batch applied too,\n'
+      + 'and I can split the refactor out into its own commit.\n\nHappy to iterate.\n'
+    write(dir, '.work/review-report.md', report('CLEAN', head) + chatter)
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, `a signed-off report is not a malformed one: ${r.out}`)
+    assert.match(r.out, /the review describes HEAD/)
+
+    write(dir, '.work/review-report.md', report('CRITICAL', head) + chatter)
+    assert.equal(run(REVIEW_GUARD, [], dir).status, 1, 'and a CRITICAL is still a CRITICAL')
+  })
+})
+
+test('review-guard: a contract quoted right before the markers is prose, not a verdict', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    // No padding between the quote and the real markers — the case a tail window cannot
+    // separate, and the shape a review takes when the diff touches the prompt itself.
+    const adjacent = '## Code Review\n\nFix: end the report with\n'
+      + '<!-- CI_VERDICT: CRITICAL|WARNINGS|CLEAN -->\n<!-- REVIEWED: <full sha of HEAD> -->\n'
+      + `<!-- CI_VERDICT: CLEAN -->\n<!-- REVIEWED: ${head} -->\n`
+    write(dir, '.work/review-report.md', adjacent)
+    const r = run(REVIEW_GUARD, [], dir)
+    assert.equal(r.status, 0, `the verdict is the last one, whatever precedes it: ${r.out}`)
+    assert.match(r.out, /CLEAN/)
+  })
+})
+
+test('review-guard: two reports back to back are judged on the newer one', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir)
+    write(dir, '.work/review-report.md', report('CRITICAL', head) + '\n' + report('CLEAN', head))
+    assert.equal(run(REVIEW_GUARD, [], dir).status, 0, 'the last verdict wins')
+    write(dir, '.work/review-report.md', report('CLEAN', head) + '\n' + report('CRITICAL', head))
+    assert.equal(run(REVIEW_GUARD, [], dir).status, 1, 'in both directions')
   })
 })
 

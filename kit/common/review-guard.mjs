@@ -22,6 +22,9 @@
 // | CRITICAL, any sha                   | BLOCK   | otherwise one more commit expires a     |
 // |                                     |         | CRITICAL — the hole this closes         |
 // | markers unreadable                  | BLOCK   | a malformed report is a falsifiable one |
+// The markers are read LAST-wins, so a contract quoted mid-report is prose, not a
+// second verdict — and a report that signs off with a few lines of prose after them
+// still parses. A fixed-size tail window did neither reliably.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -30,9 +33,6 @@ const VERDICTS = ['CLEAN', 'WARNINGS', 'CRITICAL']
 const VERDICT_MARKER = /^<!--\s*CI_VERDICT:\s*(.*?)\s*-->\s*$/gm
 const REVIEWED_MARKER = /^<!--\s*REVIEWED:\s*(.*?)\s*-->\s*$/gm
 const SHA = /^[0-9a-f]{7,40}$/
-// How much of the end of the report counts as "the end". Two marker lines, and enough
-// slack for a trailing blank line or a stray closing fence.
-const TAIL_LINES = 6
 
 const args = process.argv.slice(2)
 const reportPath = args.find((a) => !a.startsWith('--')) ?? '.work/review-report.md'
@@ -51,17 +51,28 @@ function git(...argv) {
 const short = (sha) => sha.slice(0, 7)
 const samesha = (a, b) => a.startsWith(b) || b.startsWith(a)
 
-/** Every reason the markers cannot be trusted — empty when the report is readable. */
-function malformations(verdicts, shas) {
-  const out = []
-  if (verdicts.length === 0) out.push('no `<!-- CI_VERDICT: ... -->` marker.')
-  else if (verdicts.length > 1) out.push(`${verdicts.length} CI_VERDICT markers — exactly one is a verdict.`)
-  else if (!VERDICTS.includes(verdicts[0]))
-    out.push(`CI_VERDICT is "${verdicts[0]}" — expected one of ${VERDICTS.join(', ')}.`)
+/** The LAST marker of its kind, or null when there is none. The report contract says
+ *  the markers go at the VERY END, so anything earlier is prose ABOUT markers — a fix
+ *  suggestion quoting the contract, which happens exactly when the diff touches the
+ *  prompt or the reviewer agent. Reading a fixed-size TAIL was the first attempt at
+ *  that rule and it broke both ways: a review that signs off with a few lines of prose
+ *  pushed its own markers out of the window and blocked every push as "malformed",
+ *  while a quote sitting next to the real markers stayed inside it and still counted.
+ *  Last-wins is what the contract promises, so it is what runs. */
+function lastMarker(text, marker) {
+  const all = [...text.matchAll(marker)].map((m) => m[1])
+  return all.length === 0 ? null : all[all.length - 1]
+}
 
-  if (shas.length === 0) out.push('no `<!-- REVIEWED: <sha> -->` marker — the report does not say what it reviewed.')
-  else if (shas.length > 1) out.push(`${shas.length} REVIEWED markers — exactly one is a commit.`)
-  else if (!SHA.test(shas[0])) out.push(`REVIEWED is "${shas[0]}" — expected a commit sha.`)
+/** Every reason the markers cannot be trusted — empty when the report is readable. */
+function malformations(verdict, sha) {
+  const out = []
+  if (verdict === null) out.push('no `<!-- CI_VERDICT: ... -->` marker.')
+  else if (!VERDICTS.includes(verdict))
+    out.push(`CI_VERDICT is "${verdict}" — expected one of ${VERDICTS.join(', ')}.`)
+
+  if (sha === null) out.push('no `<!-- REVIEWED: <sha> -->` marker — the report does not say what it reviewed.')
+  else if (!SHA.test(sha)) out.push(`REVIEWED is "${sha}" — expected a commit sha.`)
   return out
 }
 
@@ -77,7 +88,7 @@ function main() {
   // key, rate-limited, Ctrl-C — leaves a 0-byte file. Reading that as malformed
   // blocks every push on the machine (no glob on the hook), with no way out but the
   // successful review that just failed, and the file's existence hiding the
-  // absent-report escape. The recipe writes to `.part` and moves it into place for
+  // absent-report escape. The recipe writes to a temp file and moves it into place for
   // the same reason; this arm is the belt to that braces.
   const text = existsSync(reportPath) ? readFileSync(reportPath, 'utf8') : null
   if (text === null || text.trim() === '') {
@@ -87,17 +98,16 @@ function main() {
     return 0
   }
 
-  // The markers are read from the TAIL, not from the whole file, because the format
-  // spec puts them "at the very end" — and a review that QUOTES the output contract
-  // in a fix suggestion (which happens exactly when the diff touches review-prompt.md
-  // or the code-reviewer agent) would otherwise emit a second CI_VERDICT line at
-  // column 0 and be rejected as having two verdicts. The exactly-one rule still
-  // holds, inside the tail.
-  const tail = text.trimEnd().split('\n').slice(-TAIL_LINES).join('\n')
-  const verdicts = [...tail.matchAll(VERDICT_MARKER)].map((m) => m[1])
-  const shas = [...tail.matchAll(REVIEWED_MARKER)].map((m) => m[1])
+  // The LAST marker of each kind wins, because the format spec puts them "at the very
+  // end" — and a review that QUOTES the output contract in a fix suggestion (which
+  // happens exactly when the diff touches review-prompt.md or the code-reviewer agent)
+  // emits a second CI_VERDICT line at column 0 and would otherwise be rejected as
+  // having two verdicts. A fixed-size TAIL window was the first attempt and it broke
+  // both ways — see lastMarker().
+  const verdict = lastMarker(text, VERDICT_MARKER)
+  const sha = lastMarker(text, REVIEWED_MARKER)
 
-  const broken = malformations(verdicts, shas)
+  const broken = malformations(verdict, sha)
   if (broken.length > 0) {
     console.error(`review-guard: ${reportPath} is malformed — a report nobody can parse cannot clear a push.`)
     for (const problem of broken) console.error(`  ${problem}`)
@@ -105,8 +115,6 @@ function main() {
     return 1
   }
 
-  const [verdict] = verdicts
-  const [sha] = shas
   const head = git('rev-parse', 'HEAD')
 
   if (verdict === 'CRITICAL') {

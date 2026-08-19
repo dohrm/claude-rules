@@ -164,11 +164,24 @@ review_cmd  := "claude -p --disallowedTools '" + review_deny + "' --allowedTools
 # provided either through stdin or as a prompt argument" after printing one "Ignoring
 # --allowedTools rule" per word of the prompt. A pipe has no argv to mis-parse.
 #
-# The report is written to `.part` and moved into place, because `>` truncates its
-# target BEFORE the CLI runs: a CLI that dies (absent, no key, rate-limited, Ctrl-C)
+# The report is written to `.work/review.tmp` and moved into place, because `>` truncates
+# its target BEFORE the CLI runs: a CLI that dies (absent, no key, rate-limited, Ctrl-C)
 # left a 0-byte file, review-guard read that as MALFORMED, and since the hook has no
 # glob that blocked every push on the machine — with the "no report → passes" escape
 # unreachable, because the file existed. Observed in the wild, not theorised.
+#
+# The temp file is NOT named `review-report.md.part`: that string contains
+# `review-report.md`, so bash-guard denied the recipe's own two lines to anyone
+# replaying them by hand to debug a review — blocked by the forge-the-report rule while
+# doing the opposite of forging.
+#
+# A dead CLI therefore leaves the PREVIOUS report standing, and that is deliberate: the
+# alternative (delete it first) means a rate-limited review CLEARS a CRITICAL, which is
+# the hard bypass autonomy.md forbids. The signal that nothing ran is this recipe's
+# non-zero exit — read it and hand back "code review not run", never as green. The `mv`
+# line stays deny-listed for a hand-typed spelling, on purpose: writing the report by
+# hand is a forged verdict, and the recipe is trusted because editing the justfile is
+# itself gated.
 #
 # The guard runs at the end so the verdict comes back as an exit code, not as something
 # you have to remember to go and read. Needs a POSIX shell.
@@ -177,13 +190,13 @@ code-review:
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" scripts/review-prompt.md > .work/prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/prompt.md
     git diff {{base}}...HEAD >> .work/prompt.md
-    {{review_cmd}} < .work/prompt.md > .work/review-report.md.part
-    mv .work/review-report.md.part .work/review-report.md
+    {{review_cmd}} < .work/prompt.md > .work/review.tmp
+    mv .work/review.tmp .work/review-report.md
     node scripts/review-guard.mjs
 
 # The deterministic half of the review — pure Node, no LLM, milliseconds. THAT is
 # why it can be a hook (pre-push; never pre-commit, the cadence is per push). It
-# reads the two markers at the END of the report (the tail only, so a verdict quoted
+# reads the two markers at the END of the report (the LAST of each, so a verdict quoted
 # mid-report is data): CRITICAL blocks whatever the sha, an absent OR EMPTY report
 # passes with a notice (declared, never simulated), a stale CLEAN/WARNINGS passes, a
 # malformed one blocks. One test per arm in test/gates.test.mjs; doctrine:

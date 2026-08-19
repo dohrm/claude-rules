@@ -93,9 +93,9 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 `CI_VERDICT` = `CRITICAL` if any 🔴, `WARNINGS` if only 🟡/🔵, `CLEAN` if none.
 `REVIEWED` = the full sha of the commit under review — **The commit under review**
 above says where to get it — because a verdict that does not name its code cannot be
-judged stale. Both lines are mandatory, exactly one of each, and they go at the VERY
-END: `review-guard` reads the tail of the report, so a verdict quoted mid-report (in
-a fix suggestion, say) is data, and only the last one counts.
+judged stale. Both lines are mandatory and they go at the VERY END: `review-guard`
+takes the LAST of each marker in the report, so a verdict quoted mid-report (in a fix
+suggestion, say) is prose about the contract, not a second verdict. Nothing after them.
 Each issue: **Location** (file+line) · **Problem** (what & why) · **Fix** (concrete,
 snippet if useful). Skip empty sections. Don't pad.
 

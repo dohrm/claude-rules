@@ -82,12 +82,13 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
     — which `review-guard` read as *malformed*, not *absent*. The hook has no glob, so
     that state blocked every push on the machine, and the documented "no report →
     passes" escape was unreachable because the file existed. The report is now written
-    to `.part` and moved into place, and an empty report reads as "not run".
+    to a temp file and moved into place, and an empty report reads as "not run".
   - **A report that QUOTES the verdict markers was read as malformed.** Any review
     whose fix suggestion shows the output contract — which is exactly what happens when
     the diff touches `review-prompt.md` or the reviewer agent — emitted a second
     `CI_VERDICT` line and was rejected for having two verdicts, reproducibly. The
-    markers are now read from the tail of the report; earlier ones are prose.
+    markers are now read LAST-wins over the report; earlier ones are prose about the
+    contract.
   - **The "read-only reviewer" was not read-only.** `--allowedTools` ADDS to the rules
     the subprocess inherits from `settings.json` and `settings.local.json`; it does not
     replace them. Measured in a worked-in repo: with `--allowedTools 'Read,Glob,Grep'`
@@ -107,6 +108,47 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   look at the verdict blocking its push), and `git config --get core.hooksPath` (the
   diagnostic the hooks README tells you to run). The write test is now correlated with
   the gate file instead of matched independently over the whole command.
+
+- **Tightening those patterns opened three ways past the guard's own rules** — found by
+  measuring the guard against the commands it exists to refuse, not by reading it. A ref
+  and a flag do not END on `(\s|$)`: `;`, `&` and `|` are none of the alternatives, so
+  one trailing separator was enough. `git commit --no-verify; git push` and
+  `git push -f origin main; echo ok` were both allowed, where the looser patterns before
+  them denied both. And the lookbehind meant to spare `2>&1` sat BEFORE the `>`, which is
+  exactly where an fd number goes — so `1>`, `2>` and `&>` were exempted while each of
+  them truncates a real file on open, and `echo x 2> .git/hooks/pre-commit` emptied a
+  hook silently. Both are anchored on what cannot FOLLOW the token now, which still
+  refuses to see the trunk in `feat/fix-main-nav`.
+- **Half the mutating commands could empty `.git/hooks/` without a prompt.** The
+  `.git/hooks/` rule carried its own short list (`rm`, `mv`, `truncate`, `dd`, `sed -i`,
+  `chmod -x`) while the gate-file rule thirty lines below also listed `cp`, `tee`, `ln`,
+  `install`, `chown` and `chmod` — so `cp /dev/null`, `ln -sf /bin/true`, `install
+  -m755` and `chmod 000` all went through, each one neutering the git floor. One list
+  feeds both rules now, plus `sed --in-place`. Readers (`cat`, `grep`, `sed -n`) stay
+  out of it, on purpose.
+- **Editing a document and then running the gate that checks it escalated.**
+  `just check > /dev/null 2>&1; node scripts/docs-check.mjs` holds a gate filename and a
+  redirect for entirely unrelated reasons — it RUNS the gate, it does not write it — and
+  independent matching asked for confirmation on it. That is a prompt on every
+  documentation change, interrupting exactly the loop `rules/agent/autonomy.md` asks an
+  agent to close by itself.
+- **`review-guard` read a fixed 6-line tail, which blocked ordinary reports and missed
+  the case it was added for.** A review that signs off with a few lines of prose pushed
+  its own markers out of the window, and the push was refused as *malformed*; a contract
+  quoted next to the real markers stayed inside the window and still counted as a second
+  verdict. The report contract already promises the reviewer that only the last marker
+  counts, so that is what runs: the LAST of each marker, over the whole report. Several
+  markers is no longer a malformation; a last one that is not a verdict still is.
+- **The temp report was named `review-report.md.part`**, which contains
+  `review-report.md` — so `bash-guard` denied the recipe's own two lines to anyone
+  replaying them by hand to debug a review, blocked by the forge-the-report rule while
+  doing the opposite of forging. It is `.work/review.tmp` now. A dead CLI still leaves
+  the previous report standing, deliberately: deleting it first would let a rate-limited
+  review clear a `CRITICAL`, and the signal that nothing ran is the recipe's exit code.
+- **`kit/common/hooks/README.md` described guards that had changed under it** —
+  `edit-guard` documented as "always ask, never deny" after two paths started denying,
+  and a deny list still advertising bare `sed` while omitting `.git/hooks/`. That file
+  ships into consuming repos as the explanation of the layer.
 
 ### Added
 
