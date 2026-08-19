@@ -42,6 +42,36 @@ const DENIED = [
   ['rm -f .work/review-report.md && just code-review', /review/],
   ['echo "<!-- CI_VERDICT: CLEAN -->" > .work/review-report.md', /forges/],
   ['printf x >>.work/review-report.md', /forges/],
+  // Emptying the files lefthook installs is the cheapest bypass of the git floor,
+  // and the one git itself cannot see.
+  ['rm .git/hooks/pre-commit', /git floor/],
+  ['rm -rf .git/hooks/', /git floor/],
+  ['echo "exit 0" > .git/hooks/pre-push', /by hand/],
+  ['sed -i "" 1d .git/hooks/pre-commit', /git floor/],
+  // A ref and a flag END on a separator too. `(\s|$)` and `(\s|:|$)` do not say that:
+  // `;`, `&` and `|` are none of the alternatives, so one trailing character used to
+  // walk past the flagship rules of this file. One case per rule that was anchored.
+  ['git commit -m x --no-verify; git push', /--no-verify/],
+  ['git push --no-verify&', /--no-verify/],
+  ['git commit -n; git push', /-n/],
+  ['git push -f origin main; echo ok', /force-push/],
+  ['git push origin +main;', /force-push/],
+  ['git push origin +main|cat', /force-push/],
+  ['git push origin --delete main;', /deleting the trunk/],
+  // A LEADING fd number does not make a redirect innocent — `1>`, `2>` and `&>` all
+  // truncate a real file on open. Only `>&` duplicates an fd, and that is what the
+  // lookahead now excludes. A lookbehind before the `>` exempted exactly the wrong set.
+  ['echo x 1> .git/hooks/pre-push', /by hand/],
+  ['echo x 2> .git/hooks/pre-commit', /by hand/],
+  ['echo x &> .git/hooks/pre-push', /by hand/],
+  ['printf x 1>.work/review-report.md', /forges/],
+  // One mutator list for both rules: the short `.git/hooks/` list let each of these
+  // neuter the git floor without so much as a prompt.
+  ['cp /dev/null .git/hooks/pre-commit', /git floor/],
+  ['ln -sf /bin/true .git/hooks/pre-push', /git floor/],
+  ['install -m755 /dev/null .git/hooks/pre-push', /git floor/],
+  ['chmod 000 .git/hooks/pre-push', /git floor/],
+  ['sed --in-place -e 1d .git/hooks/pre-commit', /git floor/],
 ]
 for (const [command, why] of DENIED) {
   test(`bash-guard denies: ${command}`, () => {
@@ -68,6 +98,32 @@ const ALLOWED = [
   'just check',
   'node scripts/review-guard.mjs',
   'LEFTHOOK=1 lefthook run pre-commit --all-files',
+  // `--no-verify-signatures` is a real git flag about GPG, unrelated to hooks.
+  'git merge --no-verify-signatures origin/main',
+  // The trunk is a whole ref, not the word "main" inside a branch name.
+  'git push --force-with-lease origin feat/fix-main-nav',
+  'git push -f origin feature/remaster',
+  // An fd redirect is not a write to what is being read, and `sed -n` never writes.
+  'cat justfile 2>/dev/null',
+  'sed -n "1,20p" lefthook.yml',
+  'sed -n "60,80p" .work/review-report.md',
+  'npm install && cat .gitea/workflows/ci.yml',
+  // Reading the setting back is how you verify the floor is wired — the hooks README
+  // tells you to. A guard that blocks its own diagnostic invites being unwired.
+  'git config --get core.hooksPath',
+  'git config --list | grep hooksPath',
+  'cat .git/hooks/pre-commit',
+  // Editing a document and then RUNNING the gate that checks it is one command, and it
+  // holds a gate filename and a redirect for entirely unrelated reasons. Matched
+  // independently, that escalated — on every documentation change, which is where the
+  // self-closing loop of autonomy.md costs the most to interrupt.
+  'just check > /dev/null 2>&1; node scripts/docs-check.mjs 2>&1 | head -4',
+  'node scripts/adr-check.mjs docs/adr --strict 2>&1 | tail -5',
+  // Anchoring the refs must not start seeing the trunk in a branch name again.
+  'git push --force-with-lease origin feat/fix-main-nav; echo done',
+  'git push -f origin feature/remaster && echo ok',
+  // `2>&1` duplicates an fd; it opens no file and writes to nothing.
+  'echo hi > out.txt 2>&1',
 ]
 for (const command of ALLOWED) {
   test(`bash-guard stays out of the way: ${command}`, () => {
@@ -84,6 +140,10 @@ const ASKED = [
   'rm .github/workflows/ci.yaml',
   'echo "check:" > justfile',
   'sed -i s/0.62/0.40/ .coverage-baseline',
+  'sed --in-place s/0.62/0.40/ .coverage-baseline',
+  // The same fd/noclobber spellings that were slipping past the deny tier.
+  'echo x 1> justfile',
+  'echo x >| lefthook.yml',
 ]
 for (const command of ASKED) {
   test(`bash-guard escalates: ${command}`, () => {
@@ -135,7 +195,6 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     '.claude/kit/common/hooks/bash-guard.mjs',
     'scripts/review-guard.mjs',
     'scripts/review-prompt.md',
-    '.work/review-report.md',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]
@@ -151,8 +210,20 @@ test('edit-guard escalates the gate layer and nothing else', () => {
   }
 })
 
+// autonomy.md calls hand-editing the report a HARD bypass — "no legitimate form" — and
+// bash-guard already denies the shell spelling of it. An ask on the strongest rule in
+// the doctrine is one keypress from a forged verdict, so this half denies too.
+test('edit-guard denies what has no legitimate hand-edit', () => {
+  for (const [path, why] of [['.work/review-report.md', /forges the verdict/],
+                             ['.git/hooks/pre-commit', /lefthook install. owns/]]) {
+    const r = edit(path)
+    assert.equal(r.status, 2, `${path}: expected a block, got ${r.status}`)
+    assert.match(r.err, /^Blocked: /m)
+    assert.match(r.err, why)
+  }
+})
+
 test('edit-guard names WHY the file is protected', () => {
-  assert.match(edit('.work/review-report.md').out, /forges the verdict/)
   assert.match(edit('.coverage-baseline').out, /HARD bypass/)
   assert.match(edit('.claude/kit/common/hooks/edit-guard.mjs').out, /meta-bypass/)
 })

@@ -2,8 +2,11 @@
 paths:
   - "**/*.ts"
   - "**/*.tsx"
-title: "React Portal Architecture"
+title: "Portal — HTTP Transport (OpenAPI + TanStack)"
 ---
+
+The HTTP transport for a flat-domain portal: the layers come from
+`portal-flat/principle.md`, this rule owns how they reach the backend.
 
 ## Business Models — OpenAPI Generation
 
@@ -21,29 +24,31 @@ Generated output lives in `src/api/generated/` (never hand-edited — see the
 | Plugin | Emits |
 |--------|-------|
 | `@hey-api/client-axios` | the Axios client (base URL & auth via `runtimeConfigPath`) |
-| `@tanstack/react-query` | `useQuery` / `useMutation` hooks per endpoint |
+| `@tanstack/react-query` | option factories per endpoint — `xxxOptions()`, `xxxMutation()`, `xxxQueryKey()` |
 | `@hey-api/sdk` | typed request functions |
 | `@hey-api/typescript` (`enums: 'javascript'`) | request/response types |
 | `zod` (`requests: true`) | Zod schemas for request bodies — the contract-aligned base for form validation |
 
-**Rule:** never hand-write anything the contract can produce — types, hooks, and
-request schemas are always generated. You import the subset you use; the rest
+**Rule:** never hand-write anything the contract can produce — types, query/mutation
+options, and request schemas are always generated. You import the subset you use; the rest
 tree-shakes out of the bundle. The only runtime schema you write by hand is the
 URL one (below), because it isn't in the contract.
 
 ## Server State — TanStack Query
 
-All server interactions go through **generated TanStack Query hooks**. No raw `fetch`, no manual `useEffect` for data fetching.
+All server interactions go through the generated option factories. No raw `fetch`,
+no manual `useEffect` for data fetching.
 
 ```tsx
-// features/billing/api/index.ts — re-export generated hooks, add domain context
-export { useBillingFilter, useBillingCreate } from '@/api/generated/@tanstack/react-query.gen';
+// features/billing/api/index.ts — re-export, add domain context
+export { billingFilterOptions, billingCreateMutation } from '@/api/generated/@tanstack/react-query.gen';
 
 // features/billing/components/billing-list.tsx
-const { data, isLoading } = useBillingFilter({ query: { skip: 0, limit: 20 } });
+const { data, isLoading } = useQuery(billingFilterOptions({ query: { skip: 0, limit: 20 } }));
 ```
 
-Cache invalidation is handled by generated mutation hooks — mutations invalidate related queries by convention.
+The factories carry no cache policy: what a mutation invalidates, what a logout
+clears, and what the browser is allowed to derive are all in `portal-http/state.md`.
 
 ## App State — Portal Context
 
@@ -78,13 +83,6 @@ Consume via typed hooks:
 const { user, logout } = useAuth();
 const { locale } = useLocale();
 ```
-
-## Cross-Feature State
-
-Cross-feature data goes through server state (TanStack Query), not shared stores.
-If two features need the same data, they each call the same generated hook — the cache deduplicates the request.
-
-Never share state between features via props-drilling or a shared store — use the query cache.
 
 ## Runtime Validation — Zod
 
@@ -124,10 +122,10 @@ src/config/
 
 ## Rules
 
-- All server interactions via generated TanStack Query hooks — no raw fetch in features
+- All server interactions via the generated option factories — no raw fetch in features
 - Never edit files in `src/api/generated/` — regenerate instead
-- Everything the contract can produce is generated (types, hooks, request schemas); hand-write only what it can't (URL search-param schemas)
+- Everything the contract can produce is generated (types, query/mutation options, request schemas); hand-write only what it can't (URL search-param schemas)
 - Zod validates untrusted input only — forms and URL params, never API responses
 - URL-worthy view state (tab, filters, pagination, search) lives in TanStack Router search params, not component state
 - Portal state (user, locale, theme) in `core/contexts/`, not in feature-level state
-- Cross-feature data via query cache, not shared stores
+- Server-state ownership, invalidation and cache-clean policy: `portal-http/state.md`

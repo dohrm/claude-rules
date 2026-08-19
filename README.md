@@ -93,7 +93,8 @@ docs/
 ```bash
 # in your repo, from its root — combine profiles freely:
 npx github:dohrm/claude-rules add rust testing cicd hexagonal api backend   # a Rust backend
-npx github:dohrm/claude-rules add ts testing cicd portal-flat               # a React frontend
+npx github:dohrm/claude-rules add ts testing cicd portal-flat portal-http   # a React frontend
+npx github:dohrm/claude-rules add ts rust testing cicd portal-flat tauri    # …or the same portal as a desktop app
 npx github:dohrm/claude-rules add ops k8s incident                          # + running it in production
 npx github:dohrm/claude-rules add product                                   # the product-lifecycle skills
 
@@ -103,7 +104,7 @@ npx github:dohrm/claude-rules doctor                   # audit the install again
 npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that file, and what it costs
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: ALL)
-npx github:dohrm/claude-rules add ts portal-flat --module apps/web   # monorepo: anchor to a directory
+npx github:dohrm/claude-rules add ts portal-flat portal-http --module apps/web   # monorepo: anchor to a directory
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
 npx github:dohrm/claude-rules remove cqrs              # delete a profile's files, update the lock
 npx github:dohrm/claude-rules remove all               # full uninstall
@@ -119,7 +120,9 @@ exact command. Install `product` first, or read the table in
 | Group | Profiles | What you get |
 |---|---|---|
 | **Language baseline** | `rust` `ts` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates |
-| **Architecture** | `hexagonal` `cqrs` `react` `portal-flat` `tauri` `api` `backend` | ports/adapters, event sourcing, the React framework gates, flat-domain React portal, Tauri IPC, the HTTP stack, the cross-language backend contracts |
+| **Architecture** | `hexagonal` `cqrs` | ports/adapters with inward-only deps · the event-sourced write/read split (explicit opt-in) |
+| **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map, layer boundaries and business boundary — transport-agnostic · then **one** transport on top: HTTP (OpenAPI-generated client, TanStack Query, cache-clean policy) or Tauri IPC (invoke/listen, Zustand stores). Never both — they contradict each other by design |
+| **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify) · the cross-language contracts: problem+json errors, config & secrets, health, pagination, API surface design, authorization |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contract tests, the mutation ratchet · pipeline & release doctrine, reference workflows, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | what to emit & what you promise (SLO, error budget), migrations & rollback, `/observability` · the manifest layer · `/runbook` + `/postmortem` |
 | **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills + the living-documents rule · a 4-phase debug methodology · framing a self-terminating agent loop |
@@ -164,15 +167,28 @@ per-file context, spent on guidance that is wrong for that file**.
 `--module` anchors the profiles of that invocation to a directory:
 
 ```bash
-npx github:dohrm/claude-rules add rust hexagonal api backend --module apps/api
-npx github:dohrm/claude-rules add ts portal-flat            --module apps/web
-npx github:dohrm/claude-rules add testing cicd product      # no --module: repo-wide
+npx github:dohrm/claude-rules add rust hexagonal api backend  --module apps/api
+npx github:dohrm/claude-rules add ts portal-flat portal-http  --module apps/web
+npx github:dohrm/claude-rules add ts portal-flat tauri        --module apps/desktop
+npx github:dohrm/claude-rules add testing cicd product        # no --module: repo-wide
 ```
+
+That third line is the case anchoring exists for. `apps/web` and `apps/desktop` share
+one architecture — the same module map, the same layer boundaries, the same business
+boundary — while their **transports** are mutually exclusive: `portal-http` says
+server state lives in the TanStack Query cache, `tauri` says it lives in a Zustand
+store fed by IPC. Anchored, each lands only on the app it governs. Unanchored, both
+land on every `.ts` in the repo — measured: 13.5 KB of transport rules on a single
+file, of which one side is always wrong for it, and the agent is left to arbitrate.
 
 It lands in the lock, so `update` replays it:
 
 ```json
-"modules": { "apps/api": ["rust", "hexagonal", "api", "backend"], "apps/web": ["ts", "portal-flat"] }
+"modules": {
+  "apps/api":     ["rust", "hexagonal", "api", "backend"],
+  "apps/web":     ["ts", "portal-flat", "portal-http"],
+  "apps/desktop": ["ts", "portal-flat", "tauri"]
+}
 ```
 
 and emission rewrites the globs — `**/*.ts` becomes `apps/api/**/*.ts` for Claude's
@@ -243,21 +259,29 @@ npx github:dohrm/claude-rules budget      # no path: the session floor
 ```
 Context for apps/web/src/api/client.ts
 
-  always-on rules (4)             9.9 KB  (~2.5k tokens)
-      agent/autonomy.md           3.8 KB
-      agent/guardrails.md         3.7 KB
-      agent/decisions.md          2.1 KB
-      common/language.md          0.3 KB
-  skills, descriptions (11)       5.9 KB  (~1.5k tokens)
-  path-scoped rules (7)          27.1 KB  (~6.9k tokens)
-      portal-flat/react.md        5.1 KB    apps/web/**/*.ts
-      …
-  total                          42.9 KB  (~11.0k tokens)
+  always-on rules (4)             11.7 KB  (~3k tokens)
+      agent/autonomy.md            5.5 KB
+      agent/guardrails.md          3.7 KB
+      agent/decisions.md           2.1 KB
+      common/language.md           0.3 KB
+  skills, descriptions (12)        6.4 KB  (~1.6k tokens)
+  path-scoped rules (8)           30.9 KB  (~7.9k tokens)
+      testing/ratchet.md           6.5 KB    **/*.ts
+      portal-flat/principle.md     5.5 KB    apps/web/**/*.ts
+      portal-http/react.md         5.1 KB    apps/web/**/*.ts
+      testing/strategy.md          4.1 KB    **/*.ts
+      testing/contract.md          3.6 KB    **/*.ts
+      portal-http/state.md         2.8 KB    apps/web/**/*.ts
+      ts/quality-gates.md          1.8 KB    apps/web/**/*.ts
+      ts/code-style.md             1.4 KB    apps/web/**/*.ts
+  total                           49.0 KB  (~12.5k tokens)
 ```
 
 Each path-scoped row names **the glob that matched**, which is what makes a
 mis-anchored module visible: a rule firing on `**/*.ts` when you expected
-`apps/api/**/*.ts` says so on its own line.
+`apps/api/**/*.ts` says so on its own line. Above, the `testing` rules are repo-wide
+by choice while the portal ones are anchored — and `tauri` is simply absent, because
+a transport that is not this app's never reaches its files.
 
 One asymmetry is deliberate: for Codex and opencode, a rule destination exists only
 when the profile *has* a path-scoped rule, and `doctor` stages nothing, so it cannot
@@ -412,9 +436,9 @@ claude-rules/
 ├── registry.json    # drives the installer: profile → source dirs → destinations
 ├── bin/cli.mjs      # the npx installer (giget-based; dumb by design, data-driven)
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
-│                    #   portal-flat tauri api backend react) · delivery & run (testing
+│                    #   portal-flat portal-http tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent
-├── kit/             # common (just, adr-check, docs-check, review-guard, hooks) · rust ts go python godot portal-flat · cicd
+├── kit/             # common (just, adr-check, docs-check, review-guard, hooks) · rust ts go python godot portal-http · cicd
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
@@ -436,8 +460,9 @@ against the working tree with `--local`. It runs on every PR
 ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)); `eval/` is manual
 (`workflow_dispatch`). The asset-tree suite is what keeps this README honest — it
 fails when a rule, skill or kit directory is unreachable from `registry.json`, when
-a skill's frontmatter name drifts from its directory, when `/architect`'s gating
-table and the registry disagree, or when a shipped workflow uses an expression
+a skill's frontmatter name drifts from its directory, when `/architect`'s gating table
+or **the profile catalogue above** disagrees with the registry, when a rule cites a
+sibling rule that no longer exists, or when a shipped workflow uses an expression
 syntax GitHub rejects.
 
 `eval/` covers the two subagents and four skills (`/architect`, `/plan`, `/runbook`,

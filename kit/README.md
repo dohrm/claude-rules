@@ -137,7 +137,7 @@ kit/
 │   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
-│       ├── edit-guard.mjs      #   ask (never deny) on the gate files themselves
+│       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest
 │       └── *.snippet.*         #   one wiring snippet per tool: claude · opencode · cursor · codex
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
@@ -160,7 +160,7 @@ kit/
 │   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
 │   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
-└── portal-flat/                # COMPLETE (frontend, pairs with the portal-flat profile)
+└── portal-http/                # COMPLETE (frontend, pairs with the portal-http profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```
 

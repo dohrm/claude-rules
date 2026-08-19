@@ -15,7 +15,7 @@ test — otherwise a renamed field ships green and breaks at runtime.
 ## The OpenAPI document is the contract
 
 The `api` profile emits it from the types (utoipa / Huma / Fastify schemas), and
-`portal-flat` generates the client from it. That makes the spec a build artifact
+`portal-http` generates the client from it. That makes the spec a build artifact
 on one side and an input on the other — so it must be **committed and gated**:
 
 - **Commit the emitted spec** (e.g. `docs/openapi.json`) and add a gate that

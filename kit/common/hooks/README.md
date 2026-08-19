@@ -40,18 +40,33 @@ merge. Do not sell more than that.
 - **deny** (exit 2, reason on stderr → back to the agent): commands with no
   legitimate form — `--no-verify`, `git commit -n`, `core.hooksPath`,
   `lefthook uninstall`, `LEFTHOOK=0`/`SKIP=`, force-pushing or deleting the trunk,
-  and any `rm`/`sed`/redirect aimed at `.work/review-report.md`.
+  and any *write* aimed at `.work/review-report.md` or at `.git/hooks/` — a
+  mutating command (`rm`, `mv`, `cp`, `tee`, `ln`, `install`, `touch`, `chmod`,
+  `chown`, `truncate`, `dd`, `sed -i`) or a redirect. Reading them is not a write:
+  `cat`, `grep` and `sed -n` pass, because a guard that blocks its own diagnostic
+  invites being unwired.
 - **ask** (JSON): the command *writes* to the gate layer — a `lefthook.yml`, a
   workflow, the `justfile`, a ratchet baseline, `mutants.toml`. Sometimes that is
   the task, so a human decides.
 
 Quoted text is scrubbed before matching, so `git commit -m "drop the -n flag"` is
-not a bypass. Matching stays inside the current `|;&` segment.
+not a bypass. Matching stays inside the current `|;&` segment, and the write and the
+gate file must be *correlated* — the redirect has to target the gate file, or the
+mutating command has to carry it. Tested independently, `just check > /dev/null;
+node scripts/docs-check.mjs` escalates, and that command RUNS the gate rather than
+writing it.
 
-**`edit-guard.mjs`** — `PreToolUse` on `Edit|Write`. Always **ask**, never deny:
-`/ci-setup`'s whole job is editing a workflow. The protected list is short on
-purpose — the hook layer itself (including these two files: the meta-bypass), the
-`justfile` (`check` is what "green" means), the ratchets, the review report.
+**`edit-guard.mjs`** — `PreToolUse` on `Edit|Write`. Two verdicts, like its sibling:
+
+- **deny** for the paths with no legitimate hand-edit: `.work/review-report.md`
+  (hand-writing it forges the verdict `review-guard` reads) and `.git/hooks/`
+  (`lefthook install` owns those files). `autonomy.md` calls both a HARD bypass, and
+  `bash-guard` denies the shell spelling — an ask here would leave the strongest rule
+  in the doctrine enforced by the weaker half.
+- **ask** for everything else on the list, because editing it is sometimes the task:
+  `/ci-setup`'s whole job is editing a workflow. The list is short on purpose — the
+  hook layer itself (including these two files: the meta-bypass), the `justfile`
+  (`check` is what "green" means), the ratchets, the review prompt.
 
 Interactively, "ask" is one keypress. **Headless, "ask" blocks** — which is the
 intended answer for an unattended agent rewriting its own gates.
