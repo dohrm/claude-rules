@@ -5,7 +5,11 @@ paths:
 title: "Frontend Architecture — Flat-Domain Modular Portal"
 ---
 
-A flat-domain modular structure for a React/TypeScript single-page portal. Framework-agnostic in spirit — the layer boundaries matter more than the tooling.
+A flat-domain modular structure for a React/TypeScript single-page portal.
+Transport-agnostic: this rule owns the layers and their boundaries. How the portal
+talks to its backend — and where server state lives — belongs to a companion
+profile: `portal-http/state.md` for an HTTP/OpenAPI portal, `tauri/app.md` for a
+Tauri app.
 
 ## Module Map
 
@@ -17,8 +21,8 @@ src/
 ├── features/    # Business modules — one directory per domain
 │   └── {domain}/
 │       ├── components/   # Domain-coupled components (e.g. InvoiceList)
-│       ├── api/          # Network calls — generated TanStack Query hooks
-│       └── logic/        # Local state, validation, derived values
+│       ├── api/          # The backend boundary — transport calls live here
+│       └── logic/        # Screen behaviour — UI state machines, display derivations
 └── pages/       # Route entry points — assembly only
 ```
 
@@ -82,8 +86,8 @@ Deleting a feature = deleting its directory, with no dead code left behind.
 ```
 features/billing/
 ├── components/   # BillingList, InvoiceCard — coupled to billing data
-├── api/          # useBillingData() / Resource::new(...)
-└── logic/        # validation, state machines, derived values
+├── api/          # the backend boundary for this domain
+└── logic/        # screen behaviour — wizard steps, display derivations, form drafts
 ```
 
 ### `pages/` — Route Orchestration
@@ -104,24 +108,31 @@ Four distinct categories — never conflate them:
 |----------|------|----------|---------|
 | **Server state** | Data from the backend | `features/{domain}/api/` | invoice list, user profile |
 | **App state** | Portal-wide context | `core/` | current_user, locale, theme |
-| **URL / view state** | Shareable navigation state | route search params (TanStack Router) | active tab, filters, pagination, search query |
-| **Local state** | UI-only, ephemeral | `features/{domain}/logic/` | modal open, form draft |
+| **URL / view state** | Shareable navigation state | the router's typed search params | active tab, filters, pagination, search query |
+| **Local state** | UI-only, ephemeral — never a copy of server state | `features/{domain}/logic/` | modal open, form draft |
 
 **URL-worthy state goes in search params, not component state** — anything a user
 would expect to survive a reload, a shared link, or the back button (active tab,
 filters, pagination, search query). Validate it at the route boundary with Zod.
 
-**Cross-feature data goes through server state** — two features that need the same data each
-fetch it independently. The caching layer (TanStack Query, SSR) deduplicates the request.
-Never route data between features via shared stores or props-drilling.
+**Cross-feature data goes through server state** — two features that need the same
+data each fetch it independently, and the transport layer deduplicates. Never route
+data between features via a shared store or props-drilling.
+
+## Where Business Logic Lives
+
+The backend. Eligibility, pricing, quotas, permissions and status derivation are
+never recomputed in the browser; the screen owns only its own behaviour —
+navigation, disclosure, formatting, form drafts. The full boundary, and the cache
+or store policy that enforces it, is in your transport profile
+(`portal-http/state.md`, or `tauri/app.md` for a Tauri app).
 
 ## Business Models
 
-Business models are the shared language between frontend and backend. They are **generated from
-the backend OpenAPI spec** (single source of truth is the backend) — see the React idioms in the
-same profile for the generation workflow.
-
-Never hand-write types that duplicate backend models.
+Business models are the shared language between frontend and backend, and the
+backend owns them. Where it publishes a machine-readable contract, they are
+**generated** from it — never hand-written twice. The generation workflow belongs to
+the transport profile.
 
 ## Rules for Adding a Feature
 
@@ -138,3 +149,4 @@ When asked to build a new view:
 - New data fetching → `features/{domain}/api/`
 - New route → `pages/`
 - Never mix layers within a single component file
+- Never move a business decision into the browser — see `portal-http/state.md`

@@ -785,7 +785,7 @@ test('pruning a managed block that carries no index is a no-op', () => {
 
 test('react is its own profile, so it can be anchored where portal-flat is not', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'ts', 'react', 'portal-flat', '--agent', 'claude', '--module', 'apps/web'], dir))
+    ok(runCli(['add', 'ts', 'react', 'portal-flat', 'portal-http', '--agent', 'claude', '--module', 'apps/web'], dir))
     ok(runCli(['add', 'ts', 'react', '--module', 'apps/mobile'], dir))
 
     // Rules of Hooks apply to every React tree — web portal AND React Native
@@ -793,8 +793,32 @@ test('react is its own profile, so it can be anchored where portal-flat is not',
     assert.match(react, /- "apps\/web\/\*\*\/\*\.tsx"/)
     assert.match(react, /- "apps\/mobile\/\*\*\/\*\.tsx"/)
     // the portal architecture stays on the web side
-    const portal = read(dir, '.claude/rules/portal-flat/react.md')
-    assert.doesNotMatch(portal, /apps\/mobile/, 'a React Native app is not a flat-domain web portal')
-    assert.deepEqual(lockOf(dir).modules, { 'apps/web': ['ts', 'react', 'portal-flat'], 'apps/mobile': ['ts', 'react'] })
+    const portal = read(dir, '.claude/rules/portal-flat/principle.md')
+    assert.doesNotMatch(portal, /apps\/mobile/, 'a React Native app is not a flat-domain portal')
+    assert.deepEqual(lockOf(dir).modules,
+      { 'apps/web': ['ts', 'react', 'portal-flat', 'portal-http'], 'apps/mobile': ['ts', 'react'] })
+  })
+})
+
+// The transport is a separate axis from the architecture: two apps share the layer
+// rules while their contradicting transports (HTTP cache vs IPC stores) never meet
+// on the same file. Bundling the transport into `portal-flat` made that impossible.
+test('portal transports are separable, and never load on each other files', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'ts', 'react', 'portal-flat', 'portal-http', '--agent', 'claude', '--module', 'apps/web'], dir))
+    ok(runCli(['add', 'ts', 'react', 'portal-flat', 'tauri', '--module', 'apps/desktop'], dir))
+
+    // the shared architecture is anchored to BOTH
+    const principle = read(dir, '.claude/rules/portal-flat/principle.md')
+    assert.match(principle, /- "apps\/web\/\*\*\/\*\.ts"/)
+    assert.match(principle, /- "apps\/desktop\/\*\*\/\*\.ts"/)
+
+    // …while each transport stays on its own app
+    const http = read(dir, '.claude/rules/portal-http/state.md')
+    assert.doesNotMatch(http, /apps\/desktop/, 'the TanStack cache policy must not reach a Tauri app')
+    const tauri = read(dir, '.claude/rules/tauri/app.md')
+    assert.doesNotMatch(tauri, /apps\/web/, 'Zustand/IPC rules must not reach the web portal')
+    // tauri governs TypeScript — it describes stores and IPC wrappers, not Rust
+    assert.match(tauri, /- "apps\/desktop\/\*\*\/\*\.tsx?"/)
   })
 })

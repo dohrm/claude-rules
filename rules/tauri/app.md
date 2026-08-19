@@ -1,11 +1,15 @@
 ---
 paths:
-  - "**/*.rs"
+  - "**/*.ts"
+  - "**/*.tsx"
 title: "Tauri App Architecture"
 ---
 
 Applicable to Tauri v2 apps using Preact/React + TypeScript.
-Extends the `portal-flat` rule with Tauri-specific patterns.
+
+The layers come from `portal-flat/principle.md`; this rule is its **transport**, the
+desktop counterpart of `portal-http/react.md`. Install `portal-flat` and `tauri`,
+never `portal-http` — the two transports contradict each other by design.
 
 ## Transport — Tauri IPC, Not HTTP
 
@@ -21,18 +25,21 @@ All state goes through **Zustand stores**, organized by the flat-domain rule.
 
 ## State Model
 
-Three categories — same as `portal-flat`, different tooling:
+Three categories — the same as `portal-flat/principle.md`, different tooling:
 
 | Category | Lives in | Tool | Updated by |
 |----------|----------|------|------------|
-| **Server state** | `features/{domain}/logic/` | Zustand store | `invoke()` results + Tauri events |
+| **Server state** | `features/{domain}/api/` | Zustand store | `invoke()` results + Tauri events |
 | **App state** | `core/` | Zustand store or Context | Tauri events (connection, health) |
-| **Local state** | `features/{domain}/logic/` | Zustand store | UI interactions |
+| **Local state** | `features/{domain}/logic/` | component state or a small store | UI interactions |
+
+Server state lives in `api/` — the backend boundary — for the same reason it does in
+an HTTP portal: `logic/` is screen behaviour, never a home for backend data.
 
 ### Store pattern
 
 ```typescript
-// features/chat/logic/store.ts
+// features/chat/api/store.ts
 import { create } from 'zustand'
 import { invoke } from '@tauri-apps/api/core'
 
@@ -119,7 +126,7 @@ This is the only place where `core/tauri/events` and `features/*/logic/` meet.
 ```typescript
 // providers.tsx or a dedicated core/tauri/bridge.ts
 import { onAssistantStream, onPromptRequest } from '@/core/tauri/events'
-import { useChatStore } from '@/features/chat/logic/store'
+import { useChatStore } from '@/features/chat/api/store'
 
 // Setup once at app mount
 onAssistantStream(({ content, phase }) => {
@@ -142,9 +149,18 @@ core/ → (nothing — no feature imports)
 Features consume `core/tauri/commands` for request/response and subscribe to events
 via `core/tauri/events`. Features never import `@tauri-apps/api` directly.
 
+## Store Hygiene
+
+A store is a cache with no expiry, so its lifecycle is explicit: reset every
+server-state store on logout or identity change, and on the events that invalidate
+what it holds. Stale store data outlives a session exactly the way a stale query
+cache does.
+
 ## Rules
 
-- No TanStack Query — all server state in Zustand stores
+- No TanStack Query — all server state in Zustand stores, under `features/{domain}/api/`
+- Server-state stores are reset on logout / identity change
+- Business decisions stay in the Rust backend — the UI renders them (`portal-flat/principle.md`)
 - No raw `invoke()` or `listen()` in features — always go through `core/tauri/`
 - Events update stores, components subscribe to stores — no event listeners in components
 - Cross-feature data: each feature fetches independently via `core/tauri/commands`; Zustand handles deduplication if needed

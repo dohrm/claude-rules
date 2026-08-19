@@ -31,8 +31,9 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
 | `incident` | `/runbook` (one per failure mode) + `/postmortem` (blameless, hands off deltas) | someone is on call for it — the natural pair of `ops` |
 | `react` | React framework gates (Rules of Hooks, purity, RTL, a11y) | anything with a React tree — web, React Native, a component library |
-| `portal-flat` | flat-domain React portal (OpenAPI-generated client) | shape is **frontend** or **fullstack** |
-| `tauri` | Tauri v2 desktop: IPC instead of HTTP, Zustand instead of TanStack Query | the frontend ships as a **desktop app** — on top of `ts portal-flat` |
+| `portal-flat` | flat-domain portal architecture: module map, layers, business boundary (transport-agnostic) | shape is **frontend** or **fullstack** |
+| `portal-http` | the HTTP transport of that portal: OpenAPI-generated client, TanStack Query, cache policy | the portal talks HTTP — i.e. every web portal, on top of `portal-flat` |
+| `tauri` | the desktop transport instead: IPC (invoke/listen), Zustand stores, no OpenAPI | the frontend ships as a **desktop app** — on top of `ts react portal-flat`, and never with `portal-http` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
 | `product` | the product-lifecycle skills (`/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo (it is how you got here) |
 | `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
@@ -40,9 +41,10 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 Examples:
 - Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
-- React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat`
-- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat`
-- Node/TS backend → `add ts testing cicd api backend` (Fastify; not `portal-flat`)
+- React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat portal-http`
+- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat portal-http`
+- Tauri desktop app → `add ts rust testing cicd react portal-flat tauri` (the architecture, then the IPC transport — never `portal-http` too)
+- Node/TS backend → `add ts testing cicd api backend` (Fastify; no portal profile)
 - Python service → `add python testing cicd ops backend` (`api` ships no Python variant yet — name the framework in an ADR)
 
 `python` carries one decision the others don't: it assumes a **committed lockfile
@@ -51,13 +53,16 @@ on `pip install -r requirements.txt`, say so out loud — adopting the profile m
 adopting that, and it is worth its own ADR.
 
 In a **monorepo**, anchor each profile to the directory it governs (`--module`), and
-keep `react` on every React tree while `portal-flat` stays on the web one:
+keep `react` on every React tree, `portal-flat` on every portal, and let the
+**transport** profile differ per app — that anchoring is what keeps a desktop app's
+IPC rules off the web app's files, and vice versa:
 
 ```
-add rust hexagonal api backend --module apps/api
-add ts react portal-flat       --module apps/web
-add ts react                   --module apps/mobile     # Expo: React, but not a portal
-add testing cicd product                                # repo-wide
+add rust hexagonal api backend        --module apps/api
+add ts react portal-flat portal-http  --module apps/web
+add ts react portal-flat tauri        --module apps/desktop   # same layers, IPC transport
+add ts react                          --module apps/mobile    # Expo: React, but not a portal
+add testing cicd product                                      # repo-wide
 ```
 
 Add `cqrs` only if the user confirms they want event sourcing. Say so explicitly: *"CQRS is non-standard and pulls in a home library — do you want it, or a plain repository?"*

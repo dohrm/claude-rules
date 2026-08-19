@@ -1,7 +1,9 @@
 // hey-api OpenAPI → TypeScript client generator — COPY to your frontend root and adapt.
 //
-// Generates the typed Axios client, TanStack Query hooks, request/response types,
-// and request-body Zod schemas from the backend OpenAPI spec into
+// Generates the typed Axios client, TanStack Query option factories
+// (`xxxOptions()` / `xxxMutation()` / `xxxQueryKey()` — NOT `useXxx` hooks, and
+// nothing auto-invalidates), request/response types, and request-body Zod schemas
+// from the backend OpenAPI spec into
 // `src/api/generated/`. That directory is NEVER hand-edited — it is rewritten on
 // every run and must sit in eslint `globalIgnores` + be excluded from tsconfig.
 //

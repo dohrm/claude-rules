@@ -160,7 +160,7 @@ kit/
 │   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
 │   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
-└── portal-flat/                # COMPLETE (frontend, pairs with the portal-flat profile)
+└── portal-http/                # COMPLETE (frontend, pairs with the portal-http profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```
 

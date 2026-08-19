@@ -12,6 +12,61 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking
+
+- **`portal-flat` no longer ships the HTTP transport — add `portal-http` for it.**
+  The profile bundled two independent axes: the flat-domain *architecture* (module
+  map, layer boundaries, business boundary) and the *HTTP idioms* (OpenAPI codegen,
+  TanStack Query, cache policy). `tauri` needs the first and explicitly forbids the
+  second, so a Tauri repo was loading 12.9 KB of rules prescribing TanStack Query on
+  its Zustand stores.
+
+  **Migration** — a web portal adds one profile; nothing else changes:
+
+  ```bash
+  npx github:dohrm/claude-rules add portal-http        # same globs, same --module anchoring
+  ```
+
+  `rules/portal-flat/react.md` → `rules/portal-http/react.md`, and
+  `kit/portal-flat/openapi-ts.config.ts` → `kit/portal-http/`. A Tauri app installs
+  `portal-flat` + `tauri` and **never** `portal-http`.
+
+### Added
+
+- **`portal-http/state.md` — server-state ownership and cache-clean policy.** The
+  generated TanStack Query code invalidates nothing: the plugin emits option
+  factories (`xxxOptions()`, `xxxMutation()`, `xxxQueryKey()`), and the generated
+  mutation is a bare `mutationFn`. The rule states who owns server state, where the
+  invalidation set is written (`features/{domain}/api/`, not the component), what a
+  logout must clear, and what the browser may not recompute.
+- **`backend/api-surface.md` — the API models the domain, not the screens.** An admin
+  screen and a consultation screen touching the same data are one route and two
+  authorizations, not two routes. Includes the "name the difference" table
+  (who / which fields / which subset / a real domain operation) and the line between
+  a legitimate domain command and a screen-shaped endpoint.
+- **`backend/authorization.md` — habilitation, which no rule covered.** Deny by
+  default, one permission model in the domain's vocabulary, row-level scope applied
+  in the query (never post-filtered — it breaks `total` and pagination), 403 vs 404,
+  and the policy/implementation split that `hexagonal` implies.
+
+### Fixed
+
+- **`rules/portal-flat/react.md` claimed generated mutation hooks invalidate related
+  queries "by convention". They do not** — verified against two independently
+  generated clients: zero occurrences of `invalidate` or `queryClient` in the emitted
+  code. The rule promised a behaviour that does not exist, which is worse than saying
+  nothing. Corrected, along with the same wrong vocabulary in the plugin table, the
+  code example, and the `openapi-ts.config.ts` header comment.
+- **`rules/tauri/app.md` was scoped `**/*.rs` while being entirely TypeScript.** It
+  loaded on the Rust side, where none of it applies, and never on the stores and IPC
+  wrappers it governs. Now scoped `**/*.ts`/`**/*.tsx`. Its state table also moved
+  server state from `features/{domain}/logic/` to `features/{domain}/api/`, so a
+  Tauri app and a web portal share one module map instead of contradicting it.
+- **`features/{domain}/logic/` was chartered as "validation, state machines, derived
+  values"** — an invitation to put business rules in the browser. It is now screen
+  behaviour only: UI state machines, display derivations, form drafts. A UI
+  approximation the product asked for is allowed, labelled as an estimate.
+
 ### Fixed
 
 - **`just code-review` could not run, and the gate it feeds could lock a repo out of

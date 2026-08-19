@@ -6,7 +6,7 @@ title: "HTTP API — Node/TypeScript (Fastify)"
 
 Opinionated default for a Node/TypeScript HTTP API: **Fastify** with its JSON-Schema-first validation and `@fastify/swagger` for OpenAPI. The OpenAPI document is the contract the frontend generates its client from — it is not optional.
 
-> This is the **backend** TS profile — distinct from `portal-flat` (the React frontend). Add `api` + `backend` for a Node service; add `portal-flat` for the SPA.
+> This is the **backend** TS profile — distinct from the frontend ones. Add `api` + `backend` for a Node service; add `portal-flat` + `portal-http` for the SPA.
 
 ## Stack
 

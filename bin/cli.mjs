@@ -108,7 +108,7 @@ function dumpFm(obj) {
 // load on a React component. `modules` in the lock says which profiles belong to
 // which directory, and emission anchors their globs there.
 //
-//   "modules": { "apps/api": ["rust", "api"], "apps/web": ["ts", "portal-flat"] }
+//   "modules": { "apps/api": ["rust", "api"], "apps/web": ["ts", "portal-http"] }
 //
 // A profile named by no module stays repo-wide, and a lock with no `modules` at all
 // behaves exactly as before — the installer only rewrites what it is asked to.
@@ -668,7 +668,7 @@ function globToRe(glob) {
 }
 
 // The repo's own files. The installer's own output is excluded on purpose:
-// `.claude/kit/portal-flat/openapi-ts.config.ts` must not make a `**/*.ts`
+// `.claude/kit/portal-http/openapi-ts.config.ts` must not make a `**/*.ts`
 // rule look alive in a repo that has no TypeScript.
 const SCAN_SKIP = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'vendor', 'coverage', '.next',
   '.claude', '.agents', '.cursor', '.opencode', '.dev'])
