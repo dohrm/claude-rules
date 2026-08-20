@@ -13,9 +13,9 @@ a witness, not a second definition of what "correct" means.
 ## The one rule
 
 **CI calls `just check` (or `just <tech>-check`). It never reimplements the
-commands.** The justfile is the single place that knows the paths and the tools
-(`kit/common/justfile.snippet`); lefthook triggers call it, `just check` calls it,
-CI calls it.
+commands.** The justfile is the single place that knows the paths and the tools —
+it composes the gate library (`kit/common/gate.just` and one file per technology);
+lefthook triggers call it, `just check` calls it, CI calls it.
 
 A command that exists in CI and not in the justfile is **drift**, and it is
 expensive in a specific way: the agent's self-closing loop (`agent/autonomy.md`)

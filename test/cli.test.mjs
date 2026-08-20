@@ -23,8 +23,9 @@ test('add rust --agent claude: verbatim rules, kit, agents, shared, lock', () =>
     assert.ok(has(dir, '.claude/rules/common/language.md'), 'shared common rules missing')
     assert.ok(has(dir, '.claude/agents/code-reviewer.md'), 'shared subagents missing')
     // kit is copied, not merged
-    assert.ok(has(dir, '.claude/kit/rust/deny.toml'))
-    assert.ok(has(dir, '.claude/kit/common/justfile.snippet'))
+    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
+    assert.ok(has(dir, '.dev/kit/common/gate.just'), 'the gate library ships with kit/common')
+    assert.ok(has(dir, '.dev/kit/rust/rust.just'), "and one per tech, with that tech's kit")
     assert.ok(!has(dir, 'lefthook.yml'), 'the installer must never write build config')
 
     const lock = lockOf(dir)
@@ -147,7 +148,37 @@ test('remove all after several adds deletes every installed asset', () => {
     assert.ok(!has(dir, '.claude-rules.lock'))
     assert.ok(!has(dir, '.claude/rules/rust'), 'first-added profile orphaned by the uninstall')
     assert.ok(!has(dir, '.claude/rules/go'))
-    assert.ok(!has(dir, '.claude/kit/rust'))
+    assert.ok(!has(dir, '.dev/kit/rust'))
+  })
+})
+
+// The kit is the one kind no emitter transforms, so it has ONE agent-neutral home.
+// Two agents must therefore yield one tree, not two identical ones — and the log must
+// say so once, or the next reader assumes there is a second copy somewhere.
+test('the kit has one home whatever the agents, and is copied once', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust', '--agent', 'claude,opencode'], dir))
+    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
+    assert.ok(!has(dir, '.claude/kit'), 'the kit must not land under an agent directory')
+    assert.equal(r.stdout.split('kit/rust  \u2192').length - 1, 1, 'kit/rust copied twice')
+  })
+})
+
+// An install that predates the move leaves .claude/kit/ behind, and a justfile still
+// importing from it never sees an `update` again — the exact drift the move fixes. So
+// add/update purge it, BY NAME: a directory the repo put there itself survives.
+test('add purges the legacy .claude/kit, keeping what is not ours', () => {
+  withTmpRepo(dir => {
+    mkdirSync(join(dir, '.claude/kit/rust'), { recursive: true })
+    writeFileSync(join(dir, '.claude/kit/rust/deny.toml'), 'stale\n')
+    mkdirSync(join(dir, '.claude/kit/mine'), { recursive: true })
+    writeFileSync(join(dir, '.claude/kit/mine/notes.md'), 'mine\n')
+
+    const r = ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    assert.ok(!has(dir, '.claude/kit/rust'), 'the legacy kit copy must go')
+    assert.ok(has(dir, '.claude/kit/mine/notes.md'), 'only registry-known kit dirs may be deleted')
+    assert.match(r.stdout, /\.claude\/kit/, 'a silent move leaves the reader with two trees')
+    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
   })
 })
 
@@ -242,11 +273,18 @@ test('init assembles justfile + lefthook from the installed kit', () => {
     ok(runCli(['add', 'rust', 'ts', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
 
-    // Byte-for-byte the snippet, except the ONE line init owns: `check` is derived
-    // from the locked techs, so the gate runs ts as well as rust.
+    // The generated justfile is the COMPOSITION: the imports, the dirs, and `check`
+    // derived from the locked techs. The recipes themselves stay in the library, so
+    // this file must NOT contain them.
     const just = read(dir, 'justfile')
     assert.match(just, /^check: rust-check ts-check$/m)
-    assert.equal(just.replace(/^check:.*$/m, 'check: rust-check'), read(REPO, 'kit/common/justfile.snippet'))
+    assert.match(just, /^import '\.dev\/kit\/common\/gate\.just'$/m)
+    assert.match(just, /^import '\.dev\/kit\/rust\/rust\.just'$/m)
+    assert.match(just, /^import '\.dev\/kit\/ts\/ts\.just'$/m)
+    assert.match(just, /^set allow-duplicate-recipes := true$/m, 'without it the repo cannot override a library recipe')
+    assert.match(just, /^set allow-duplicate-variables := true$/m)
+    assert.ok(!/^rust-check:/m.test(just), 'a recipe in this file would fork the library')
+    assert.ok(!/^rust-lint:/m.test(just))
     const lefthook = read(dir, 'lefthook.yml')
     assert.match(lefthook, /pre-commit:/)
     assert.match(lefthook, /run: just rust-lint/)
@@ -258,6 +296,42 @@ test('init assembles justfile + lefthook from the installed kit', () => {
 })
 
 // The trunk guard is not about a language, so it must not wait for one to be locked.
+// A justfile holding its own copy of a library recipe is the drift the import exists to
+// kill: the copy is frozen at install time. doctor WARNS rather than fails — an install
+// that predates the library is in exactly this state, and migrating is the human's call.
+test('doctor warns about a justfile that redefines the library instead of importing it', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, 'justfile'), 'rust_dir := "."\ncheck: rust-check\nrust-check:\n    @echo mine\n')
+
+    const r = runCliBare(['doctor'], dir)
+    assert.match(r.stdout, /does not import \.dev\/kit\/rust\/rust\.just/)
+    assert.match(r.stdout, /redefines 1 of its recipes \(rust-check\)/)
+    assert.match(r.stdout, /README\.md/, 'a warning without the migration pointer is a dead end')
+
+    // Importing it clears the warning — the check is about the import, not the file's age.
+    writeFileSync(join(dir, 'justfile'), "import '.dev/kit/rust/rust.just'\nimport '.dev/kit/common/gate.just'\ncheck: rust-check\n")
+    assert.doesNotMatch(runCliBare(['doctor'], dir).stdout, /does not import/)
+  })
+})
+
+// A documents-only install (`cicd` ships a kit directory with no `.just` in it at all)
+// must still get a coherent file: no `check` claiming to gate nothing, and above all no
+// hint naming a recipe no import provides — `mutate-diff: rust-mutate` in a repo with no
+// Rust sends the reader at a recipe that does not exist.
+test('init writes no invented recipe when no language is locked', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'cicd', 'product', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+
+    const just = read(dir, 'justfile')
+    assert.match(just, /^import '\.dev\/kit\/common\/gate\.just'$/m, 'the cross-language gates still apply')
+    assert.ok(!/^check:/m.test(just), 'a `check` with no dependency would be green for nothing')
+    assert.ok(!/rust-mutate/.test(just), 'no import provides it — the hint would be a dead end')
+    assert.ok(!/mutate-diff/.test(just), 'nothing to aggregate, so the whole Tier-3 block is absent')
+  })
+})
+
 test('init writes the git floor even with no language in the lock', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
@@ -381,7 +455,7 @@ test('doctor notices the harness guards are installed but unwired, and confirms 
     const warnings = unwired.stdout.split('\nWarnings')[1] || ''
     assert.doesNotMatch(warnings, /wires them|harness/, 'an opt-in absence must not be scored as a warning')
 
-    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.claude/kit/common/hooks/settings.snippet.json'))
+    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.dev/kit/common/hooks/settings.snippet.json'))
     const wired = ok(runCliBare(['doctor'], dir))
     assert.match(wired.stdout, /✓ claude: guards wired in \.claude\/settings\.json/)
   })
@@ -390,8 +464,8 @@ test('doctor notices the harness guards are installed but unwired, and confirms 
 test('doctor fails when a wired guard is not on disk', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
-    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.claude/kit/common/hooks/settings.snippet.json'))
-    rmSync(join(dir, '.claude/kit/common/hooks/bash-guard.mjs'))
+    writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.dev/kit/common/hooks/settings.snippet.json'))
+    rmSync(join(dir, '.dev/kit/common/hooks/bash-guard.mjs'))
 
     const r = runCliBare(['doctor'], dir)
     assert.equal(r.status, 1)
@@ -504,9 +578,9 @@ test('update clears a rule directory instead of leaving orphans in it', () => {
     assert.ok(!has(dir, '.claude/rules/rust/dropped-upstream.md'), 'a rule dir is library-owned; update must not leave orphans')
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     // kit is the "copy and own" surface — update must NOT wipe what the repo added.
-    writeFileSync(join(dir, '.claude/kit/rust/mine.toml'), 'x = 1\n')
+    writeFileSync(join(dir, '.dev/kit/rust/mine.toml'), 'x = 1\n')
     ok(runCli(['update'], dir))
-    assert.ok(has(dir, '.claude/kit/rust/mine.toml'), 'kit is owned by the repo, not the installer')
+    assert.ok(has(dir, '.dev/kit/rust/mine.toml'), 'kit is owned by the repo, not the installer')
   })
 })
 
@@ -521,18 +595,41 @@ test('init derives the *_dir block from the lock modules, and nothing outside it
 
     const just = read(dir, 'justfile')
     assert.match(just, /rust_dir\s+:= "apps\/api"/)
-    assert.match(just, /go_dir\s+:= "\."/, 'just fails at parse time on an undefined variable')
-    assert.match(just, /python_dir\s+:= "\."/, 'every DIR_VAR is emitted, claimed or not')
-    assert.match(just, /base\s+:= "origin\/main"/, 'content outside the block must survive')
-    assert.match(just, /rust-check: rust-lint/)
+    // Only the LOCKED techs: an unimported library's variable would be dead weight,
+    // and the library ships its own default anyway.
+    assert.ok(!/go_dir/.test(just), 'go is not locked, so nothing reads go_dir')
+    assert.ok(!/python_dir/.test(just))
+    assert.match(just, /^check: rust-check$/m, 'content outside the block must survive')
   })
 })
 
-test('init leaves the *_dir defaults alone when no module is declared', () => {
+// Nothing declared, nothing derived — and re-running init must reproduce the file it
+// wrote, or the "managed block" promise is a rewrite lottery.
+test('init is idempotent on the justfile it generated', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
-    assert.equal(read(dir, 'justfile'), read(REPO, 'kit/common/justfile.snippet'))
+    const first = read(dir, 'justfile')
+    assert.match(first, /rust_dir\s+:= "\."/, 'no module declared: the repo root')
+    ok(runCliBare(['init'], dir))
+    assert.equal(read(dir, 'justfile'), first)
+  })
+})
+
+// A justfile that predates the library holds the recipes inline. init must not rewrite
+// it — only say what to add, and how to prove the migration lost nothing.
+test('init reports the missing imports on a pre-library justfile', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const legacy = 'rust_dir := "api"\ncheck: rust-check\nrust-check:\n    @echo mine\n'
+    writeFileSync(join(dir, 'justfile'), legacy)
+    const r = ok(runCliBare(['init'], dir))
+
+    assert.equal(read(dir, 'justfile'), legacy, "the repo's justfile is never rewritten")
+    assert.match(r.stdout, /import '\.dev\/kit\/common\/gate\.just'/)
+    assert.match(r.stdout, /import '\.dev\/kit\/rust\/rust\.just'/)
+    assert.match(r.stdout, /set allow-duplicate-variables := true/)
+    assert.match(r.stdout, /--summary/, 'the equivalence proof is the point of the report')
   })
 })
 
@@ -552,9 +649,8 @@ test('init writes a CLAUDE.md once and never rewrites it', () => {
   })
 })
 
-// The snippet ships `check: rust-check`, so a repo with no Rust used to get a gate
-// that ran cargo and never ran its own tech's check — the locked profile was absent
-// from the one command the agent closes its loop on.
+// A generated `check` that ran cargo in a python-only repo would leave the locked tech
+// out of the one command the agent closes its loop on. It is derived from the lock.
 test('init derives the check recipe from the locked language profiles', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'python', 'testing', '--agent', 'claude'], dir))
@@ -563,7 +659,7 @@ test('init derives the check recipe from the locked language profiles', () => {
     const just = read(dir, 'justfile')
     assert.match(just, /^check: python-check$/m, 'the locked tech must be in the gate')
     assert.ok(!/^check:.*rust-check/m.test(just), 'a repo with no Rust must not run cargo')
-    assert.match(just, /^python-check: python-lint$/m, 'the recipes themselves are untouched')
+    assert.ok(!/^python-check:/m.test(just), 'the recipe stays in the library')
     assert.match(read(dir, 'lefthook.yml'), /just python-check/)
   })
 })

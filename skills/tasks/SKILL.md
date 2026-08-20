@@ -103,6 +103,11 @@ writes nothing else — one loop, one state file.
 Create `phase/NN-<slug>` off the trunk. One commit per completed task, the task's
 title as the subject — the `git log` becomes the phase's real account.
 
+If another session is already working in this checkout, the branch gets **its own
+worktree** (`git worktree add ../<repo>-NN-<slug> -b phase/NN-<slug>`): one tree, one
+writer. The worklist below and the review verdict both live in `.work/`, which is
+per-tree — two sessions sharing a checkout share one verdict (`agent/autonomy.md`).
+
 Then hand off, and stop:
 
 - **`/loop-setup`** — it wraps this worklist in the guardrails you do not own:
@@ -149,7 +154,9 @@ human's act, on the phase's acceptance criteria, not on ticked boxes.
 ## Blocked on the human
 
 <!-- What the loop cannot decide or access — a new acceptance criterion above all.
-     Non-empty means the loop stopped and is waiting. -->
+     Non-empty means the loop stopped and is waiting. This section IS the escalation
+     channel: `just status` surfaces it across every worktree, so a stop written here is
+     findable without reopening the session. One line per blocker, no placeholders. -->
 - <blocker>
 
 <!-- `/loop-setup` adds a `## Guardrails` section here (iteration cap, token budget,

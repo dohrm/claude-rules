@@ -3,8 +3,8 @@
 Wiring (the installer never merges build config — do this by hand):
 
 1. Merge `lefthook.snippet.yml` into your root `lefthook.yml` (thin triggers → `just godot-lint` / `godot-check`).
-2. Merge `justfile.snippet` into your root `justfile` and set `godot_dir`, `godot_bin`, `godot_export_preset`.
-3. `chmod +x check-no-new-gd.sh` (copied to `.claude/kit/godot/`).
+2. `claude-rules init` writes `import '.dev/kit/godot/godot.just'` into your root `justfile`; override `godot_dir`, `godot_bin` and `godot_export_preset` there (the lock cannot derive them) and add `godot-check` to `check`.
+3. `chmod +x check-no-new-gd.sh` (copied to `.dev/kit/godot/`).
 4. In the Godot project: enable C# (.NET), install export templates, add GDUnit4, and configure an export preset matching `godot_export_preset`.
 
 ## The gates
@@ -32,7 +32,7 @@ Reference the analyzer project from the game `.csproj` so it runs in every build
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include=".claude/kit/godot/analyzers/Factory.Godot.Analyzers.csproj"
+  <ProjectReference Include=".dev/kit/godot/analyzers/Factory.Godot.Analyzers.csproj"
                     OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 </ItemGroup>
 ```

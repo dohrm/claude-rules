@@ -14,6 +14,62 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Breaking
 
+- **The kit has one home: `.dev/kit/`, for every agent.** It was `.claude/kit/` for
+  Claude and `.dev/kit/` for the other four. The kit is the only asset kind no emitter
+  transforms — executable gates, copied verbatim — and nothing reads it automatically
+  the way Claude reads `.claude/rules/`: its only consumers name the path themselves
+  (the justfile, `lefthook.yml`, `settings.json`). So the per-agent destination bought
+  nothing and cost two things: a second identical tree in a multi-agent install, and a
+  justfile whose import path depended on which agent happened to be first in the lock.
+
+  **Migration** — `add`/`update` move it for you and purge the old tree (by name, one
+  registry-known directory at a time; anything you put under `.claude/kit/` yourself
+  survives). What they cannot rewrite is the paths you wired by hand:
+
+  ```bash
+  npx github:dohrm/claude-rules update
+  grep -rn '\.claude/kit' justfile lefthook.yml .claude/settings.json .github .gitea 2>/dev/null
+  ```
+
+  Anything that turns up becomes `.dev/kit/…`. `claude-rules doctor` reports a wired
+  guard whose script is not on disk, so a missed path shows up as a problem rather
+  than as a hook that silently never fires.
+
+- **The gates are a `just` library you import, not a snippet you merge.**
+  `kit/common/justfile.snippet` is gone. In its place: `kit/common/gate.just` plus one
+  file per technology (`kit/rust/rust.just`, `ts`, `go`, `python`, `godot/godot.just`),
+  which the repo's root justfile `import`s. The reason is the one that mattered all
+  along — a merged snippet could never be updated again, so every fix stayed upstream
+  and every installed repo drifted from the day it was installed. An import can be
+  updated. Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override
+  settings in 1.27).
+
+  What the root justfile holds now is the *composition*: the imports, the `*_dir`
+  variables, `check`, `mutate-diff`, and any recipe or variable it overrides — a
+  definition there wins over the imported one, which is how you adapt a gate without
+  forking it. `claude-rules init` writes that file; it is ~40 lines instead of ~260.
+
+  Two wiring steps disappear with it. The gate scripts (`adr-check.mjs`,
+  `docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `review-prompt.md`) are
+  no longer moved into `scripts/` — the recipes call them where they ship, so an
+  update refreshes gate and implementation together. And enabling an opt-in gate is
+  now one word in the `check` recipe.
+
+  **Migration** — the installer reports, it never rewrites your justfile:
+
+  ```bash
+  npx github:dohrm/claude-rules update && npx github:dohrm/claude-rules init
+  ```
+
+  `init` prints the `import` lines and the two `set allow-duplicate-*` lines to add;
+  `doctor` warns for as long as a justfile redefines a library recipe instead of
+  importing it, naming which ones. The full procedure — including the deterministic
+  equivalence proof, since `just --summary` and `just --evaluate` flatten imports
+  while `just --dump` does not — is in `.dev/kit/common/README.md`.
+
+  Both guards now treat `*.just` as gate-layer files: the recipes moved, so guarding
+  only the file holding the `import` lines would have left the commands unguarded.
+
 - **`portal-flat` no longer ships the HTTP transport — add `portal-http` for it.**
   The profile bundled two independent axes: the flat-domain *architecture* (module
   map, layer boundaries, business boundary) and the *HTTP idioms* (OpenAPI codegen,

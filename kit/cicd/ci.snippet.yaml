@@ -2,7 +2,8 @@ name: CI
 
 # Tier 1-2 gate. The pipeline is a scheduler, not a second definition of
 # "correct": every job below calls `just`, which is the ONE place that knows the
-# commands and the paths (kit/common/justfile.snippet). Doctrine:
+# commands and the paths (it imports kit/common/gate.just + one file per tech).
+# Doctrine:
 # rules/cicd/pipeline.md.
 #
 # COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — the syntax is
@@ -122,8 +123,13 @@ jobs:
   #       with: { fetch-depth: 0 }   # the gate reads history to see a moved status line
   #     - uses: actions/setup-node@v4
   #       with: { node-version: '22' }
-  #     - run: node scripts/adr-check.mjs
-  #     - run: node scripts/docs-check.mjs
+  #     - name: Ensure just
+  #       run: |
+  #         command -v just >/dev/null 2>&1 || \
+  #           curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+  #             | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+  #     - run: just adr-check
+  #     - run: just docs-check
 
   # ONE required check for branch protection. Without this, protecting each job
   # individually means a job that is skipped (renamed, conditioned out) silently

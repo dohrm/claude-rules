@@ -88,38 +88,53 @@ repo just keeps its workspace at the root.
 
 ## Consuming in a repo
 
-Run **`claude-rules init`** to assemble the justfile + lefthook from the
-installed snippets, or do it by hand:
+The gates are a **just library**, not a template: the repo's root justfile
+`import`s them, so `claude-rules update` can still fix a recipe months later.
+`common/README.md` is the shipped version of this — including the procedure for
+migrating a justfile that predates the library.
 
-1. `add` the profiles you need (installs into `.claude/`).
-2. Merge `common/justfile.snippet` into your root justfile and **set the `*_dir`
-   variables** to your layout — the ONE place paths live. Enable your techs in
-   the `check` recipe.
+Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
+
+1. `add` the profiles you need (installs into `.dev/kit/`).
+2. Write a root justfile that imports the library — `set allow-duplicate-recipes`
+   + `set allow-duplicate-variables` (so this file can override it), one `import`
+   line per `.just` under `.dev/kit/`, the `*_dir` variables for your layout, and
+   a `check` recipe listing your techs. Never edit a `.just` under `.dev/kit/`:
+   override it here instead. Needs just >= 1.27.
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
    move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
    merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml`;
    adapt eslint `globalIgnores`; then `lefthook install`.
-4. **Decision records** (only if the repo keeps ADRs): move `common/adr-check.mjs`
-   to `scripts/` and add `adr-check` to the `check` recipe. The gate makes
+4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
+   `check` recipe — the script ships with the library and is called from it, so
+   there is nothing to move into `scripts/`. The gate makes
    accepting an ADR a human act — it fails when a new ADR is not `Proposed`, or
    when a status line moved without a commit. Doctrine: `../rules/agent/decisions.md`.
    It is a no-op in a repo with no `docs/adr/`.
-5. **Code review** (only if an agent CLI is available): move `common/review-guard.mjs`
-   AND `common/review-prompt.md` to `scripts/`, set `review_cmd` in the justfile, and
+5. **Code review** (only if an agent CLI is available): set `review_cmd` in your
+   justfile to that CLI (override `review_prompt` for a repo-specific prompt) and
    gitignore `.work/`. `just code-review` runs a read-only reviewer once per coherent
    block; `just review-guard` reads the verdict it left behind and blocks a push on a
    `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger (it also
    carries the `no-commit-on-trunk` git floor; a solo repo deletes that one command).
    Doctrine: `../rules/agent/autonomy.md`.
-6. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
+6. **Parallel sessions** (only if you run more than one at a time): `just status`.
+   The reason it exists is
+   the reason it is needed: `.work/` is per-worktree, so `review-guard` answers about
+   the tree it runs in — two sessions in one checkout share one verdict. One tree, one
+   writer; `just status` is the one command that shows every tree at once (branch,
+   dirty, phase worklist, verdict, `## Blocked on the human`). It reports and never
+   gates, so it belongs in neither `check` nor a hook.
+   Doctrine: `../rules/agent/autonomy.md` ("One tree, one writer").
+7. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
    into `.claude/settings.json` — or the opencode / cursor / codex snippet beside it.
    This is the **harness layer**, and the split matters: `lefthook` is the git floor (portable,
    every agent), the hooks catch what git never gets to see — the `--no-verify`, the
    `lefthook uninstall`, the `rm` on the review report. Both guards fail open and
    neither makes drift impossible; they make it expensive and loud. Read
    `common/hooks/README.md` for what it does *not* guarantee before relying on it.
-7. **Generated code** (only if present): a Rust generated *member* crate — swap
+8. **Generated code** (only if present): a Rust generated *member* crate — swap
    the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
    to that crate (clippy lints path-dep members; `--exclude` won't silence them).
    TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
@@ -129,12 +144,14 @@ installed snippets, or do it by hand:
 ```
 kit/
 ├── common/                     # language-agnostic
-│   ├── justfile.snippet        # `just check` — the one command an agent runs to self-verify
+│   ├── README.md               # the library/import model + the migration procedure (shipped)
+│   ├── gate.just               # the cross-language recipes, imported by the repo's justfile
 │   ├── lefthook.snippet.yml    # the git floor: no-commit-on-trunk + review-guard on pre-push
 │   ├── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
 │   ├── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
 │   ├── review-prompt.md        # the headless reviewer's prompt (`just code-review`, any CLI)
 │   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
+│   ├── worktree-status.mjs     # OPT-IN report, never a gate: every worktree at a glance — `just status`
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
 │       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest
@@ -143,20 +160,24 @@ kit/
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish
 ├── rust/                       # COMPLETE
+│   ├── rust.just               # rust-lint / rust-check / rust-mutate, imported by the justfile
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml
 │   ├── deny.toml               # Tier 2 supply-chain (adapt registry / private crates)
 │   ├── mutants.toml            # Tier 3 config → copy to <workspace>/.cargo/ (adapt exclusions)
 │   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
 ├── ts/                         # COMPLETE
+│   ├── ts.just                 # ts-lint / ts-check / ts-mutate, imported by the justfile
 │   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
 │   ├── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
 │   └── mutation-ci.yaml        # Tier 3 CI job (Stryker, changed files) → .gitea/ or .github/workflows/
 ├── go/                         # COMPLETE
+│   ├── go.just                  # go-lint / go-check / go-cover, imported by the justfile
 │   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
 │   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
 │   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
 ├── python/                     # COMPLETE
+│   ├── python.just              # python-lint / python-check / python-mutate, imported by the justfile
 │   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
 │   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)

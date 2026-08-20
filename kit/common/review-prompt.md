@@ -1,4 +1,4 @@
-<!-- The prompt behind `just code-review` (kit/common/justfile.snippet): one review,
+<!-- The prompt behind `just code-review` (kit/common/gate.just): one review,
      one process, any agent CLI (claude -p · codex exec · opencode run · cursor-agent -p).
      The recipe substitutes the base placeholder below and redirects stdout into
      .work/review-report.md, which `review-guard` then reads. Its twin is the subagent
