@@ -388,3 +388,96 @@ test('review-guard: with no commit yet there is nothing to compare against', () 
     assert.match(r.out, /nothing to compare it against/)
   })
 })
+
+// ── worktree-status ────────────────────────────────────────────────────────
+// The counterpart of review-guard: that one is the gate in ONE tree, this one is
+// the report across ALL of them. So what gets pinned here is that it aggregates
+// faithfully (a CRITICAL in a sibling tree is visible from here), that the
+// escalation channel /tasks defines actually surfaces, and that it NEVER blocks —
+// a dashboard with an exit code is a second gate nobody asked for.
+const WT_STATUS = join(REPO, 'kit', 'common', 'worktree-status.mjs')
+
+/** A phase worklist, with the `## Blocked on the human` section /tasks writes. */
+const worklist = (blockers) =>
+  '# Phase 02: split — worklist\n\n## Tasks\n\n- [ ] T1\n\n## Blocked on the human\n\n'
+  + '<!-- What the loop cannot decide or access. -->\n'
+  + (blockers.length ? blockers.map((b) => `- ${b}\n`).join('') : '- <blocker>\n')
+
+test('worktree-status: outside a repo it says so and still exits 0', () => {
+  withTmpRepo((dir) => {
+    const r = run(WT_STATUS, [], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /not a git repository/)
+  })
+})
+
+test('worktree-status: one tree, no review — the normal case reads as such', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /^1 worktree · base HEAD/m)
+    assert.match(r.out, /\* \./, 'the tree you are standing in is marked')
+    assert.match(r.out, /clean/)
+    assert.match(r.out, /no report/)
+  })
+})
+
+test('worktree-status: a CRITICAL in a SIBLING tree is visible from here', () => {
+  withTmpRepo((dir) => {
+    const main = join(dir, 'main')
+    mkdirSync(main, { recursive: true })
+    const [head] = commits(main)
+    const sibling = join(dir, 'side')
+    git(main, 'worktree', 'add', '-q', '-b', 'phase/02-split', sibling)
+    const sideHead = git(sibling, 'rev-parse', 'HEAD')
+    write(sibling, '.work/review-report.md', report('CRITICAL', sideHead))
+    write(main, '.work/review-report.md', report('CLEAN', head))
+
+    const r = run(WT_STATUS, ['HEAD'], main)
+    assert.equal(r.status, 0, 'it reports; review-guard is what blocks')
+    assert.match(r.out, /^2 worktrees/m)
+    assert.match(r.out, /phase\/02-split.*CRITICAL → blocks/)
+    assert.match(r.out, /CLEAN/, "and the tree you are in keeps its own verdict — that is the whole point")
+  })
+})
+
+test('worktree-status: the phase file and its blockers surface, placeholders do not', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/phase-02-split.md', worklist([]))
+    const quiet = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(quiet.out, /phase-02-split/)
+    assert.doesNotMatch(quiet.out, /BLOCKED/, 'an untouched template is not an escalation')
+    assert.doesNotMatch(quiet.out, /waiting on you/)
+
+    write(dir, '.work/phase-02-split.md', worklist(['the PRD says X, the schema says Y — which wins?']))
+    const loud = run(WT_STATUS, ['HEAD'], dir)
+    assert.equal(loud.status, 0)
+    assert.match(loud.out, /BLOCKED: the PRD says X, the schema says Y/)
+    assert.match(loud.out, /1 tree\(s\) waiting on you/)
+  })
+})
+
+test('worktree-status: a stale or malformed verdict is reported as itself, never guessed', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 3)
+    write(dir, '.work/review-report.md', report('WARNINGS', first))
+    assert.match(run(WT_STATUS, ['HEAD'], dir).out, /WARNINGS \(stale, \+2\)/)
+
+    write(dir, '.work/review-report.md', '## Code Review\n\nlooks fine to me.\n')
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /malformed → blocks/, 'the guard would block on it, so the report must say so')
+  })
+})
+
+test('worktree-status: an unknown base is a missing column, not a crash', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    const r = run(WT_STATUS, ['origin/does-not-exist'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /base origin\/does-not-exist/)
+    assert.match(r.out, /—/, 'the ahead count is unknown, and says so')
+  })
+})

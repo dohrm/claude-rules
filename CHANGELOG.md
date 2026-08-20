@@ -33,6 +33,21 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`just status` and the "one tree, one writer" rule** (shared `kit/common`). The
+  self-closing loop of `rules/agent/autonomy.md` has a precondition nothing stated:
+  the proof is local to the working tree. `.work/review-report.md` is one file and
+  `review-guard` reads the report of the tree it runs in, so two sessions sharing a
+  checkout share one verdict — A's `CLEAN` authorises B's push, and nobody forged
+  anything. They share the files too, so `just check` measures a mix of both.
+
+  So parallel work gets a parallel tree (`git worktree add`), and
+  `kit/common/worktree-status.mjs` (`just status`, opt-in) is the one command that
+  shows every tree at once: branch, dirty, phase worklist, verdict, and the
+  `## Blocked on the human` section `/tasks` writes. It **reports and never gates** —
+  a dashboard with an exit code is a second gate nobody asked for — so it belongs in
+  neither `check` nor a hook. `/tasks` now names that section as the escalation
+  channel: with several trees in flight, "loud" is not volume, it is location.
+
 - **`portal-http/state.md` — server-state ownership and cache-clean policy.** The
   generated TanStack Query code invalidates nothing: the plugin emits option
   factories (`xxxOptions()`, `xxxMutation()`, `xxxQueryKey()`), and the generated

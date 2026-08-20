@@ -66,6 +66,24 @@ Check what the repo actually exposes — `just --list` — and:
   reported, never silently skipped and never assumed green. `review-guard` holds
   the same line for you: with no report it passes and tells you to declare it.
 
+## One tree, one writer
+
+The loop above has a precondition: **the proof is local to the working tree.**
+`.work/review-report.md` is one file, `.work/phase-NN-*.md` is one work unit, and
+`review-guard` reads the report of the tree it runs in. Two sessions sharing a checkout
+therefore share one verdict — A's `CLEAN` authorises B's push, and nobody forged
+anything: the gate was asked about someone else's work. They share the files too, so
+`just check` measures a mix of both and a commit carries half of the other's.
+
+So: **one tree, one writer, one branch, one phase file.** Parallel work gets a parallel
+tree — `git worktree add ../<repo>-<slug> -b <branch>` — never a second session in the
+same directory. The mechanism is git's ordinary one; the invariant is the doctrine, for
+the same reason `no-commit-on-trunk` is: a gate that answers about the wrong tree is not
+a gate. A fresh tree carries no `.work/` and no build artefacts (both ignored, so neither
+follows) and pays the cold build once — the price of a verdict that describes YOUR
+branch. **`just status`** (opt-in, `kit/common/worktree-status.mjs`) is the one command
+that shows every tree at once: it reports, it never gates.
+
 ## Never fake green (two tiers)
 
 A gate you bypass is a gate you no longer have.
@@ -97,5 +115,12 @@ rule above is still the rule, not the leftovers of what a guard failed to catch.
 **Declare every bypass.** Even a permitted (soft) one. No silent TODO, skipped
 test, placeholder, or stubbed mock slipped into a hand-back — if you defer or
 stub anything, say so out loud. A hidden gap is worse than a flagged one.
+
+**Escalate where it will be found.** With several trees in flight, "loud" is not
+volume, it is location: a stop goes in that tree's `.work/phase-NN-*.md`, under
+`## Blocked on the human` — the section `/tasks` already writes there, and the one
+`just status` surfaces across every tree. A hand-back nobody is watching is not an
+escalation. Never in the review report: that file is written by a review and by
+nothing else.
 
 Escalate loudly; never silently pass.

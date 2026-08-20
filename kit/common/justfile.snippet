@@ -204,6 +204,18 @@ code-review:
 review-guard:
     node scripts/review-guard.mjs
 
+# ── Parallel work (opt-in) ─────────────────────────────────────────────────
+# One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the
+# tree it runs in: two sessions in one checkout share one verdict, and A's CLEAN
+# authorises B's push (rules/agent/autonomy.md, "One tree, one writer").
+# `just status` is the aggregator once you split the work across trees — branch,
+# commits ahead of the base branch, dirty count, phase worklist, the verdict it would
+# give, and whatever its `## Blocked on the human` section is waiting for. Read-only,
+# no LLM, always exit 0: it REPORTS, the gate stays `review-guard` in each tree.
+# Rename the recipe if your justfile already has a `status`.
+status:
+    node scripts/worktree-status.mjs {{base}}
+
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop
 # indicator" from rules/agent/guardrails.md a machine can measure. jscpd is
