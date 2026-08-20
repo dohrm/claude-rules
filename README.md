@@ -58,6 +58,9 @@ and never runs a product skill; a greenfield product starts at `/interview`.
 1. **The machine settles correctness.** An agent writes the code *and* its tests,
    runs `just check`, reads the failure, fixes the cause, and only then hands back.
    A green gate is permission; the agent's belief is not (`rules/agent/autonomy.md`).
+   That permission is **local to one working tree** — `.work/` and its verdict are per-tree,
+   so parallel sessions get parallel worktrees (one tree, one writer) and `just status`
+   aggregates them.
 2. **A human settles decisions.** A green gate is permission for *code*, never for a
    *decision*. Four things an agent proposes and never takes: an **ADR's status**
    (enforced by `adr-check`), the **release tag**, the **error budget policy**, and
@@ -137,15 +140,25 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   cross-cutting ones load every session.
 - Skills land in `.claude/skills/` and subagents in `.claude/agents/` — both
   auto-discovered. Subagents inherit the repo's rules, which is why they stay thin.
-- Kit lands in `.claude/kit/` and is the **one thing that needs wiring** (once):
-  merge the `just`/lefthook snippets, move the configs into place. The installer
-  **never merges your build config** and prints exactly what is left to do — see
-  [`kit/README.md`](./kit/README.md). `init` does the assembling for you.
-- `init` owns **delimited sections, never whole files**. It creates a `justfile`,
-  a `lefthook.yml` and a `CLAUDE.md` when they are absent; when they already exist
-  it touches only the `# claude-rules:start … end` block holding the `*_dir`
-  variables, which it derives from the lock's `modules`. A `CLAUDE.md` that exists
-  is never rewritten — from the moment it is there, it is yours.
+- Kit lands in `.dev/kit/` — agent-neutral, one copy whatever agents you install —
+  and is the **one thing that needs wiring** (once): merge the lefthook snippets,
+  move the configs into place. The installer **never merges your build config** and
+  prints exactly what is left to do — see [`kit/README.md`](./kit/README.md).
+- **The gates are a `just` library, not a snippet to merge.** `.dev/kit/*/*.just`
+  holds the recipes; your root justfile `import`s them and holds only what is true
+  of your repo — where each technology lives, what `check` runs, what it overrides.
+  That is what makes `update` mean something: a merged snippet could never be
+  updated again, so every installed repo drifted from day one. A recipe defined in
+  your justfile wins over the imported one, so you adapt a gate without forking it.
+  Migrating a justfile from before this: `kit/common/README.md` has the procedure
+  and a deterministic equivalence proof (`just --summary` and `just --evaluate`
+  flatten imports — diff both, before and after).
+- `init` owns **delimited sections, never whole files**. It writes a `justfile`
+  (the imports, the dirs, `check`), a `lefthook.yml` and a `CLAUDE.md` when they
+  are absent; when they already exist it touches only the
+  `# claude-rules:start … end` block holding the `*_dir` variables, which it
+  derives from the lock's `modules`, and reports what is missing. A `CLAUDE.md`
+  that exists is never rewritten — from the moment it is there, it is yours.
 - The ref and the agent set are pinned in `.claude-rules.lock`, so `update` replays
   your choices. Updates are reviewable: re-run `update` and read the `git diff`.
 - **`add` is additive.** It extends the lock — profiles *and* agents — and re-emits
@@ -259,8 +272,8 @@ npx github:dohrm/claude-rules budget      # no path: the session floor
 ```
 Context for apps/web/src/api/client.ts
 
-  always-on rules (4)             11.7 KB  (~3k tokens)
-      agent/autonomy.md            5.5 KB
+  always-on rules (4)             13.2 KB  (~3.4k tokens)
+      agent/autonomy.md            7.1 KB
       agent/guardrails.md          3.7 KB
       agent/decisions.md           2.1 KB
       common/language.md           0.3 KB
@@ -274,7 +287,7 @@ Context for apps/web/src/api/client.ts
       portal-http/state.md         2.8 KB    apps/web/**/*.ts
       ts/quality-gates.md          1.8 KB    apps/web/**/*.ts
       ts/code-style.md             1.4 KB    apps/web/**/*.ts
-  total                           49.0 KB  (~12.5k tokens)
+  total                           50.5 KB  (~12.9k tokens)
 ```
 
 Each path-scoped row names **the glob that matched**, which is what makes a
@@ -306,8 +319,9 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` `hexagonal` | `/investigate` `/loop-setup` `/rust-add-domain` |
 
-**3. Repo commands — the gates.** One task layer (`justfile`), three callers: the
-git hooks, you or the agent, and CI. No command is defined twice.
+**3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
+or the agent, and CI. No command is defined twice — and the recipes themselves live
+once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 
 | Command | Tier | Runs on |
 |---|---|---|
@@ -319,6 +333,7 @@ git hooks, you or the agent, and CI. No command is defined twice.
 | `just mutate-diff` | 3 — mutation / coverage ratchet, on the merge-base diff | per coherent block, before the push; minutes; never a hook |
 | `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | same cadence as `mutate-diff`; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
+| `just status` | — reports, never gates: every worktree at a glance (branch, dirty, phase, verdict, blockers) | opt-in, when sessions run in parallel trees |
 
 Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
 a laptop that the PR job computes on a runner, so the agent runs it before pushing
@@ -354,7 +369,7 @@ thing that matters: does the tool load a rule because a glob matched?
 | Asset | Claude (canonical) | Cursor | Antigravity | Codex | opencode |
 |-------|--------------------|--------|-------------|-------|----------|
 | **skill** | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` | `.agents/skills/` | `.opencode/skills/` |
-| **kit** | `.claude/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` |
+| **kit** | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` | `.dev/kit/` |
 | **rule** (path-scoped) | `.claude/rules/` (`paths:`) | `.cursor/rules/*.mdc` (`globs:`) | `.agents/rules/*.md` (`globs:`) | `.dev/rules/` + a row in `AGENTS.md` | `.dev/rules/` + a row in `AGENTS.md` |
 | **rule** (cross-cutting) | `.claude/rules/` | `.cursor/rules/*.mdc` (`alwaysApply`) | `.agents/rules/*.md` (`alwaysApply`) | inlined in `AGENTS.md` | inlined in `AGENTS.md` |
 | **agent** (subagent) | `.claude/agents/` | — (no file subagents) | — (no file subagents) | — (no file subagents) | `.opencode/agent/` |
@@ -438,7 +453,7 @@ claude-rules/
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat portal-http tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent
-├── kit/             # common (just, adr-check, docs-check, review-guard, hooks) · rust ts go python godot portal-http · cicd
+├── kit/             # common (gate.just, adr-check, docs-check, review-guard, worktree-status, hooks) · rust ts go python godot portal-http · cicd
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)

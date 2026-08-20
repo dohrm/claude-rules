@@ -19,7 +19,7 @@
 // authority on a report — this echoes what it would say and prints `malformed`
 // rather than guessing when it cannot parse one.
 //
-// Usage: node scripts/worktree-status.mjs [base-ref]   (default: origin/main)
+// Usage: just status   (directly: node .dev/kit/common/worktree-status.mjs [base-ref]; default origin/main)
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'

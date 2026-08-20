@@ -4,7 +4,7 @@
 // blocks `git commit -m "drop the -n flag"` gets uninstalled by lunchtime.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO } from './helpers.mjs'
@@ -119,6 +119,8 @@ const ALLOWED = [
   // self-closing loop of autonomy.md costs the most to interrupt.
   'just check > /dev/null 2>&1; node scripts/docs-check.mjs 2>&1 | head -4',
   'node scripts/adr-check.mjs docs/adr --strict 2>&1 | tail -5',
+  'node .dev/kit/common/docs-check.mjs 2>&1 | head -4',
+  'sed -n "1,40p" .dev/kit/common/gate.just',
   // Anchoring the refs must not start seeing the trunk in a branch name again.
   'git push --force-with-lease origin feat/fix-main-nav; echo done',
   'git push -f origin feature/remaster && echo ok',
@@ -143,6 +145,7 @@ const ASKED = [
   'sed --in-place s/0.62/0.40/ .coverage-baseline',
   // The same fd/noclobber spellings that were slipping past the deny tier.
   'echo x 1> justfile',
+  'echo x > .dev/kit/rust/rust.just',
   'echo x >| lefthook.yml',
 ]
 for (const command of ASKED) {
@@ -188,13 +191,18 @@ test('edit-guard escalates the gate layer and nothing else', () => {
   const protectedPaths = [
     'lefthook.yml',
     'justfile',
+    '.dev/kit/rust/rust.just',
+    '.dev/kit/common/gate.just',
     '.github/workflows/ci.yaml',
     '.gitea/workflows/mutation.yaml',
     '.claude/settings.json',
     '.claude/settings.local.json',
-    '.claude/kit/common/hooks/bash-guard.mjs',
+    '.dev/kit/common/hooks/bash-guard.mjs',
     'scripts/review-guard.mjs',
     'scripts/review-prompt.md',
+    '.dev/kit/common/review-guard.mjs',
+    '.dev/kit/common/review-prompt.md',
+    '.dev/kit/common/worktree-status.mjs',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]
@@ -225,7 +233,7 @@ test('edit-guard denies what has no legitimate hand-edit', () => {
 
 test('edit-guard names WHY the file is protected', () => {
   assert.match(edit('.coverage-baseline').out, /HARD bypass/)
-  assert.match(edit('.claude/kit/common/hooks/edit-guard.mjs').out, /meta-bypass/)
+  assert.match(edit('.dev/kit/common/hooks/edit-guard.mjs').out, /meta-bypass/)
 })
 
 // ------------------------------------------------------------------- the wiring
@@ -243,6 +251,31 @@ test('the hook snippets are valid JSON and point at scripts that exist', () => {
       assert.ok(readFileSync(join(REPO, 'kit', script), 'utf8'), `${name}: ${m[1]} does not exist in the kit`)
     }
   }
+})
+
+// opencode has no hook process, so its half of the gate layer is a set of PATTERNS —
+// and a pattern that matches nothing is a guard that is silently absent. The kit lives
+// in a DOTTED directory (.dev/), which is exactly where a `**/` globstar is not
+// guaranteed to descend, so coverage is asserted against the files the kit really ships
+// rather than trusted to the matcher.
+test('the opencode patterns cover every gate file the kit ships', () => {
+  const pats = Object.keys(JSON.parse(readFileSync(join(HOOKS, 'opencode.snippet.json'), 'utf8')).permission.edit)
+  const covers = p => pats.some(k =>
+    k === p || (k.endsWith('/**') && p.startsWith(k.slice(0, -3) + '/'))
+    || (k.startsWith('**/') && p.endsWith(k.slice(2)))
+    || (k === '**/*.just' && p.endsWith('.just')))
+
+  const shipped = ['common/gate.just', 'rust/rust.just', 'ts/ts.just', 'go/go.just',
+    'python/python.just', 'godot/godot.just', 'common/adr-check.mjs', 'common/docs-check.mjs',
+    'common/review-guard.mjs', 'common/worktree-status.mjs', 'common/review-prompt.md',
+    'common/hooks/bash-guard.mjs', 'common/hooks/edit-guard.mjs']
+  for (const f of shipped) {
+    assert.ok(existsSync(join(REPO, 'kit', f)), `kit/${f} is asserted but not shipped`)
+    assert.ok(covers(`.dev/kit/${f}`), `.dev/kit/${f} matches no opencode pattern — the guard would be silently absent`)
+  }
+  // An ordinary file must NOT be caught, or "ask" becomes noise the user learns to skip.
+  for (const p of ['src/main.rs', 'docs/PRD.md', 'package.json'])
+    assert.ok(!covers(p), `${p} is escalated by an opencode pattern`)
 })
 
 test('the Claude snippet wires both guards on PreToolUse', () => {

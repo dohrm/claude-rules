@@ -20,17 +20,18 @@ to a job nobody can run on their machine, and to a gate that exists only in CI.
   the remote (`git remote -v`) and ask once. The syntax is the same; the runner
   label is what differs.
 - **What is installed**: `.claude-rules.lock` (profiles → technologies), the root
-  `justfile` (the recipes and the `*_dir` variables — the ONE source of paths),
+  `justfile` (its imports, the `*_dir` variables and `check` — the ONE source of
+  paths; the recipes themselves live in the imported library),
   `lefthook.yml` (which tiers already run locally), and the installed kit
-  (`.claude/kit/cicd/` — or `.dev/kit/cicd/` for Cursor/Codex/opencode).
+  (`.dev/kit/cicd/`, whatever the agent).
 - **What exists**: every current workflow file, and whether the repo publishes
   anything (a `bin`/`files` in `package.json`, a `[[bin]]`, a Dockerfile).
 - Then ask only what cannot be read: the **runner label**, whether the repo takes
   **fork PRs**, and who may push tags.
 
-If there is no justfile, say so and stop: wire `kit/common/justfile.snippet` first
-(`claude-rules init`), because the pipeline you would write otherwise is the drift
-this skill exists to prevent.
+If there is no justfile, say so and stop: run `claude-rules init` first (it writes
+one, importing the gate library), because the pipeline you would write otherwise is
+the drift this skill exists to prevent.
 
 ### 2. Audit — only if a pipeline already exists
 

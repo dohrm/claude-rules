@@ -53,8 +53,11 @@ Quoted text is scrubbed before matching, so `git commit -m "drop the -n flag"` i
 not a bypass. Matching stays inside the current `|;&` segment, and the write and the
 gate file must be *correlated* — the redirect has to target the gate file, or the
 mutating command has to carry it. Tested independently, `just check > /dev/null;
-node scripts/docs-check.mjs` escalates, and that command RUNS the gate rather than
-writing it.
+node .dev/kit/common/docs-check.mjs` escalates, and that command RUNS the gate rather
+than writing it.
+
+The gate layer includes `*.just`: the recipes live in the imported library, so guarding
+only the `justfile` that holds the `import` lines would leave the commands unguarded.
 
 **`edit-guard.mjs`** — `PreToolUse` on `Edit|Write`. Two verdicts, like its sibling:
 
@@ -103,9 +106,9 @@ in `test/hooks.test.mjs` of this library. In a consuming repo:
 
 ```bash
 echo '{"tool_input":{"command":"git commit --no-verify -m x"}}' \
-  | node .claude/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=2
+  | node .dev/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=2
 echo '{"tool_input":{"command":"git commit -m \"drop the -n flag\""}}' \
-  | node .claude/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=0, silent
+  | node .dev/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=0, silent
 ```
 
 A hook that is wired but never fires is indistinguishable from no hook at all —

@@ -22,7 +22,10 @@ index is the alert table in `docs/OBSERVABILITY.md`; if there is none, keep
   deploy, resource exhaustion) — say so and pick one.
 - Read `docs/OBSERVABILITY.md` for the alert that points here, and `ops/slo.md`'s
   severity meaning: a page implies a user-visible symptom and an action available now.
-- **Harvest the real commands from the repo** — the `justfile` recipes, the deploy
+- **Harvest the real commands from the repo** — the `justfile` recipes AND the files it
+  `import`s (a root justfile usually holds only the composition; the commands live in
+  `.dev/kit/*/*.just`, so `just --summary` lists the names and the library holds the
+  bodies), the deploy
   manifests (actual namespace, deployment and container names), the CLI, the migration
   tool, the flag mechanism. A runbook full of plausible-looking commands is worse than
   no runbook: it costs the responder the time to discover each one is wrong.

@@ -57,7 +57,15 @@ function parseAgents(fallback) {
 // `paths:`, meaningless to it) live in .dev/rules/ instead — same neighbourhood as
 // .dev/kit/, and nothing picks them up by accident.
 const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills', antigravity: '.agents/skills', codex: '.agents/skills', opencode: '.opencode/skills' }
-const KIT_DIR   = { claude: '.claude/kit',    cursor: '.dev/kit',       antigravity: '.dev/kit',       codex: '.dev/kit',       opencode: '.dev/kit' }
+// The kit is the ONE kind no emitter transforms: executable gates, copied verbatim,
+// byte-identical for every agent. And nothing reads it the way Claude auto-reads
+// .claude/rules/ — its only consumers name the path themselves (the justfile,
+// lefthook, settings.json). So a per-agent destination bought nothing and cost two
+// things: a second identical tree in a multi-agent install, and a justfile whose
+// import path depended on whichever agent happened to be first in the lock. ONE home,
+// agent-neutral, next to .dev/rules/.
+const KIT_DIR = '.dev/kit'
+const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put it
 const AGENTS_RULE_DIR = '.dev/rules'
 
 // ------------------------------------------------------------------ fs utils
@@ -192,8 +200,12 @@ function emitSkill(s, entry, agent) {
   for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return null
 }
-function emitKit(s, entry, agent) {
-  const dest = join(KIT_DIR[agent], basename(entry.from))
+function emitKit(s, entry, agent, ctx) {
+  // One destination for every agent, so the second agent would re-copy the same
+  // bytes and print the same line twice. Same guard as the AGENTS.md accumulator.
+  if (ctx.kit.has(entry.from)) return null
+  ctx.kit.add(entry.from)
+  const dest = join(KIT_DIR, basename(entry.from))
   for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
@@ -320,7 +332,7 @@ function destsFor(entry, agent) {
   const name = basename(entry.from)
   switch (entry.kind) {
     case 'skill': return [join(SKILL_DIR[agent], name)]
-    case 'kit':   return [join(KIT_DIR[agent], name)]
+    case 'kit':   return [join(KIT_DIR, name)]
     case 'rule':
       if (agent === 'claude') return [entry.to]                                   // file or dir
       if (agent === 'cursor') return [isFileFrom(entry.from) ? join('.cursor/rules', name.replace(/\.md$/, '.mdc')) : join('.cursor/rules', name)]
@@ -332,6 +344,33 @@ function destsFor(entry, agent) {
       return []                                                                   // cursor/antigravity/codex: skipped on add
     default: return []
   }
+}
+
+// Every kit directory this registry can emit — the whitelist the legacy purge below
+// deletes by name, so a directory a repo put under the old kit root by hand survives.
+const kitNames = () => new Set([...registry.shared, ...Object.values(registry.profiles).flat()]
+  .filter(e => e.kind === 'kit').map(e => basename(e.from)))
+
+// The kit moved from .claude/kit/ to one agent-neutral .dev/kit/. An install that
+// predates the move leaves the old tree on disk, and that tree is the failure mode
+// this change exists to kill: a justfile still pointing at it never sees an `update`
+// again. So add/update/remove purge it — BY NAME, one registry-known directory at a
+// time, never `rm -rf` on the root.
+function purgeLegacyKit() {
+  if (!existsSync(LEGACY_KIT_DIR)) return
+  const known = kitNames()
+  const gone = []
+  for (const name of readdirSync(LEGACY_KIT_DIR)) {
+    if (!known.has(name)) continue
+    rmSync(join(LEGACY_KIT_DIR, name), { recursive: true, force: true })
+    gone.push(name)
+  }
+  if (!gone.length) return
+  // Only when nothing of the repo's own is left — an unknown directory keeps it alive.
+  const rest = readdirSync(LEGACY_KIT_DIR)
+  if (!rest.length) rmSync(LEGACY_KIT_DIR, { recursive: true, force: true })
+  console.log(`  ✗ ${LEGACY_KIT_DIR}/{${gone.join(',')}}  (moved to ${KIT_DIR}/ — update the paths in your justfile, lefthook.yml and settings.json)`)
+  if (rest.length) console.log(`  • ${LEGACY_KIT_DIR}/ kept: ${rest.join(', ')} — not ours.`)
 }
 
 // Drop the index rows of removed profiles from the AGENTS.md managed block.
@@ -405,6 +444,7 @@ function remove(profilesArg) {
     else pruneAgentsRefs([...new Set(removedRuleDirs)])
   }
   if (fullUninstall) {
+    purgeLegacyKit()
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
   } else {
@@ -455,7 +495,7 @@ async function install(profiles, ref, agents, modules) {
   if (scopes.length) console.log(`Modules: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { inline: [], refs: [], seen: new Set(), scope: { prefixes: [], langProfiles } }
+  const ctx = { inline: [], refs: [], seen: new Set(), kit: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
   for (const { e: entry, profile } of owned) {
     const s = await makeStaged(ref, entry)
@@ -469,6 +509,7 @@ async function install(profiles, ref, agents, modules) {
     if (s.temp) rmSync(s.dir, { recursive: true, force: true })
   }
   flushAgentsMd(ctx)
+  purgeLegacyKit()
   writeLock(ref, profiles, agents, modules)
   console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
@@ -505,9 +546,9 @@ function genLefthook(techs) {
 const JUST_START = '# claude-rules:start (managed — derived from .claude-rules.lock)'
 const JUST_END = '# claude-rules:end'
 const DIR_VAR = { rust: 'rust_dir', ts: 'ts_dir', go: 'go_dir', python: 'python_dir' }
-function genDirsBlock(modules) {
+function genDirsBlock(modules, only = null) {
   const notes = []
-  const lines = Object.entries(DIR_VAR).map(([profile, name]) => {
+  const lines = Object.entries(DIR_VAR).filter(([p]) => !only || only.includes(p)).map(([profile, name]) => {
     const claims = Object.entries(modules || {}).filter(([, ps]) => ps.includes(profile)).map(([d]) => d)
     // `modules` allows a language in several places; a `*_dir` is one directory.
     // Two claimants means the recipe has to cover both, so it runs from the root.
@@ -516,7 +557,13 @@ function genDirsBlock(modules) {
   })
   return { block: [JUST_START, ...lines, JUST_END].join('\n'), notes }
 }
-function writeManagedDirs(file, modules) {
+// A variable belongs in the block when its language is LOCKED (so the library that
+// reads it is imported) — or when the file still mentions it outside the block. That
+// second arm is not tidiness: a justfile mid-migration keeps inline recipes for a tech
+// this install does not know about, and dropping the variable under them is a parse
+// error. Same rule on a file init just wrote and on one it found, so re-running init
+// never widens or narrows what the previous run produced.
+function writeManagedDirs(file, modules, techs) {
   // Nothing declared, nothing derived: the snippet's defaults and their examples
   // are more useful than three lines of `"."`. Same principle as the glob
   // rewriting — the installer only touches what it was asked to.
@@ -527,13 +574,113 @@ function writeManagedDirs(file, modules) {
     console.log(`• ${file}: no managed block — wrap your *_dir variables in "${JUST_START}" / "${JUST_END}" for init to keep them in sync with the lock.`)
     return
   }
-  const { block, notes } = genDirsBlock(modules)
-  writeFileSync(file, content.replace(re, block))
+  const outside = content.replace(re, '')
+  const only = Object.entries(DIR_VAR).filter(([p, v]) => techs.includes(p) || outside.includes(v)).map(([p]) => p)
+  const { block, notes } = genDirsBlock(modules, only)
+  const next = content.replace(re, block)
+  if (next === content) return                  // nothing to say: the block already agrees
+  writeFileSync(file, next)
   console.log(`✓ ${file}: *_dir block derived from the lock's modules.`)
   for (const n of notes) console.log(`  • ${n}`)
 }
 
-// `check` is THE recipe — the one an agent closes its loop on. The snippet has to
+// The gates are a just LIBRARY under .dev/kit/, and the root justfile IMPORTS them.
+// That is the whole point: a snippet merged by hand could never be updated again, so
+// every fix stayed upstream and every installed repo drifted. What the repo writes is
+// the COMPOSITION — where each technology lives, what `check` runs, what it overrides —
+// and `update` refreshes the recipes underneath it.
+//
+// `import` needs just >= 1.18; the two `allow-duplicate-*` settings (what lets this
+// file override the library) need >= 1.27.
+const JUST_MIN = '1.27'
+// Derived from what is ON DISK, not from a registry field: a profile whose kit ships a
+// `.just` gets imported, and the CLI stays dumb. Written with forward slashes — `just`
+// takes them on every platform, and a backslash would be an escape in the justfile.
+function kitImports() {
+  if (!existsSync(KIT_DIR)) return []
+  const found = []
+  for (const d of readdirSync(KIT_DIR)) {
+    const sub = join(KIT_DIR, d)
+    if (!statSync(sub).isDirectory()) continue
+    for (const f of readdirSync(sub)) if (f.endsWith('.just')) found.push(`${KIT_DIR}/${d}/${f}`)
+  }
+  // common first — it defines `base`, which the language libraries read. Then
+  // alphabetical, so re-running init on the same install yields the same file.
+  const rank = p => (p.includes('/common/') ? 0 : 1)
+  return found.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+}
+const MUTATOR = { rust: 'rust-mutate', ts: 'ts-mutate', go: 'go-cover', python: 'python-mutate' }
+function genJustfile(techs, modules) {
+  const imports = kitImports()
+  const deps = techs.map(checkDep).join(' ')
+  const mutators = techs.map(t => MUTATOR[t]).filter(Boolean)
+  const out = [
+    '# The gate, composed. Written once by `claude-rules init` — yours from here on.',
+    '#',
+    `# The recipes are a LIBRARY under ${KIT_DIR}/, imported below, and \`claude-rules update\``,
+    '# refreshes it — so a fix upstream reaches this repo. THIS file holds only what is',
+    '# true of this repo: where each technology lives, what `check` runs, what it',
+    '# overrides, and whatever else you add.',
+    '#',
+    `# Needs just >= ${JUST_MIN} (install: cargo/brew/scoop install just).`,
+    '',
+    '# A recipe or variable defined here wins over the imported one. That is what makes',
+    '# the library adaptable without forking it, and just needs both settings to allow it.',
+    'set allow-duplicate-recipes := true',
+    'set allow-duplicate-variables := true',
+    '',
+    ...(imports.length ? imports.map(p => `import '${p}'`) : [`# (no kit installed yet — \`claude-rules add <profile...>\`, then re-run init)`]),
+    '',
+    '# Where each technology lives, derived from the lock\'s `modules` — declare them with',
+    '# `add <profile...> --module <dir>` (e.g. api/, apps/web, services/ingest) and this',
+    '# block follows. Edit it by hand if you prefer, but the next `init` rewrites it;',
+    '# nothing outside the markers is ever touched.',
+    genDirsBlock(modules, techs).block,
+    '',
+    '# The trunk a feature is measured against. The library defaults to origin/main.',
+    '# base := "origin/trunk"',
+    '',
+    '# THE recipe — the one an agent closes its loop on before handing back, in seconds.',
+    '# Tier 3 is deliberately absent: it costs minutes, so it runs per coherent block'
+      + (mutators.length ? ' (`mutate-diff` below),' : ','),
+    '# not per iteration. Opt-in gates to add here as you enable',
+    '# them: adr-check docs-check rules-check dup-check'
+      + (existsSync(join(KIT_DIR, 'godot')) ? ' — and godot-check, once godot_dir/godot_bin/godot_export_preset are set' : ''),
+    deps ? `check: ${deps}` : '# check: adr-check docs-check    # no language locked — list the gates this repo has',
+  ]
+  // Only when there is a mutation recipe to name. A hint pointing at a recipe no import
+  // provides (`rust-mutate` in a repo with no Rust) is worse than no hint at all.
+  if (mutators.length) out.push('',
+    '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
+    '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
+    '# Run it when a coherent block is finished, BEFORE pushing. Uncomment once the tool',
+    '# is installed — an absent recipe is a valid answer, and the agent reports mutation',
+    '# as not-run rather than pretending. Gitignore pr.diff and coverage.out.',
+    `# mutate-diff: ${mutators.join(' ')}`)
+  return out.join('\n') + '\n'
+}
+
+// Reported, never rewritten: a justfile that predates the library holds the recipes
+// inline, and only the human can tell which of them drifted on purpose. The proof that
+// a migration lost nothing is deterministic, so it is what gets printed.
+function reportImportDrift(file) {
+  const text = readFileSync(file, 'utf8')
+  const imports = kitImports()
+  const missing = imports.filter(p => !text.includes(p))
+  if (!imports.length || !missing.length) {
+    if (imports.length) console.log(`  ✓ imports the kit library (${imports.length} file(s))`)
+    return
+  }
+  console.log(`  • ${missing.length} kit librar${missing.length > 1 ? 'ies are' : 'y is'} not imported — add at the top of ${file}:`)
+  if (!/allow-duplicate-recipes/.test(text)) console.log('      set allow-duplicate-recipes := true')
+  if (!/allow-duplicate-variables/.test(text)) console.log('      set allow-duplicate-variables := true')
+  for (const p of missing) console.log(`      import '${p}'`)
+  console.log(`    Then delete the recipes the library now provides, keeping any you changed on purpose.`)
+  console.log(`    \`just --summary\` and \`just --evaluate\` flatten imports, so a before/after diff of both`)
+  console.log(`    is the proof the migration lost nothing (${KIT_DIR}/common/README.md).`)
+}
+
+// `check` is THE recipe — the one an agent closes its loop on. The generated file has to
 // ship some version of it and ships the Rust one, so a python-only repo got a gate
 // that runs cargo and never runs `python-check`: the locked tech was not in the gate
 // at all. The lock knows which techs exist, so derive the line from it on creation.
@@ -543,12 +690,6 @@ function writeManagedDirs(file, modules) {
 const CHECK_RE = /^check:[ \t]*(.*)$/m
 const checkDep = t => `${t}-check`
 const isTechDep = d => Object.keys(GLOB).some(t => checkDep(t) === d)
-function writeCheckRecipe(file, techs) {
-  if (!techs.length) return                     // no language locked: nothing to derive
-  const content = readFileSync(file, 'utf8')
-  if (!CHECK_RE.test(content)) return
-  writeFileSync(file, content.replace(CHECK_RE, `check: ${techs.map(checkDep).join(' ')}`))
-}
 function reportCheckDrift(file, techs) {
   const m = readFileSync(file, 'utf8').match(CHECK_RE)
   const want = techs.map(checkDep)
@@ -603,19 +744,20 @@ function initRepo() {
   const lock = readLock()
   if (!lock) { console.error(`No ${LOCK} — run "add <profile...>" first.`); process.exit(1) }
   const techs = lock.profiles.filter(p => GLOB[p])
-  const kitBase = KIT_DIR[(lock.agents && lock.agents[0]) || 'claude']
-  const snippet = join(kitBase, 'common', 'justfile.snippet')
+  const kitBase = KIT_DIR
   const justfile = ['justfile', 'Justfile'].find(existsSync)
   if (justfile) {
-    console.log(`• ${justfile} exists — merge ${snippet} into it (the installer only owns the block below).`)
+    console.log(`• ${justfile} exists — left untouched (the installer only owns the block below).`)
+    reportImportDrift(justfile)
     reportCheckDrift(justfile, techs)
-  } else if (existsSync(snippet)) {
-    copyFileSync(snippet, 'justfile')
-    writeCheckRecipe('justfile', techs)
-    console.log(`✓ created justfile (from ${snippet})${techs.length ? `, \`check\` runs: ${techs.map(checkDep).join(' ')}` : ''}.`)
-  } else console.log(`• ${snippet} missing — run "add" first.`)
+  } else if (existsSync(kitBase)) {
+    writeFileSync('justfile', genJustfile(techs, lock.modules))
+    const n = kitImports().length
+    console.log(`✓ created justfile — imports ${n} kit librar${n === 1 ? 'y' : 'ies'}${techs.length ? `, \`check\` runs: ${techs.map(checkDep).join(' ')}` : ''}.`)
+    for (const note of genDirsBlock(lock.modules, techs).notes) console.log(`  • ${note}`)
+  } else console.log(`• no ${kitBase}/ — run "add <profile...>" first.`)
   const target = justfile || (existsSync('justfile') ? 'justfile' : null)
-  if (target) writeManagedDirs(target, lock.modules)
+  if (target) writeManagedDirs(target, lock.modules, techs)
 
   // Written once, then left alone — same contract as the justfile above.
   if (lock.agents && lock.agents.includes('claude')) {
@@ -633,7 +775,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/, adr-check.mjs→scripts/ (if the repo keeps ADRs), docs-check.mjs→scripts/ (if it keeps a PRD/PLAN), review-guard.mjs+review-prompt.md→scripts/ (for \`just code-review\`, plus its pre-push trigger from common/lefthook.snippet.yml and \`.work/\` in .gitignore); adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\` in the justfile \`check\` recipe (the locked techs are already wired). Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the opencode/cursor/codex snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
+  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\`/\`dup-check\` in the justfile \`check\` recipe (the locked techs are already wired) and uncomment \`mutate-diff\` once the mutation tools are installed. The gate SCRIPTS need no move any more — the recipes call them in ${KIT_DIR}/common/ directly, so an update refreshes gate and implementation together; \`just code-review\` still needs \`review_cmd\` set to this repo's agent CLI, \`.work/\` gitignored, and its pre-push trigger merged from common/lefthook.snippet.yml. Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the opencode/cursor/codex snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
 }
 
 // --------------------------------------------------------------------- doctor
@@ -668,7 +810,7 @@ function globToRe(glob) {
 }
 
 // The repo's own files. The installer's own output is excluded on purpose:
-// `.claude/kit/portal-http/openapi-ts.config.ts` must not make a `**/*.ts`
+// `.dev/kit/portal-http/openapi-ts.config.ts` must not make a `**/*.ts`
 // rule look alive in a repo that has no TypeScript.
 const SCAN_SKIP = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'vendor', 'coverage', '.next',
   '.claude', '.agents', '.cursor', '.opencode', '.dev'])
@@ -800,7 +942,29 @@ const HARNESS = {
   opencode: { files: ['opencode.json', 'opencode.jsonc'],                      snippet: 'opencode.snippet.json',     wired: s => /--no-verify/.test(s), runs: false },
 }
 
+// A justfile that redefines what the library already provides is the drift the import
+// exists to kill: the copy is frozen at install time, so every fix upstream stops here.
+// A WARNING, not a failure — an install that predates the library is in exactly this
+// state, and the migration is a judgement call the installer must not make for you.
+// The recipe names are read out of the library files, so this stays true as they change.
+function auditJustfile(warn) {
+  const justfile = ['justfile', 'Justfile'].find(existsSync)
+  const libs = kitImports()
+  if (!justfile || !libs.length) return
+  const text = readFileSync(justfile, 'utf8')
+  const own = new Set([...text.matchAll(/^([a-z][a-z0-9-]*)\s*:(?![=])/gm)].map(m => m[1]))
+  for (const lib of libs) {
+    if (text.includes(lib)) continue
+    const recipes = [...readFileSync(lib, 'utf8').matchAll(/^([a-z][a-z0-9-]*)\s*:(?![=])/gm)].map(m => m[1])
+    const shadowed = recipes.filter(r => own.has(r))
+    warn.push(`${justfile} does not import ${lib}`
+      + (shadowed.length ? ` and redefines ${shadowed.length} of its recipes (${shadowed.slice(0, 4).join(', ')}${shadowed.length > 4 ? '…' : ''}) — those copies are frozen at install time and \`update\` cannot reach them` : ' — the gates it ships are unreachable')
+      + `. Migration + the equivalence proof: ${KIT_DIR}/common/README.md`)
+  }
+}
+
 function auditGateLayer(agents, bad, warn) {
+  auditJustfile(warn)
   // --- the floor
   const lefthook = ['lefthook.yml', 'lefthook.yaml'].find(existsSync)
   const hooksDir = gitHooksDir()
@@ -818,12 +982,11 @@ function auditGateLayer(agents, bad, warn) {
       console.log('  • no `review-guard` trigger — a CRITICAL review cannot block a push (opt-in: needs an agent CLI).')
   }
 
-  // --- the harness layer. Per agent, because the kit lands in a different place
-  // for each (.claude/kit for Claude, .dev/kit for the rest) — naming the wrong
-  // one turns a useful notice into a wild-goose chase.
+  // --- the harness layer. One kit dir for every agent, but the WIRING is per host:
+  // the same guards are referenced from .claude/settings.json, opencode.json or
+  // .cursor/hooks.json, and each has to be checked where that host reads it.
   for (const agent of agents) {
-    const kitBase = KIT_DIR[agent]
-    const shipped = existsSync(join(kitBase, 'common', 'hooks'))
+    const shipped = existsSync(join(KIT_DIR, 'common', 'hooks'))
     const host = HARNESS[agent]
     if (!host) {
       if (agent === 'codex') console.log('  • codex has no hooks — .codex/config.toml (sandbox_mode + approval_policy) is the nearest thing, and it loads for TRUSTED projects only.')
@@ -839,7 +1002,7 @@ function auditGateLayer(agents, bad, warn) {
     }
     const wired = texts.filter(t => t.strings.some(host.wired))
     if (!wired.length) {
-      if (shipped) console.log(`  • ${agent}: harness guards installed (${kitBase}/common/hooks/) but nothing wires them — merge ${host.snippet} (opt-in).`)
+      if (shipped) console.log(`  • ${agent}: harness guards installed (${KIT_DIR}/common/hooks/) but nothing wires them — merge ${host.snippet} (opt-in).`)
       continue
     }
     // A path typo makes the hook silently never fire, which is indistinguishable

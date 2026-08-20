@@ -2,7 +2,7 @@
 // build a throwaway docs/ tree, run the script, assert exit code + message.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
@@ -38,6 +38,46 @@ const PHASE = `# Phase 01: A
 
 A thing.
 `
+
+// ------------------------------------------------------------- the just library
+// The gates are a just LIBRARY the consuming repo imports. A `.just` that does not
+// parse is a repo whose every gate is dead — including `just --list` — so this
+// assembles the whole thing the way `init` does and asks `just` itself. Skipped when
+// just is not installed: this must not turn a machine without it into a red suite.
+const JUST = spawnSync('just', ['--version'], { encoding: 'utf8' })
+const LIBS = ['common/gate.just', 'rust/rust.just', 'ts/ts.just', 'go/go.just', 'python/python.just', 'godot/godot.just']
+
+test('the whole kit library parses, and the root justfile overrides it', { skip: JUST.error ? 'just not installed' : false }, () => {
+  withTmpRepo(dir => {
+    for (const lib of LIBS) {
+      const to = join(dir, '.dev/kit', lib)
+      mkdirSync(join(to, '..'), { recursive: true })
+      writeFileSync(to, readFileSync(join(REPO, 'kit', lib), 'utf8'))
+    }
+    writeFileSync(join(dir, 'justfile'),
+      'set allow-duplicate-recipes := true\nset allow-duplicate-variables := true\n'
+      + LIBS.map(l => `import '.dev/kit/${l}'`).join('\n')
+      + '\nrust_dir := "api"\nbase := "origin/trunk"\ncheck: rust-check\n')
+
+    const summary = spawnSync('just', ['--summary'], { cwd: dir, encoding: 'utf8' })
+    assert.equal(summary.status, 0, `the library does not parse:\n${summary.stderr}`)
+    // Every recipe the shipped snippets promise, in one flat namespace — `mod` would
+    // have namespaced them (and moved the working directory), breaking every trigger.
+    const recipes = new Set(summary.stdout.trim().split(/\s+/))
+    for (const r of ['check', 'rust-check', 'ts-check', 'go-check', 'python-check', 'godot-check',
+                     'rust-mutate', 'ts-mutate', 'go-cover', 'python-mutate',
+                     'code-review', 'review-guard', 'adr-check', 'docs-check', 'rules-check', 'dup-check', 'status'])
+      assert.ok(recipes.has(r), `${r} is not resolvable`)
+
+    // The override is the contract that lets a repo adapt a gate without forking it.
+    const vars = spawnSync('just', ['--evaluate'], { cwd: dir, encoding: 'utf8' })
+    assert.equal(vars.status, 0, vars.stderr)
+    assert.match(vars.stdout, /rust_dir\s+:= "api"/, 'the root justfile must win over the library')
+    assert.match(vars.stdout, /base\s+:= "origin\/trunk"/)
+    // The gate scripts are called where they ship — nothing to move into scripts/.
+    assert.match(vars.stdout, /review_prompt\s+:= "\.dev\/kit\/common\/review-prompt\.md"/)
+  })
+})
 
 test('docs-check: no docs/ is not a failure', () => {
   withTmpRepo((dir) => {
