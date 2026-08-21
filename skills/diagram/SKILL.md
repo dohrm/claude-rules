@@ -1,6 +1,6 @@
 ---
 name: diagram
-description: "Create Excalidraw diagrams and visuals (schematics, process flows, slides, illustrations) as valid `.excalidraw` JSON files. Use on /diagram, or when the user wants a diagram, schematic, or visual to illustrate a concept — for a lesson, article, presentation, video, or technical doc. Also on 'Excalidraw', 'process flow', 'flowchart', 'diagram this', 'illustrate this idea'. Dependency-free: it writes the `.excalidraw` file; you open/export PNG or SVG from Excalidraw itself."
+description: "Write valid `.excalidraw` JSON that argues a concept (relationships, causality), not a decoration. Use on /diagram, \"flowchart\", \"illustrate this\". Export happens in Excalidraw — no rendering pipeline."
 allowed-tools: Read, Write, Bash, Glob, AskUserQuestion
 ---
 

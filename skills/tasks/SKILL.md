@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: "Turn ONE phase of `docs/PLAN.md` into the worklist an agent loop executes: explore the code once, freeze the contract as code, then cut the phase into tasks sized to the green boundary — each with its anchor in the existing code and its own done-command. Writes `.work/phase-NN-<slug>.md`, working memory that dies with the branch — never a document under `docs/`. Use on /tasks, \"break this phase into tasks\", \"prepare phase N for the loop\", \"make this phase agent-executable\", \"what do I implement first\". Downstream of /plan, upstream of /loop-setup."
+description: "Cut ONE phase of `docs/PLAN.md` into tasks sized to the green boundary, with anchors in the existing code. Writes `.work/phase-NN-<slug>.md` (gitignored, dies with the branch). Use on /tasks, \"break this phase into tasks\", \"prepare phase N for the loop\". Downstream of /plan, upstream of /loop-setup."
 ---
 
 `/plan` deliberately withholds file names, symbols and layers — a phase is a promise,
@@ -178,24 +178,6 @@ neighbour for the how.>
 
 ## Rules
 
-- **The worklist is memory, never truth.** It never lands under `docs/`, it is
-  gitignored, and it dies with the branch. If something in it deserves to survive,
-  it belongs in an ADR or in the phase — move it there, don't promote the file.
-- **A task is the smallest change that leaves the gate green.** Everything else about
-  granularity follows from that one sentence.
-- **The contract is code.** T0 commits it; the worklist points at it.
-- **Re-split freely; never widen.** A task that turns out too big is split mid-loop —
-  that is the mechanism working. But a *new acceptance criterion* is not a re-split:
-  stop, escalate, back to `/plan`. Scope creep dressed as decomposition is the
-  failure mode this rule exists to catch (`agent/guardrails.md`).
-- **Anchors, not descriptions.** Every task names where it attaches and what to
-  imitate. A task an implementer must go explore to understand is a task you did not
-  finish writing.
-- **Roles, not models.** Planner / implementer / reviewer are roles; who fills them is
-  the host's decision and must never be baked into the worklist.
-- **The gate is the authority.** A reviewer's approval is a proposal; a green gate is
-  permission (`agent/autonomy.md`). Ticking every box is not "phase done" — the
-  phase's acceptance criteria being green is.
-- **Declare every stub.** T0's stubs are listed with the task that kills each one. An
-  undeclared stub at hand-back is the same offence here as anywhere else.
-- Plan mode: `.work/*` are read-only planning artifacts — writing them is allowed.
+- **Re-split freely; never widen.** A too-big task splits mid-loop. A *new acceptance criterion* is not a re-split: stop, back to `/plan`.
+- **Roles, not models.** Planner / implementer / reviewer are roles; never bake a model name into the worklist.
+- Plan mode: writing `.work/*` is allowed.

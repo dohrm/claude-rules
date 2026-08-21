@@ -30,8 +30,7 @@
       { "from": "kit/godot", "to": ".dev/kit/godot", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just godot-lint`/`godot-check`). `claude-rules init` writes the `import '.dev/kit/godot/godot.just'` line; override godot_dir/godot_bin/godot_export_preset in your justfile (the lock cannot derive a Godot binary or an export preset) and add `godot-check` to `check` once they are right. chmod +x check-no-new-gd.sh. Godot project needs C# (.NET) + export templates + GDUnit4 + a matching export preset. Ships Roslyn analyzers (GODOT001 hardcoded values, GODOT002 signal placement, GODOT003 string node paths) that run inside dotnet build — reference the analyzer .csproj from the game project. The headless-export gate catches broken .tscn/.tres refs the C# compiler can't. See .dev/kit/godot/README.md." }
     ],
     "hexagonal": [
-      { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule" },
-      { "from": "skills/rust-add-domain", "to": ".claude/skills/rust-add-domain", "kind": "skill", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go), path-scoped so only your language's loads. `rust-add-domain` is the rust DI-container transformation skill (needs rust-di-container.md). `architect` recommends this for backend/fullstack shapes." }
+      { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go), path-scoped so only your language's loads. `architect` recommends this for backend/fullstack shapes." }
     ],
     "cqrs": [
       { "from": "rules/cqrs", "to": ".claude/rules/cqrs", "kind": "rule", "_note": "Architecture pattern — gate: EXPLICIT opt-in only (non-standard). The rust variant assumes the home library `cqrs-rust-lib` (github.com/dohrm/cqrs-rust-lib). Add explicitly: `add cqrs`." }

@@ -14,6 +14,12 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Breaking
 
+- **`/rust-add-domain` is gone.** It was a transformation recipe for one AppState DI
+  scaffold, not a reusable methodology — the `hexagonal` profile keeps the rules
+  (`rust-di-container.md` and friends), not the skill. After `update`, delete the
+  leftover copy (`doctor` will flag it): `.claude/skills/rust-add-domain`,
+  `.agents/skills/rust-add-domain`, `.opencode/skills/rust-add-domain`.
+
 - **The kit has one home: `.dev/kit/`, for every agent.** It was `.claude/kit/` for
   Claude and `.dev/kit/` for the other four. The kit is the only asset kind no emitter
   transforms — executable gates, copied verbatim — and nothing reads it automatically
@@ -86,6 +92,19 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   `rules/portal-flat/react.md` → `rules/portal-http/react.md`, and
   `kit/portal-flat/openapi-ts.config.ts` → `kit/portal-http/`. A Tauri app installs
   `portal-flat` + `tauri` and **never** `portal-http`.
+
+### Changed
+
+- **Always-on rules are shorter.** `agent/autonomy.md` is a procedure, not an
+  essay. `agent/guardrails.md` and the review contract now treat a comment-only
+  hunk as a failed edit: rewrite a comment only when the code change made it
+  false.
+- **Skill prompts: less restatement, same contracts.** Descriptions dropped the
+  8-synonym trigger lists. `/prd` description no longer names a stale 8-section
+  template. Skills defer to `product/documents.md` / `agent/decision-records.md`
+  instead of reciting budgets. `/experience` dropped the DX/Web/CLI knowledge
+  book (anti-slop stays). `/investigate` is agent-agnostic and may instrument
+  with a debugger or a failing test, not only tagged logs.
 
 ### Added
 

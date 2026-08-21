@@ -1,6 +1,6 @@
 ---
 name: loop-setup
-description: "Frame and write a self-terminating agent loop before running it: check the 4 preconditions, bound the objective, pin a measurable done-command, set budget/iteration guardrails, and produce `.work/loop.md` + the ready-to-run loop prompt. Use on /loop-setup, \"set up a loop\", \"automate a repetitive task\", \"run an agent until it's done\", \"loop until the tests pass\", \"make this run autonomously\", \"how do I use /loop\". Helps CADRE a loop for the current host — Claude Code /loop, Codex /goal, or a Cursor automation — it does not replace those commands. Not for one-off tasks."
+description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/loop.md` (or Guardrails on a /tasks worklist) + the loop prompt. Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start the loop. Not for one-off tasks."
 ---
 
 You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state file, then hand the exact command to run.
@@ -125,12 +125,6 @@ On any of these: stop, write the reason and current state under `## Blocked on t
 
 ## Rules
 
-- **"Done" is a green command, never your own say-so** — re-run the done-command and read the exit code each turn (see `rules/agent/autonomy.md` if installed).
-- **No loop without a cap and an escalation point.** Exhaustion escalates loudly; it never silently passes or fakes green.
-- **The agent is never the authority on "finished"** — the done-command is. An agent's "looks done" is a proposal, not permission.
-- **Bound the scope** — the loop touches only what the state file lists; no opportunistic refactors, no scope creep (see `rules/agent/guardrails.md` if installed).
-- **Refuse the wander** — if the objective can't be made measurable, don't scaffold a loop; say why and stop.
-- **State lives in a file, not in context** — so a fresh turn, or a restarted loop, resumes correctly.
-- **One state file, under `.work/`, gitignored.** It is working memory: it dies with the work. If it holds something worth keeping, that thing belongs in a document or an ADR — move it there rather than promoting the file.
-- **Never write a second plan next to `/tasks`'** — a phase worklist already is the plan; you add the guardrails to it.
-- Plan mode: `.work/*` are read-only planning artifacts — writing them is allowed.
+- Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point.
+- One state file under `.work/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
+- Plan mode: writing `.work/*` is allowed.

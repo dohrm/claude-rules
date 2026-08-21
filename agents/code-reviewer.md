@@ -51,8 +51,9 @@ the code moved under it.
 
 - **Correctness**: bugs, panics, races, unhandled errors, boundary/off-by-one,
   wrong error propagation, security.
-- **AI slop** — name it: verbose comments on obvious code, abstractions "just in
-  case", copy-paste boilerplate, generic names (`data`, `result`, `tmp`, `item`)
+- **AI slop** — name it: verbose comments on obvious code, comment-only hunks
+  (reworded comments with no code change), abstractions "just in case",
+  copy-paste boilerplate, generic names (`data`, `result`, `tmp`, `item`)
   where a domain name exists, gratuitous wrappers/trait impls.
 - **YAGNI**: code serving no current requirement.
 - **Wrong layer**: logic in the wrong module/crate; architectural boundary

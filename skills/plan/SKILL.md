@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Break a PRD into independently shippable phases as vertical slices (tracer bullets), then produce or extend `docs/PLAN.md` following a fixed template (durable architectural decisions + phases with user stories, deliverable, acceptance criteria, blockers). Use on /plan, \"break down the PRD\", \"write the implementation plan\", \"slice this into phases\", \"vertical slices\", \"tracer bullets\", or whenever a PRD must become a versioned execution plan. Natural downstream of /prd."
+description: "Break a PRD into independently shippable vertical slices. Writes `docs/PLAN.md` (and `docs/plan/` past the split). Use on /plan, \"slice this into phases\", \"tracer bullets\". Downstream of /prd; hands off to /tasks."
 ---
 
 Break a PRD into independently shippable phases as vertical slices (tracer bullets). Output to `docs/PLAN.md`.
@@ -15,7 +15,7 @@ Default: read `docs/PRD.md`. If a file path is passed as an argument, read it. I
 
 If `docs/PLAN.md` (or `docs/plan/`) already exists, read the index and only the phases still open. Spot the PRD user stories not yet covered by an existing phase, and inconsistencies with a PRD that has moved. **Never rewrite a shipped phase** — it records what was promised, not what was built. Propose additional phases, and flag contradictions to the user before writing.
 
-**A plan is meant to grow — the file is not.** Growth arrives as a new phase *unit*, never as more prose inside an existing one (`product/documents.md`). If the plan is a single file and is now past ~6 phases or ~400 lines, propose the split before adding anything:
+**A plan is meant to grow — the file is not.** Growth is a new phase unit (`product/documents.md`). If the single file is past the split, propose the migration before adding:
 
 > *"The plan is at N phases / L lines. I'd split it: `docs/plan/NN-<slug>.md` per phase, `docs/PLAN.md` becomes the phase table. Shipped phases move as-is. Go?"*
 
@@ -67,10 +67,10 @@ Iterate until validated.
 
 ### 7. Write the plan
 
-Create `docs/` if absent. **Two shapes, one threshold** (`product/documents.md`):
+Create `docs/` if absent. **Two shapes** (`product/documents.md`):
 
-- **Up to ~6 phases** — one file, `docs/PLAN.md`: the header, then each phase as `<phase-unit>` under an `## Phase N: …` heading. A directory for three phases is ceremony.
-- **Beyond that** — `docs/PLAN.md` becomes the index (`<plan-index-template>`), one file per phase in `docs/plan/NN-<slug>.md` (`<phase-unit>`).
+- **Below the split** — one file, `docs/PLAN.md`: the header, then each phase as `<phase-unit>` under `## Phase N: …`.
+- **Beyond it** — `docs/PLAN.md` is the index (`<plan-index-template>`), one file per phase in `docs/plan/NN-<slug>.md` (`<phase-unit>`).
 
 In extension mode, add units; never touch a shipped phase. Confirm what was written and, if you migrated, that the phase contents moved unchanged.
 

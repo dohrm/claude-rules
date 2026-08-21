@@ -1,6 +1,6 @@
 ---
 name: postmortem
-description: "Blameless retrospective of an incident that already happened: reconstruct the timeline from evidence (alerts, deploys, commits, logs), separate time-to-detect from time-to-mitigate, name the contributing factors instead of one comforting root cause, keep what limited the damage, and turn each lesson into a system change with an owner and a date. Produces `docs/postmortem/<YYYY-MM-DD>-<slug>.md` and hands off deltas to /runbook, /observability, /architect or the kit — it never edits them itself. Use on /postmortem, \"post-mortem\", \"incident review\", \"what happened\", \"RCA\", \"root cause analysis\", \"we had an outage\", \"write up the incident\", \"retrospective on the outage\". Retrospective mirror of /pre-mortem, which attacks a failure that has not happened yet."
+description: "Blameless incident retrospective: timeline from evidence, detect/mitigate/resolve separately, contributing factors not one root cause. Writes `docs/postmortem/<YYYY-MM-DD>-<slug>.md` and hands off deltas — never edits the targets. Use on /postmortem, \"incident review\", \"RCA\", \"we had an outage\". Mirror of /pre-mortem."
 ---
 
 An incident already happened. Your job is to make **this class of failure** less likely,

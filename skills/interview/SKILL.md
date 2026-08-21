@@ -1,6 +1,6 @@
 ---
 name: interview
-description: "Structured questioning to frame a feature or brainstorm an app: one question at a time, walk down the decision tree, always give a justified recommendation. Use on /interview, \"help me plan\", \"I have a feature/app idea\", \"let's think this through\", \"brainstorm this with me\". Natural upstream of /prd."
+description: "Frame a feature or app: one question at a time, walk the decision tree, always give a justified recommendation. Use on /interview, \"help me plan\", \"I have an app idea\". Upstream of /prd."
 ---
 
 Interview me relentlessly about every aspect of this plan until we reach a shared understanding.

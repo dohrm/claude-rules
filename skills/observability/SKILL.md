@@ -1,6 +1,6 @@
 ---
 name: observability
-description: "Define what a service must emit and what it promises: pick the 1–3 user journeys that matter, turn them into SLIs the existing telemetry can actually compute, propose SLO targets with their cost, produce the burn-rate alert table (owner + runbook + action each), and audit the code for missing instrumentation and cardinality bombs. Writes `docs/OBSERVABILITY.md` and proposes one ADR per SLO target. Use on /observability, \"set up monitoring\", \"observability\", \"define SLOs\", \"SLI/SLO/error budget\", \"what should we alert on\", \"add metrics/tracing\", \"instrument this service\", \"alert fatigue\", \"are we monitoring the right things\". Downstream of /prd (its success criteria name the journeys) and /architect (its boundaries name the dependencies)."
+description: "Pick 1–3 journeys, derive computable SLIs, propose SLO targets as ADRs, audit instrumentation, write the burn-rate alert table. Writes `docs/OBSERVABILITY.md`. Use on /observability, \"define SLOs\", \"what should we alert on\". Doctrine in `ops/observability.md` and `ops/slo.md`."
 ---
 
 You decide **what a service promises and what it must emit to prove it**. Two failure

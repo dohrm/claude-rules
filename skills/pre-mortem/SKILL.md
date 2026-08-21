@@ -1,11 +1,11 @@
 ---
 name: pre-mortem
-description: "Adversarial, prospective risk gate: assume the project is already dead at a chosen horizon and work backward to the causes, through one or more attacker personas, then iterate mitigations with the user until residual risk is acceptable. Produces one lethality-ranked failure register per exercise under `docs/premortem/<target>-<horizon>.md` and hands off precise deltas to /prd, /architect, or /plan — it never edits those files itself. Use on /pre-mortem, \"pre-mortem\", \"why will this fail\", \"what could kill this project in N months\", \"stress-test the design\", \"attack this PRD/ADR\", \"risk analysis before we build\". A review gate downstream of /prd and /architect that loops back into them. (Unlike /architect, it assumes failure has already happened — it does not weigh a decision, it reverse-engineers a death.)"
+description: "Assume the project is already dead at a chosen horizon; work backward to causes. Writes `docs/premortem/<target>-<horizon>.md` and hands off deltas — never edits PRD/ADR/PLAN. Use on /pre-mortem, \"why will this fail\", \"attack this PRD\". Unlike /architect, it does not weigh a decision."
 ---
 
-You run a pre-mortem: you assume the project has **already failed** at a chosen future horizon and reason backward to the causes. This is not risk-awareness while deciding (that is `/architect`) — it is a prospective autopsy of a death that hasn't happened yet, run through the eyes of people who would witness it. Then you drive the design to an **acceptable residual risk** by iterating mitigations with the user.
+You run a pre-mortem: assume the project has **already failed** at a chosen horizon and reason backward. This is not `/architect` weighing a decision — it is a prospective autopsy. Drive residual risk to **acceptable** by iterating mitigations with the user.
 
-Output: one lethality-ranked failure register per exercise, at `docs/premortem/<target>-<horizon>.md` (e.g. `prd-6mo.md`, `architecture-2yr.md`). An exercise is identified by **(target, horizon)** — personas are the lenses applied within it, not separate files, so all findings merge into one ranked register. Mitigations that touch other documents are emitted as **precise deltas** and handed off to `/prd`, `/architect`, or `/plan` — you own `docs/premortem/` and nothing else.
+Output: `docs/premortem/<target>-<horizon>.md`. One file per **(target, horizon)**; personas are lenses inside it. Mitigations that touch other documents are **deltas**, handed to `/prd`, `/architect`, or `/plan`. You own `docs/premortem/` and nothing else.
 
 ## Process
 
@@ -112,13 +112,7 @@ One paragraph: the central imbalance or assumption that orients every failure be
 
 ## Rules
 
-- **Assume failure — don't weigh it.** Every finding starts from "it's dead", never from "this might be risky". If you're listing pros and cons, you've drifted into `/architect`.
-- **Lethality order, always.** The quiet conceptual death outranks the loud operational one. Rank by what kills, not by what's easy to see.
-- **Every failure carries a leading indicator.** No early signal → unmanageable → the finding is incomplete.
-- **One doc, one owner.** You own `docs/premortem/` only. Never edit `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/adr/*`, or `docs/PLAN.md`. Emit deltas and hand off to their skills.
-- **Verify freely, repair only on go-ahead.** Read-only/idempotent probes to prove a leading indicator (run the gate, `grep`, `cargo deny`) are encouraged. Mutating code or repo config to *apply* a mitigation is not part of the analysis — propose it as a delta and apply only on the user's explicit go-ahead. Never leave a repo changed as a side effect of analysing it.
-- **One file per (target, horizon).** Personas are lenses inside a register, never their own files — findings must merge into a single ranked set, not fragment by persona. A new target or a new horizon earns a new file.
-- **Simplicity of mitigation.** The cheapest change that defuses the risk wins. A mitigation that adds more moving parts than the risk warrants is itself a new pre-mortem finding.
-- **The user signs off on "acceptable".** You surface residual risk; you never certify it as tolerable on your own.
-- **No invented severity.** If likelihood or impact needs a number the target doesn't give, ask — don't guess a band to make the register look decided.
-- **Plan mode:** files under `docs/premortem/` are read-only design artifacts — writing them is allowed.
+- Findings start from "it's dead". Pros-and-cons is `/architect`.
+- You own `docs/premortem/` only. Emit deltas; never edit the target.
+- The user signs off on "acceptable". No invented severity band.
+- Plan mode: writing `docs/premortem/` is allowed.

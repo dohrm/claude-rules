@@ -32,11 +32,12 @@ or ask before writing code.
 - Prefer deterministic tests over mocked complexity.
 - Keep public APIs narrow; make invalid states hard to represent where cheap.
 - Keep error messages useful for the user or operator, not just the compiler.
+- Leave existing comments alone unless the change makes them false.
 
 ## After coding — before calling it done
 
-- Run the quality gates unless impossible (`just check` / the repo's gate).
-- Read the diff as a reviewer, not as the author.
+- Close the loop (`agent/autonomy.md`) — `just check`, then the Tier 3 the repo has.
+- Read the diff as a reviewer, not as the author. A comment-only hunk is a failed edit.
 - Remove dead code, unused dependencies, placeholder abstractions, vague comments.
 - Check docs still match behavior.
 - Mention any skipped gate or known risk in the final response.
@@ -52,6 +53,9 @@ or ask before writing code.
 - Catch-all errors (e.g. `Other(String)`) in domain code.
 - Tests that only assert construction, or mocks returning mocks.
 - Comments explaining obvious code while omitting the real invariant.
+- Rewriting, reformatting, or adding a comment the code change did not make
+  false. **A comment-only hunk is a failed edit.** Update a comment only when
+  the change made it untrue.
 - New dependencies where the stdlib or an existing dependency is enough.
 - Architecture changes without documentation updates.
 - The same block pasted into three places, each copy drifting on its own.
