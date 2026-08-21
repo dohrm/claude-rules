@@ -1,6 +1,6 @@
 ---
 name: design-system
-description: "Consult on a product's design system and produce `docs/DESIGN.md` + an HTML preview (type specimen + palette + one screen mockup). Propose a coherent, opinionated system (aesthetic, typography, color, layout, spacing, motion) with a SAFE/RISK breakdown. Use on /design-system, \"create the design system\", \"write DESIGN.md\", \"design from scratch\", \"design consultation\", or whenever a project's visual identity must be formalized. Natural pair of /prd (upstream) and /plan (downstream). (Distinct from any per-page artifact styling — this defines the project-wide system.)"
+description: "Propose a project-wide visual system and write `docs/DESIGN.md` + `docs/design-preview.html`. Use on /design-system, \"write DESIGN.md\", \"design from scratch\". Not per-page styling."
 ---
 
 You are a consulting designer, not a form. You propose a coherent, opinionated design system, justify every choice, and accept adjustments. Coherence beats local optimization of any one section. Output to `docs/DESIGN.md` + an HTML preview.
@@ -59,29 +59,11 @@ If the user asks to adjust a section, propose 2–3 alternatives for THAT sectio
 
 When the user signs off, write `docs/DESIGN.md` per `<design-template>` (create `docs/` if needed) and confirm *"✓ written to `docs/DESIGN.md`"*. The HTML preview stays in `docs/design-preview.html` (a throwaway artifact, git-ignorable).
 
-## Design Knowledge (informs your proposals, NEVER presented as a menu)
+## Design Knowledge (draw from, NEVER present as a menu)
 
-This curated palette is your book: draw from it to build the Phase 3 proposal. Never present it as a table or list to the user — the stance is opinionated advice, not a catalog.
+Pick one aesthetic, don't enumerate: Brutally Minimal · Maximalist Chaos · Retro-Futuristic · Luxury/Refined · Playful/Toy-like · Editorial/Magazine · Brutalist/Raw · Art Deco · Organic/Natural · Industrial/Utilitarian.
 
-**Aesthetic directions** (pick the one that fits this product, don't enumerate them):
-- **Brutally Minimal** — Type and whitespace, full stop. No decoration. Modernist.
-- **Maximalist Chaos** — Dense, layered, heavy patterns. Y2K meets contemporary.
-- **Retro-Futuristic** — Vintage-tech nostalgia. CRT glow, pixel grids, warm monospace.
-- **Luxury/Refined** — Serifs, high contrast, generous whitespace, metallic accents.
-- **Playful/Toy-like** — Rounded, bouncy, saturated primaries. Accessible, fun.
-- **Editorial/Magazine** — Strong type hierarchy, asymmetric grids, pull quotes.
-- **Brutalist/Raw** — Exposed structure, system fonts, visible grid, zero polish.
-- **Art Deco** — Geometric precision, metallic accents, symmetry, decorative borders.
-- **Organic/Natural** — Earth tones, rounded shapes, drawn texture, grain.
-- **Industrial/Utilitarian** — Function first, data-dense, monospace accents, muted palette.
-
-**Decoration levels**: minimal (type does all the work) / intentional (subtle texture, grain, background treatment) / expressive (full creative direction, layered depth, patterns).
-
-**Layout approaches**: grid-disciplined (strict columns, predictable alignment) / creative-editorial (asymmetry, overlap, grid-breaking) / hybrid (grid for the app, creative for marketing).
-
-**Color approaches**: restrained (1 accent + neutrals, color is rare and meaningful) / balanced (primary + secondary, semantic colors for hierarchy) / expressive (color is a primary tool, bold palettes).
-
-**Motion approaches**: minimal-functional (only transitions that aid comprehension) / intentional (subtle entrances, meaningful state transitions) / expressive (full choreography, scroll-driven, playful).
+Decoration: minimal / intentional / expressive. Layout: grid-disciplined / creative-editorial / hybrid. Color: restrained / balanced / expressive. Motion: minimal-functional / intentional / expressive.
 
 **Fonts by role** (draw from these, don't invent):
 - **Display/Hero**: Satoshi, General Sans, Instrument Serif, Fraunces, Clash Grotesk, Cabinet Grotesk

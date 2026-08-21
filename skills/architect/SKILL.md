@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "Consult on a product's software architecture: pick the app shape (backend/frontend/fullstack), recommend which claude-rules profiles to install, decide the technology stack and boundaries, and produce `docs/ARCHITECTURE.md` + one ADR per significant decision under `docs/adr/`. Use on /architect, \"architecture decisions\", \"write an ADR\", \"choose the stack/technology\", \"how should we build this\", \"which rules do we need\", \"technical design\". Natural bridge between /prd (what) and /plan (phases). (This NAMES real technology — unlike /prd.)"
+description: "Pick the app shape, recommend claude-rules profiles, decide stack and boundaries. Writes `docs/ARCHITECTURE.md` + one Proposed ADR per decision under `docs/adr/`. Use on /architect, \"choose the stack\", \"write an ADR\", \"which rules do we need\". Names real technology — /prd does not."
 ---
 
 You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + one ADR per significant decision under `docs/adr/`.
@@ -75,7 +75,7 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 
 Create `docs/` and `docs/adr/` if absent.
 
-- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Use `<adr-template>`. The profile selection from step 2 is itself worth an ADR.
+- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Shape, budgets, and statuses live in `agent/decision-records.md` — **read it before writing** (path-scoped, may not have loaded yet). Skeleton: `<adr-template>`. Profile selection from step 2 is itself worth an ADR.
 - Every ADR you write is **`Proposed`**. You researched the decision and argued it; you did not take it. Say so when you hand back — list what you propose and what changes if the answer is no — so the human knows there is something waiting on them.
 - The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
 
@@ -87,38 +87,18 @@ plainly that they are **proposed and awaiting acceptance**.
 The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what `docs/PLAN.md`'s "Architectural Decisions" header should reference — `/plan` reads this file rather than re-deriving them.
 
 <adr-template>
-<!-- ONE screen, ~400 words total, 600 hard ceiling. ONE decision per record. No
-     section outside the five below. Budgets per section are in
-     rules/agent/decisions.md — they are the point of the template, not a hint. -->
+<!-- Shape and budgets: agent/decision-records.md. Status always Proposed. -->
 # ADR-NNNN: <short decision title>
 
 - **Status**: Proposed
-  <!-- Always `Proposed`. Accepting a decision is the human's act, recorded by a
-       commit — see rules/agent/decisions.md and the `adr-check` gate. -->
 - **Date**: <YYYY-MM-DD>
 
 ## Context
-
-~120 words. The forces at play, as facts: the PRD constraint(s), the existing system, what makes this significant. Not the history of the discussion, not the choice.
-
 ## Decision
-
-~150 words, bullets. The choice in active voice: *"We will …"*. Precise enough to act on. Everything a *"we will"* appears in outside this section is a **different ADR**.
-
 ## Consequences
-
-~100 words. What gets harder, and the costs we knowingly accept. Not a place for new choices.
-
 ## Alternatives considered
-
-2–4 bullets, **one line each** — the option, then the trade-off that killed it (not a dismissal).
-
-- **<option>** — <the trade-off>.
-
 ## Implemented
-
-<!-- OPTIONAL, added after the code, ~150 words. Omit it while nothing is built. -->
-Only three things earn a line: a claim the code now **proves** (name the test), where reality **diverged** from the prediction (cheaper / costlier / different), and what exists but is **not load-bearing yet**. Not a changelog. It never touches the status line.
+<!-- Optional, after the code. Omit until something is built. -->
 </adr-template>
 
 <architecture-template>
@@ -163,13 +143,10 @@ External services, the contract with each, the blast radius if it fails.
 
 ## Rules
 
-- ADR only the **architecturally-significant** decisions (costly to reverse, wide blast radius). Not trivia.
-- `docs/ARCHITECTURE.md` is itself an **index** (`product/documents.md`): the stack table and the decision log point at the ADRs, they never restate their reasoning. Each section one screen.
-- **One decision per record, one screen per record.** A reader who postpones an ADR has not decided; length is a cost, not a virtue. When a record runs long, split it or move the description out (schemas → `DATA-MODEL.md`, screen behavior → `EXPERIENCE.md`, sequencing → `PLAN.md`) — never compress the reasoning, which is the only part that had to be written here.
-- Never write a status other than `Proposed` — not even for a decision the human clearly endorsed in conversation. Discussing is not accepting, and nothing in the repository distinguishes the two afterwards.
-- Simplicity first — the burden of proof is on complexity. Justify every service, store, and layer against the PRD.
-- This is the place to **name real technology** — the PRD deliberately doesn't.
-- Own the profile gating (step 2); defer to the installed rules rather than restating them.
-- `cqrs` is never assumed — offer it, explain the cost, install only on confirmation.
-- Never invent PRD constraints — if a decision needs a number the PRD doesn't give, ask.
-- Plan mode: `docs/ARCHITECTURE.md` and `docs/adr/*` are read-only design artifacts — writing them is allowed.
+- ADR only **architecturally-significant** decisions. Shape: `agent/decision-records.md`. Index shape: `product/documents.md`.
+- Status is always **`Proposed`**. Discussing is not accepting.
+- Simplicity first — justify every service, store, and layer against the PRD.
+- Name real technology here. Never invent a PRD constraint — ask.
+- Own the profile gating (step 2); defer to installed rules rather than restating them.
+- `cqrs` is never assumed — offer it, install only on confirmation.
+- Plan mode: writing `docs/ARCHITECTURE.md` and `docs/adr/*` is allowed.

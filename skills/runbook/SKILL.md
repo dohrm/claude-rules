@@ -1,6 +1,6 @@
 ---
 name: runbook
-description: "Write the operational runbook for one alert or failure mode, using the repo's real commands: symptom, impact, the first move that restores service before anyone understands why, ordered checks with what a good and a bad answer look like, escalation, and what NOT to do. Produces `docs/runbook/<slug>.md`, one screen, rehearsable. Use on /runbook, \"write a runbook\", \"operational documentation\", \"what do we do when X breaks\", \"on-call procedure\", \"this alert has no runbook\", \"how do we roll back\", \"incident procedure\". Required by `ops/slo.md` — an alert with no runbook is not shippable — and called by /observability when it builds the alert table."
+description: "Write one rehearsable runbook per failure mode at `docs/runbook/<slug>.md`: first move that restores service, real commands from the repo, what good/bad answers look like. Use on /runbook, \"what do we do when X breaks\", \"this alert has no runbook\". An alert with no runbook is not shippable (`ops/slo.md`)."
 ---
 
 You write for a responder who was asleep four minutes ago, not for a reader who wants

@@ -186,11 +186,9 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'claude'], dir))
     assert.ok(has(dir, '.claude/rules/hexagonal/principle.md'))
-    assert.ok(has(dir, '.claude/skills/rust-add-domain/SKILL.md'))
 
     ok(runCliBare(['remove', 'hexagonal'], dir))
     assert.ok(!has(dir, '.claude/rules/hexagonal'), 'hexagonal rules should be gone')
-    assert.ok(!has(dir, '.claude/skills/rust-add-domain'), 'hexagonal skill should be gone')
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'), 'rust must survive')
     assert.ok(has(dir, '.claude/rules/agent/guardrails.md'), 'shared must survive a partial remove')
     assert.deepEqual(lockOf(dir).profiles, ['rust'])
@@ -769,7 +767,7 @@ test('budget without an install exits 1', () => {
 
 test('add --agent antigravity: Cursor-shaped rules under .agents/rules/', () => {
   withTmpRepo(dir => {
-    const r = ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'antigravity', '--module', 'apps/api'], dir))
+    const r = ok(runCli(['add', 'rust', 'hexagonal', 'investigate', '--agent', 'antigravity', '--module', 'apps/api'], dir))
 
     const scoped = read(dir, '.agents/rules/rust/code-style.md')
     assert.match(scoped, /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
@@ -778,7 +776,7 @@ test('add --agent antigravity: Cursor-shaped rules under .agents/rules/', () => 
 
     assert.match(read(dir, '.agents/rules/agent/guardrails.md'), /alwaysApply: true/)
     assert.ok(!has(dir, '.agents/rules/rust/code-style.mdc'), 'Antigravity reads .md, not Cursor\'s .mdc')
-    assert.ok(has(dir, '.agents/skills/rust-add-domain/SKILL.md'), 'skills are portable — the .agents/skills collision is a happy one')
+    assert.ok(has(dir, '.agents/skills/investigate/SKILL.md'), 'skills are portable — the .agents/skills collision is a happy one')
     assert.match(r.stdout, /no file-based subagents/)
   })
 })

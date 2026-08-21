@@ -1,6 +1,6 @@
 ---
 name: prd
-description: "Frame a project through structured questioning and produce or extend `docs/PRD.md` following a fixed 8-section template (Problem, Solution, Target User, User Stories, Success Criteria, Out of Scope, Implementation Decisions, Additional Notes). Use on /prd, \"frame this project\", \"write the PRD\", \"create/extend the PRD\", \"produce the PRD\", or whenever a project's framing must be captured in a versioned document. Natural pair of /interview (upstream) and /plan (downstream)."
+description: "Frame or extend `docs/PRD.md` (stable spine + capability units). Use on /prd, \"write the PRD\", \"frame this project\". Names no technology. Upstream of /architect and /plan."
 ---
 
 You question the user to produce or extend `docs/PRD.md` using the template below.
@@ -11,7 +11,7 @@ You question the user to produce or extend `docs/PRD.md` using the template belo
 
 2. If `docs/PRD.md` (or `docs/prd/`) exists, read the spine and the capabilities the brief touches. Cross-check against the incoming brief and only question the deltas. Confront contradictions: *"You'd settled on X, the brief suggests Y — which do we keep?"*. No PRD and no brief → your first question is *"What do you want to frame?"*.
 
-   **The PRD is meant to grow — the file is not.** The spine (Problem, Solution, Target User, Success Criteria, Out of Scope) is *stable*: new scope almost never changes it, and it must stay one screen. Growth lands in a **capability unit**, never as more prose in a spine section and never as a `### … (continued)` heading (`product/documents.md`). If the PRD is a single file now past ~8 capabilities or ~400 lines, propose the split before adding:
+   **The PRD is meant to grow — the file is not.** Spine stays stable and one screen; growth is a capability unit (`product/documents.md` — read it for split thresholds and budgets). If the file is past the split, propose the migration before adding:
 
    > *"The PRD is at N capabilities / L lines. I'd split it: one file per capability in `docs/prd/`, `docs/PRD.md` keeps the spine and gains the capability table. Content moves unchanged. Go?"*
 
@@ -21,7 +21,7 @@ You question the user to produce or extend `docs/PRD.md` using the template belo
 
 5. The user validates or corrects section by section. On a correction, re-post only the affected section. Once everything is validated, write it (create `docs/` if needed) and confirm what was written.
 
-   **Two shapes, one threshold** (`product/documents.md`): up to ~8 capabilities, everything in `docs/PRD.md` — the spine, then each capability as a `###` block. Beyond that, `docs/PRD.md` keeps the spine + the capability table and each capability becomes `docs/prd/NN-<slug>.md`.
+   **Two shapes** (`product/documents.md`): below the split, everything in `docs/PRD.md`; beyond it, spine + capability table in the index, one file per capability in `docs/prd/NN-<slug>.md`.
 
 <prd-template>
 <!-- The SPINE. ~1000 words, each section ~200 max. It is the stable part: new scope

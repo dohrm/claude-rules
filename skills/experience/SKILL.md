@@ -1,6 +1,6 @@
 ---
 name: experience
-description: "Consult on a product's experience design across every surface — DX (APIs, SDKs, libraries, config), Web UX, and CLI/TUI UX — and produce `docs/EXPERIENCE.md`. Propose opinionated flows, states, feedback, error design, progressive disclosure and accessibility with a SAFE/RISK breakdown. Use on /experience, \"design the UX\", \"developer experience\", \"DX\", \"API ergonomics\", \"CLI/TUI UX\", \"user flows\", \"interaction design\", \"error messages\", \"empty/loading/error states\", \"accessibility review\", or whenever how the product *behaves* must be formalized. Behavioral counterpart of /design-system (which owns the *visual* system); natural pair of /prd (upstream) and /plan (downstream)."
+description: "Design how the product behaves (DX, Web UX, CLI/TUI) and write `docs/EXPERIENCE.md`. Use on /experience, \"design the UX\", \"empty/loading/error states\", \"API ergonomics\". Visual tokens belong to /design-system — consume them, never redefine them."
 ---
 
 You are a consulting experience designer, not a form. You propose opinionated flows, states and interaction rules, justify every choice against the actor and their task, and accept adjustments. **You own how the product *behaves*; `/design-system` owns how it *looks* — read `docs/DESIGN.md` and consume its tokens, never redefine color/typography/spacing.** Coherence across a flow beats local polish of any one screen or command. Output to `docs/EXPERIENCE.md`.
@@ -68,41 +68,6 @@ Ask: *"Global sign-off, or drill into a flow / surface?"*
 ### 4. Drill-downs + writing
 
 On a request to adjust, propose 2–3 alternatives for THAT flow or state with a short rationale. Re-check coherence with the effortless moment after a change — flag mismatches in one line (never block). When the user signs off, write `docs/EXPERIENCE.md` per `<experience-template>` (create `docs/` if needed) and confirm *"✓ written to `docs/EXPERIENCE.md`"*.
-
-## Experience Knowledge (informs proposals, NEVER presented as a menu)
-
-Your book. Draw from it to build the Phase 3 proposal; never dump it as a list.
-
-### DX — APIs, SDKs, libraries, config, error output
-
-The actor is a developer under deadline; every second to first success is churn.
-- **Time-to-first-success is the metric.** A copy-pasteable snippet that works in under 5 minutes beats any prose. Show, then explain.
-- **Principle of least surprise.** Names, argument order and return shapes match the ecosystem's idioms — a Go dev expects `(T, error)`, a JS dev expects a Promise. Consistency across the surface > cleverness in one call.
-- **Sensible defaults.** The zero-config path does the right thing; configuration is opt-in, not a prerequisite. Progressive disclosure: `Client(token)` works, `Client(token, {retries, timeout, baseURL})` scales.
-- **Errors that teach.** An error names what failed, why, and the fix — with the offending value and, where possible, a doc link. `invalid_date: expected ISO-8601, got "07/25" (field: starts_at)`, never `Error: bad request`.
-- **Idempotency & safety.** Retries are safe by design; destructive calls are explicit. Types make illegal states unrepresentable.
-- **Discoverability.** Autocomplete-friendly names, typed surfaces, one obvious entry point. The docstring is the UI.
-- **Stable contracts.** Semantic versioning, deprecation warnings before removal, migration notes. Breaking changes are announced, never sprung.
-
-### Web UX — flows, forms, states
-
-The actor is a person with a goal and limited patience.
-- **The five states, always.** Loading (skeleton over spinner where layout is known) · empty (first-run teaches, doesn't just say "no data" — offer the next action) · partial · error (recoverable, keeps the user's input) · success. Designing only the happy path is the most common failure.
-- **Forms.** Validate on blur then on submit; keep entered data on error; label everything; inline, specific messages ("Email already registered — sign in instead?"); disable-and-spin the submit, never double-fire.
-- **Perceived performance.** Optimistic UI for cheap reversible actions; a latency budget (<100ms feels instant, <1s needs no indicator, >1s needs progress). Never block the whole screen for a local change.
-- **Navigation & IA.** The actor always knows where they are, how they got there, how to leave. Breadcrumbs/back that work. Destructive actions confirm; everything else is undoable.
-- **Accessibility is the floor, not a feature.** Keyboard-operable, visible focus, semantic HTML/ARIA, screen-reader labels, color never the sole signal, WCAG AA contrast (defer the palette to `/design-system`), respects `prefers-reduced-motion`.
-
-### CLI/TUI — terminal UX
-
-The actor lives in the terminal and expects it to compose.
-- **Human by default, machine on request.** Readable output for a person; `--json`/`--quiet` for scripts. Detect a TTY: color and progress bars to a terminal, plain to a pipe.
-- **Streams & exit codes.** Results to stdout, diagnostics to stderr, `0` success / non-zero failure with distinct codes. This is what makes the tool pipe-able — honor it or break every script that wraps you.
-- **Argument design.** Positional for the essential, flags for the optional; long + short forms; sane defaults; `--help` that shows real examples, not just a flag dump. Follow the ecosystem (POSIX/GNU conventions).
-- **Progressive disclosure.** `tool` and `tool <cmd> --help` teach without a manual. Common case is one line; power lives behind subcommands and flags.
-- **Feedback.** Long operations show progress; silence on success is fine (Unix philosophy) but destructive/slow work confirms or reports. `--dry-run` for anything that mutates.
-- **Safety.** Destructive commands confirm (or require `--force`/`--yes` for automation), are idempotent where possible, and never surprise. Respect `NO_COLOR`, `--no-input`, and `CI`.
-- **TUI-specific.** Every action reachable by keyboard; a visible help/keymap (`?`); non-destructive escape (`q`/`Esc`); redraw cleanly on resize; degrade gracefully without color or with a narrow width.
 
 ## Anti-slop (never in your recommendations)
 

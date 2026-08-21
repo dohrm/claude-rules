@@ -317,7 +317,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 |---|---|
 | `product` | `/interview` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
-| `investigate` `loop-setup` `hexagonal` | `/investigate` `/loop-setup` `/rust-add-domain` |
+| `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 
 **3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
 or the agent, and CI. No command is defined twice — and the recipes themselves live

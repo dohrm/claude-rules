@@ -1,6 +1,6 @@
 ---
 name: ci-setup
-description: "Bootstrap or audit a repo's CI/CD pipeline from what is actually installed — reads `.claude-rules.lock`, the justfile and the existing workflows, maps the quality-gate tiers to jobs, and writes the workflow files for the repo's forge (Gitea Actions or GitHub Actions). Use on /ci-setup, \"set up CI\", \"add a pipeline\", \"GitHub Actions\", \"Gitea Actions\", \"CI workflow\", \"audit the pipeline\", \"why is CI slow\", \"make CI match the local gates\", \"add a release workflow\", \"branch protection\". It never invents commands: every gate job calls `just`, so the pipeline and the local loop cannot drift. Downstream of the kit — it adapts `kit/cicd/*.snippet.yaml`, it does not design a pipeline from scratch."
+description: "Bootstrap or audit CI from the lock + justfile: every gate job calls `just`. Writes forge workflows from `kit/cicd/*.snippet.yaml`. Use on /ci-setup, \"set up CI\", \"make CI match the local gates\", \"branch protection\". Never invents commands."
 ---
 
 You wire a pipeline that is a **scheduler and a witness**, never a second
