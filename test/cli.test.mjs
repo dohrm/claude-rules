@@ -58,23 +58,14 @@ test('add --agent cursor: path-scoped rules get globs, cross-cutting ones always
   })
 })
 
-test('add --agent codex: AGENTS.md block is idempotent and never touches user content', () => {
+test('retired --agent names fail loudly', () => {
   withTmpRepo(dir => {
-    writeFileSync(join(dir, 'AGENTS.md'), '# My repo\n\nHand-written guidance the installer must preserve.\n')
-
-    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
-    const first = read(dir, 'AGENTS.md')
-    assert.match(first, /^# My repo\n/, 'user content must stay at the top')
-    assert.match(first, /Hand-written guidance the installer must preserve\./)
-    assert.match(first, /<!-- claude-rules:start/)
-    assert.match(first, /<!-- claude-rules:end -->/)
-    // cross-cutting rules are inlined, path-scoped ones are referenced
-    assert.match(first, /Rules that are NOT loaded for you/)
-    assert.match(first, /\.dev\/rules\/rust\/code-style\.md/)
-    assert.ok(has(dir, ".dev/rules/rust/code-style.md"))
-
-    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
-    assert.equal(read(dir, 'AGENTS.md'), first, 'second install must be byte-identical (managed block rewritten in place)')
+    for (const name of ['codex', 'opencode', 'antigravity']) {
+      const r = runCli(['add', 'rust', '--agent', name], dir)
+      assert.equal(r.status, 1)
+      assert.match(r.stderr, /Retired agent/)
+      assert.ok(!has(dir, '.claude-rules.lock'), `${name} must not write a lock`)
+    }
   })
 })
 
@@ -88,17 +79,16 @@ test('add product: skills land as <name>/SKILL.md directories', () => {
   })
 })
 
-test('no --agent installs every known agent', () => {
+test('no --agent installs both remaining agents', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust'], dir))
-    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'antigravity', 'codex', 'opencode'])
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     assert.ok(has(dir, '.cursor/rules/rust/code-style.mdc'))
-    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
-    assert.ok(has(dir, '.dev/rules/rust/code-style.md'))
-    assert.ok(has(dir, 'AGENTS.md'))
-    assert.ok(has(dir, '.opencode/agent/code-reviewer.md'))
-    assert.match(read(dir, '.opencode/agent/code-reviewer.md'), /mode: subagent/)
+    assert.ok(!has(dir, '.agents/rules'))
+    assert.ok(!has(dir, '.dev/rules'))
+    assert.ok(!has(dir, 'AGENTS.md'))
+    assert.ok(!has(dir, '.opencode'))
   })
 })
 
@@ -157,7 +147,7 @@ test('remove all after several adds deletes every installed asset', () => {
 // say so once, or the next reader assumes there is a second copy somewhere.
 test('the kit has one home whatever the agents, and is copied once', () => {
   withTmpRepo(dir => {
-    const r = ok(runCli(['add', 'rust', '--agent', 'claude,opencode'], dir))
+    const r = ok(runCli(['add', 'rust', '--agent', 'claude,cursor'], dir))
     assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
     assert.ok(!has(dir, '.claude/kit'), 'the kit must not land under an agent directory')
     assert.equal(r.stdout.split('kit/rust  \u2192').length - 1, 1, 'kit/rust copied twice')
@@ -195,16 +185,44 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   })
 })
 
-test('remove <profile> prunes only that profile from the AGENTS.md block', () => {
+test('add/update purge leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'codex'], dir))
-    assert.match(read(dir, 'AGENTS.md'), /\.dev\/rules\/hexagonal\//)
+    mkdirSync(join(dir, '.dev/rules/rust'), { recursive: true })
+    writeFileSync(join(dir, '.dev/rules/rust/code-style.md'), 'stale\n')
+    mkdirSync(join(dir, '.opencode/agent'), { recursive: true })
+    writeFileSync(join(dir, '.opencode/agent/code-reviewer.md'), 'stale\n')
+    mkdirSync(join(dir, '.agents/rules/rust'), { recursive: true })
+    writeFileSync(join(dir, '.agents/rules/rust/code-style.md'), 'stale\n')
+    writeFileSync(join(dir, 'AGENTS.md'), [
+      '# Mine',
+      '',
+      '<!-- claude-rules:start (managed — do not edit inside this block) -->',
+      'retired block',
+      '<!-- claude-rules:end -->',
+      '',
+    ].join('\n'))
 
-    ok(runCliBare(['remove', 'hexagonal'], dir))
-    const agentsMd = read(dir, 'AGENTS.md')
-    assert.doesNotMatch(agentsMd, /\.dev\/rules\/hexagonal\//, 'stale reference left behind')
-    assert.match(agentsMd, /\.dev\/rules\/rust\//, 'rust reference must survive')
-    assert.ok(!has(dir, ".dev/rules/hexagonal"))
+    const r = ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    assert.ok(!has(dir, '.dev/rules'), 'Codex/opencode rule copies must go')
+    assert.ok(!has(dir, '.opencode'), 'the opencode tree must go')
+    assert.ok(!has(dir, '.agents/rules'), 'Antigravity rules must go')
+    assert.equal(read(dir, 'AGENTS.md').trim(), '# Mine', 'user AGENTS.md content must survive the strip')
+    assert.match(r.stdout, /retired/)
+  })
+})
+
+test('update drops retired agents from an old lock', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    lock.agents = ['claude', 'cursor', 'antigravity', 'codex', 'opencode']
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+
+    const r = ok(runCli(['update'], dir))
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
+    assert.match(r.stdout, /Dropped retired agent/)
+    assert.ok(!has(dir, '.dev/rules'))
+    assert.ok(!has(dir, '.opencode'))
   })
 })
 
@@ -471,17 +489,17 @@ test('doctor fails when a wired guard is not on disk', () => {
   })
 })
 
-// opencode DECLARES patterns instead of running a script, and its `edit` map names
-// files to protect — including scripts/review-guard.mjs. Checking those for
-// existence would fail a perfectly correct install.
-test('doctor does not mistake opencode permission patterns for scripts it must find', () => {
+test('doctor fails on leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'opencode'], dir))
-    writeFileSync(join(dir, 'opencode.json'), read(dir, '.dev/kit/common/hooks/opencode.snippet.json'))
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
+    mkdirSync(join(dir, '.dev/rules/rust'), { recursive: true })
+    writeFileSync(join(dir, '.dev/rules/rust/code-style.md'), 'stale\n')
 
-    const r = ok(runCliBare(['doctor'], dir))
-    assert.match(r.stdout, /✓ opencode: guards wired in opencode\.json/)
-    assert.doesNotMatch(r.stdout, /not on disk/)
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.dev\/rules/)
+    assert.match(r.stdout, /retired agent target/)
   })
 })
 
@@ -677,7 +695,7 @@ test('init reports check drift instead of rewriting an existing justfile', () =>
 
 test('init writes no CLAUDE.md when claude is not a target', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+    ok(runCli(['add', 'rust', '--agent', 'cursor'], dir))
     ok(runCliBare(['init'], dir))
     assert.ok(!has(dir, 'CLAUDE.md'))
   })
@@ -760,120 +778,20 @@ test('budget without an install exits 1', () => {
   })
 })
 
-// --------------------------------------------------------------- antigravity
-// Antigravity converged on Cursor's rule format (description/globs/alwaysApply)
-// but reads them from `.agents/rules/` — the directory claude-rules used for the
-// codex/opencode copies, which therefore moved to `.dev/rules/`.
-
-test('add --agent antigravity: Cursor-shaped rules under .agents/rules/', () => {
+test('doctor fails on a leftover AGENTS.md managed block', () => {
   withTmpRepo(dir => {
-    const r = ok(runCli(['add', 'rust', 'hexagonal', 'investigate', '--agent', 'antigravity', '--module', 'apps/api'], dir))
-
-    const scoped = read(dir, '.agents/rules/rust/code-style.md')
-    assert.match(scoped, /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
-    assert.match(scoped, /alwaysApply: false/)
-    assert.match(scoped, /description: Rust Code Style/)
-
-    assert.match(read(dir, '.agents/rules/agent/guardrails.md'), /alwaysApply: true/)
-    assert.ok(!has(dir, '.agents/rules/rust/code-style.mdc'), 'Antigravity reads .md, not Cursor\'s .mdc')
-    assert.ok(has(dir, '.agents/skills/investigate/SKILL.md'), 'skills are portable — the .agents/skills collision is a happy one')
-    assert.match(r.stdout, /no file-based subagents/)
-  })
-})
-
-test('codex/opencode rule copies stay out of Antigravity\'s directory', () => {
-  withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'codex,antigravity'], dir))
-
-    // same rule, two homes, two frontmatter dialects — neither can read the other's
-    assert.match(read(dir, '.dev/rules/rust/code-style.md'), /paths:/)
-    assert.match(read(dir, '.agents/rules/rust/code-style.md'), /globs:/)
-    assert.match(read(dir, 'AGENTS.md'), /read `\.dev\/rules\/rust\/code-style\.md`/)
-    assert.doesNotMatch(read(dir, 'AGENTS.md'), /`\.agents\/rules\//, 'the AGENTS.md index must not send Codex to Antigravity\'s copies')
-  })
-})
-
-test('the AGENTS.md index groups its rows by module', () => {
-  withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
-    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
-    ok(runCli(['add', 'testing'], dir))
-
-    const md = read(dir, 'AGENTS.md')
-    assert.match(md, /### apps\/api\n/)
-    assert.match(md, /### apps\/web\n/)
-    assert.match(md, /### \(repo-wide\)\n/)
-    // the instruction is stated once, imperatively — the index is not a mechanism
-    assert.match(md, /Nothing loads them automatically/)
-    // repo-wide comes last: a session in a module reads its own group first
-    assert.ok(md.indexOf('### apps/api') < md.indexOf('### (repo-wide)'))
-  })
-})
-
-test('removing a module\'s only profile drops its index group too', () => {
-  withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
-    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
-    assert.match(read(dir, 'AGENTS.md'), /### apps\/web/)
-
-    ok(runCliBare(['remove', 'ts'], dir))
-    const md = read(dir, 'AGENTS.md')
-    assert.doesNotMatch(md, /### apps\/web/, 'an empty module heading must go with its rows')
-    assert.match(md, /### apps\/api/)
-  })
-})
-
-// --- pruneAgentsRefs surveillance -------------------------------------------
-// `remove` cannot regenerate the AGENTS.md block (it stages no source), so it does
-// text surgery on the two shapes flushAgentsMd can emit: an index grouped by `###`
-// module headings, and a block with no index at all. These two tests are here to
-// break loudly the day either shape changes — not to specify the surgery.
-
-test('pruning a grouped index keeps the surviving group, its rows, and the preamble', () => {
-  withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'codex', '--module', 'apps/api'], dir))
-    ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
-
-    ok(runCliBare(['remove', 'ts'], dir))
-    const md = read(dir, 'AGENTS.md')
-
-    // the surviving group is a heading AND the rows under it
-    assert.match(md, /### apps\/api\n/)
-    assert.match(md, /^- `apps\/api\/\*\*\/\*\.rs`.* → read `\.dev\/rules\/rust\/code-style\.md`/m)
-    // the index survives its own pruning: heading + the imperative preamble
-    assert.match(md, /## Rules that are NOT loaded for you/)
-    assert.match(md, /Nothing loads them automatically/)
-    // repo-wide (the shared agent rules) is still last
-    assert.ok(md.indexOf('### apps/api') < md.indexOf('### (repo-wide)'))
-    // …and nothing of the removed profile is left, anywhere
-    assert.doesNotMatch(md, /\.dev\/rules\/ts\//)
-    assert.doesNotMatch(md, /apps\/web/)
-    // the block is still a block
-    assert.equal(md.match(/<!-- claude-rules:start/g).length, 1)
-    assert.equal(md.match(/<!-- claude-rules:end -->/g).length, 1)
-    // the terminator still follows a row directly — the surgery leaves no debris behind
-    assert.match(md, /\n- `[^\n]+\n<!-- claude-rules:end -->/)
-  })
-})
-
-test('pruning a managed block that carries no index is a no-op', () => {
-  withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', 'ts', '--agent', 'codex'], dir))
-
-    // Rewrite the block into its other legal shape: inline rules only, no index —
-    // what flushAgentsMd emits when no locked rule is path-scoped.
-    const block = [
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
+    writeFileSync(join(dir, 'AGENTS.md'), [
+      '# Mine',
       '<!-- claude-rules:start (managed — do not edit inside this block) -->',
-      '# Project rules (managed by claude-rules)',
-      '',
-      'A cross-cutting rule, inlined because it has no `paths:`.',
+      'retired',
       '<!-- claude-rules:end -->',
-    ].join('\n')
-    const before = `# My repo\n\nHand-written.\n\n${block}\n\n## Mine again\n`
-    writeFileSync(join(dir, 'AGENTS.md'), before)
+    ].join('\n'))
 
-    ok(runCliBare(['remove', 'ts'], dir))
-    assert.equal(read(dir, 'AGENTS.md'), before, 'nothing to prune must mean nothing touched')
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /AGENTS\.md still has a claude-rules managed block/)
   })
 })
 

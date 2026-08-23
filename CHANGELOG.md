@@ -14,6 +14,15 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Breaking
 
+- **Codex, OpenCode and Antigravity are no longer targets.** The installer emits
+  for Claude Code and Cursor only (`--agent claude,cursor`; default: both).
+  `--agent codex` / `opencode` / `antigravity` fails. An old lock that still lists
+  them is rewritten on `add`/`update`; leftover `.dev/rules/`, `.opencode/`,
+  `.agents/rules/` and the managed `AGENTS.md` block are purged. `doctor` fails
+  until that `update` has run. Nested `CLAUDE.md` / `AGENTS.md` is now possible
+  (the Codex-concatenates / OpenCode-replaces conflict is gone) — the installer
+  does not emit those files yet.
+
 - **`/rust-add-domain` is gone.** It was a transformation recipe for one AppState DI
   scaffold, not a reusable methodology — the `hexagonal` profile keeps the rules
   (`rust-di-container.md` and friends), not the skill. After `update`, delete the

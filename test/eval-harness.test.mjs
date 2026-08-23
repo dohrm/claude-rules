@@ -1,7 +1,7 @@
 // The eval harness is real code that normally only runs while spending tokens.
 // A deterministic fake agent (test/fixtures/fake-agent.mjs) exercises it end to end
 // for free — and, at the same time, proves the generic `--cmd` runner works, which
-// is what any other CLI (opencode, codex, antigravity, a local model) goes through.
+// is what any other CLI (a local model, a wrapper) goes through.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -39,11 +39,11 @@ test('the workspace is laid out where the runner reads it', () => {
   assert.match(claude.out, /\.claude\/\n {5}rules\/|\.claude\//, claude.out)
   assert.match(claude.out, /skills\/\n {7}runbook\/|runbook\//)
 
-  // Same case, an AGENTS.md agent: rules move to .agents/ and a pointer file appears.
-  const codex = run([...withFake(['--layout', 'agents']), '--setup-only'])
-  assert.match(codex.out, /AGENTS\.md/)
-  assert.match(codex.out, /\.agents\//)
-  assert.doesNotMatch(codex.out, /\.claude\//)
+  // Same case, Cursor's layout: rules move to .agents/ and a pointer file appears.
+  const cursor = run([...withFake(['--layout', 'agents']), '--setup-only'])
+  assert.match(cursor.out, /AGENTS\.md/)
+  assert.match(cursor.out, /\.agents\//)
+  assert.doesNotMatch(cursor.out, /\.claude\//)
 })
 
 test('a runner that cannot drive a conversation skips, by name, instead of pretending', () => {

@@ -9,9 +9,9 @@ This directory is the part that cannot.
 | Layer | Mechanism | Catches | Portable? |
 |-------|-----------|---------|-----------|
 | **git floor** | `lefthook` (`../lefthook.snippet.yml`) | what git can SEE: a commit on the trunk, a push with an unanswered `CRITICAL` | yes — every agent, every machine, CI included |
-| **harness** | per-tool hooks (this directory) | what git never gets to see: the `--no-verify`, the `lefthook uninstall`, the `rm` on the report | no — one dialect per tool, and one tool has none |
+| **harness** | per-tool hooks (this directory) | what git never gets to see: the `--no-verify`, the `lefthook uninstall`, the `rm` on the report | no — one dialect per tool |
 
-The floor is the same for all five targets, so it is where a guarantee belongs. The
+The floor is the same for both targets, so it is where a guarantee belongs. The
 harness layer is depth, per tool. **Never the only rampart.**
 
 (Not to be confused with the kit's `Tier 1-3`, which grade gates by *cost* —
@@ -85,16 +85,9 @@ the `justfile`): it ships the snippet, you merge it.
 | Tool | Mechanism | Merge | Confidence |
 |------|-----------|-------|------------|
 | **Claude Code** | `PreToolUse` hooks | `settings.snippet.json` → `.claude/settings.json` | verified against the hook API |
-| **opencode** | `permission` patterns in `opencode.json` | `opencode.snippet.json` | verified: three values (`allow`/`ask`/`deny`), `*` globs, **last match wins** |
 | **Cursor** | agent hooks (`.cursor/hooks.json`, `version: 1`) | `cursor-hooks.snippet.json` | shell tier verified; **no pre-edit hook exists** (`afterFileEdit` is post-hoc), so tier 2 is shell-only |
-| **Codex** | none — `sandbox_mode` + `approval_policy` | `codex.snippet.toml` → `.codex/config.toml` | different mechanism, different promise; project config loads for **trusted projects only** |
-| **Antigravity** | nothing known | — | assumed degradation: the git floor alone |
 
-`opencode` has no hook process, so its rules are declarative: no reason string
-comes back to the agent, and the pattern language is coarser. `Codex` is not a
-guard at all — it is a sandbox: it does not know what `--no-verify` means.
-
-One script serves Claude Code and Cursor. Cursor's `beforeShellExecution` payload
+One script serves both. Cursor's `beforeShellExecution` payload
 carries `command` at the top level (Claude nests it under `tool_input`) and expects
 `{"permission": …}` (Claude expects `hookSpecificOutput`); `bash-guard.mjs` detects
 the dialect from the payload and answers in kind. Exit 2 means "blocked" to both.

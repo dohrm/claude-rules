@@ -42,8 +42,6 @@ const PROTECTED = [
   /(^|\/)\.git(hub|ea)\/workflows\//,
   /(^|\/)\.claude\/settings(\.local)?\.json$/,
   /(^|\/)\.cursor\/hooks\.json$/,
-  /(^|\/)\.codex\/config\.toml$/,
-  /(^|\/)opencode\.jsonc?$/,
   /(^|\/)(bash|edit)-guard\.mjs$/,
   /(^|\/)(adr-check|docs-check|review-guard|worktree-status)\.mjs$/,
   /(^|\/)review-prompt\.md$/,

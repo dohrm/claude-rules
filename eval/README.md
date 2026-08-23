@@ -24,7 +24,7 @@ gives the skill a fixture repo to read and asserts on what it wrote. The runner:
 1. makes a throwaway git workspace: the case's `files/` tree committed as the
    baseline, the case's `input.*` on top as the uncommitted working change,
 2. installs the target agent or skill + its rules **where that runner reads them**
-   (`.claude/`, `.opencode/`, `.agents/` + an `AGENTS.md` — see the runner table),
+   (`.claude/`, or Cursor's `.agents/` + an `AGENTS.md` — see the runner table),
 3. invokes it **headlessly** at a chosen `--model` — single-shot, or driven turn by
    turn from the case's scripted `answers`,
 4. asserts: regex over what it said, regex over the files it wrote, and the kit's own
@@ -60,14 +60,13 @@ spending anything — and is the same `--cmd` path any other CLI goes through.
 
 ## Running it with another agent
 
-The assets are agent-agnostic, so a regression in them should be observable wherever
-they are used. A **runner** is four facts — the command line, the asset layout, the
-output format, and what the tool can and cannot do — and they live in one table,
-[`runners.mjs`](./runners.mjs).
+The assets ship for Claude and Cursor, so a regression in them should be
+observable on both. A **runner** is four facts — the command line, the asset
+layout, the output format, and what the tool can and cannot do — and they live
+in one table, [`runners.mjs`](./runners.mjs). Anything else goes through `--cmd`.
 
 ```bash
-node eval/run.mjs --runner opencode                     # a preset
-node eval/run.mjs --runner codex --model gpt-5.1        # …with a model
+node eval/run.mjs --runner cursor                       # a preset
 node eval/run.mjs --cmd "my-agent --run {prompt}" --format text --layout agents
 node eval/run.mjs --bin ./build/claude                  # the claude preset, another binary
 ```
@@ -75,42 +74,17 @@ node eval/run.mjs --bin ./build/claude                  # the claude preset, ano
 | Runner | Layout | Scripted answers | Subagent cases | Status |
 |---|---|---|---|---|
 | `claude` | `.claude/` | yes — streamed over stdin | yes | **verified** |
-| `opencode` | `.opencode/` + `AGENTS.md` | yes — one invocation per turn | skipped: output does not say whether one ran | **verified** |
-| `codex` | `.agents/` + `AGENTS.md` | yes — `exec resume --last` | no (no file subagents) | **verified** |
-| `antigravity` (`agy`) | `.agents/` + `AGENTS.md` | yes — one invocation per turn | no (agents ship in plugins) | **verified** |
 | `cursor` (`cursor-agent`) | `.agents/` + `AGENTS.md` | yes — `--continue` | no | **verified** |
 | `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
 
 An entry marked *unverified* was written from documentation and has never been run
 here — the harness says so at startup, and a wrong flag is wrong on exactly one line.
 
-**Confirming one is worth the half hour.** All three presets written *blind* were
-wrong, and each failed *silently* — as "the skill does not work on this agent" rather
-than "the invocation is wrong":
+`cursor`'s flags were read off the installed binary's `--help` before the first
+run, and that run passed first time.
 
-- `antigravity` — Go-style flags (`--flag value` swallows the value, so
-  `--dangerously-skip-permissions "…"` turned the *flag name* into the prompt), `-p`
-  takes the prompt as its value rather than preceding it, and it **ignores the process
-  cwd**: it runs from its own install directory, so without `--add-dir` the agent sees
-  no installed asset at all — and answers confidently anyway.
-- `opencode` — needs `--auto`, or it stops at a permission prompt and writes nothing.
-- `codex` — writes are gated by the **sandbox** (`-s workspace-write`), not by an
-  approval flag. The obvious guess produces an empty workspace.
-
-`cursor` is the exception that proves the rule: its flags were read off the installed
-binary's `--help` before the first run, and that run passed first time. Reading beats
-guessing; running beats reading.
-
-The payoff is the comparison. Given the same `/runbook` skill and the same fixture,
-**all five agents produced the same section structure and harvested the real justfile
-recipes — none invented a command.** Cursor went further and left an explicit
-`_[fill: …]_` blank where the fixture could not tell it who is on call, which is what
-the skill asks for instead of inventing. That is the question this harness exists to
-answer: *does the rule survive the trip to another agent?*
-
-Two practical notes: a runner has to be on `PATH` for the harness to spawn it (or pass
-`--bin ~/.opencode/bin/opencode`), and text-mode runners have their ANSI colour codes
-stripped before assertions run.
+Two practical notes: a runner has to be on `PATH` for the harness to spawn it, and
+text-mode runners have their ANSI colour codes stripped before assertions run.
 
 **A local or self-hosted model** is usually not a new runner: Claude Code pointed at
 another endpoint is still Claude Code. Export the endpoint and pick the model — the

@@ -128,7 +128,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    gates, so it belongs in neither `check` nor a hook.
    Doctrine: `../rules/agent/autonomy.md` ("One tree, one writer").
 7. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
-   into `.claude/settings.json` — or the opencode / cursor / codex snippet beside it.
+   into `.claude/settings.json` — or the cursor snippet beside it.
    This is the **harness layer**, and the split matters: `lefthook` is the git floor (portable,
    every agent), the hooks catch what git never gets to see — the `--no-verify`, the
    `lefthook uninstall`, the `rm` on the review report. Both guards fail open and
@@ -155,7 +155,7 @@ kit/
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
 │       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest
-│       └── *.snippet.*         #   one wiring snippet per tool: claude · opencode · cursor · codex
+│       └── *.snippet.*         #   one wiring snippet per tool: claude · cursor
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish

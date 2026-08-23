@@ -121,11 +121,10 @@ starts every Claude session with no project map at all. The documented bridges a
 an `@AGENTS.md` import from `CLAUDE.md`, or a symlink; `/import` (and `/init` under
 `CLAUDE_CODE_NEW_INIT=1`) will also copy an `AGENTS.md` in once, as a one-shot.
 
-Do not reach for those bridges in a repo installed for both Claude *and*
-Codex/opencode. There, `AGENTS.md` carries an installer-managed block that is those
-tools' *copy* of rules Claude already auto-loads from `.claude/rules/` — importing it
-pays for the same conventions twice. Keep the channels separate: `CLAUDE.md` is the
-project map, the managed block is the other tools' rule delivery.
+Do not reach for those bridges to dump Cursor's `.cursor/rules/` into Claude.
+Keep the channels separate: `CLAUDE.md` is the project map, `.claude/rules/`
+auto-loads, and Cursor reads `.cursor/rules/*.mdc`. A leftover Codex/OpenCode
+managed block in `AGENTS.md` is the same conventions twice — `update` strips it.
 
 ## Other
 
