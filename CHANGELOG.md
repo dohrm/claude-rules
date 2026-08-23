@@ -12,6 +12,16 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Changed
+
+- **Rust is the first language jalon.** `just rust-lint` now denies
+  `clippy::unwrap_used` / `expect_used` on `--lib --bins` (tests stay free).
+  `rules/rust/quality-gates.md` is a pointer: the recipes, the configs they
+  read, suppressions. Copy `rustfmt.toml` next to `deny.toml` and
+  `mutants.toml` — the map is `.dev/kit/rust/README.md`. Style, errors,
+  tracing, UTF-8 stay prose; they are not translated into a fourth clippy
+  pass.
+
 ### Breaking
 
 - **Codex, OpenCode and Antigravity are no longer targets.** The installer emits

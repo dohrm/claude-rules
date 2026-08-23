@@ -102,7 +102,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    a `check` recipe listing your techs. Never edit a `.just` under `.dev/kit/`:
    override it here instead. Needs just >= 1.27.
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
-   move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
+   move the configs into place (deny.toml+rustfmt.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
    merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml`;
    adapt eslint `globalIgnores`; then `lefthook install`.
@@ -159,12 +159,14 @@ kit/
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish
-├── rust/                       # COMPLETE
+├── rust/                       # JALON — toolchain owns the chain
+│   ├── README.md               # config map: file → destination → recipe
 │   ├── rust.just               # rust-lint / rust-check / rust-mutate, imported by the justfile
+│   ├── rustfmt.toml            # Tier 1 fmt — copy to <rust_dir>/
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml
-│   ├── deny.toml               # Tier 2 supply-chain (adapt registry / private crates)
-│   ├── mutants.toml            # Tier 3 config → copy to <workspace>/.cargo/ (adapt exclusions)
+│   ├── deny.toml               # Tier 2 supply-chain — copy to <rust_dir>/ (adapt registry / private crates)
+│   ├── mutants.toml            # Tier 3 config → copy to <rust_dir>/.cargo/ (adapt exclusions)
 │   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
 ├── ts/                         # COMPLETE
 │   ├── ts.just                 # ts-lint / ts-check / ts-mutate, imported by the justfile

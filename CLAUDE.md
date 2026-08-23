@@ -22,7 +22,7 @@ outputs.
 - `skills/` — Claude Code skills as canonical `<name>/SKILL.md` dirs, copied into `.claude/skills/` (auto-discovered); frontmatter is `name` + `description` (the description drives auto-triggering)
 - `guidelines/` — patterns for working with Claude Code
 - `registry.json` + `bin/cli.mjs` — the installer (data-driven; the CLI stays dumb)
-- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR.
+- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR. The rust jalon (`test/rust-gates.test.mjs`) skips when the toolchain is missing; the matching CI job installs it and sets `RUST_GATES=1` so a skip cannot pass.
 - `eval/` — agent regression harness; calls `claude` and spends tokens, so it is manual (model bumps only)
 
 ## Working rules

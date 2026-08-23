@@ -11,7 +11,7 @@
   "profiles": {
     "rust": [
       { "from": "rules/rust", "to": ".claude/rules/rust", "kind": "rule" },
-      { "from": "kit/rust", "to": ".dev/kit/rust", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just rust-lint`/`rust-check`); `claude-rules init` writes the `import '.dev/kit/rust/rust.just'` line and derives `rust_dir` from the lock. Move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, mutation-ci.yaml→.gitea/workflows/ (set its working-directory to your rust_dir). Tier 3 also runs LOCALLY: `cargo install cargo-mutants` and uncomment the `mutate-diff` line in your justfile — the CI job is the witness, not the first observation. rust-fmt.sh is a SPECIAL CASE (generated member crate): swap the fmt command in rust-check + add #![allow(clippy::all)] to that crate. See .dev/kit/common/README.md." }
+      { "from": "kit/rust", "to": ".dev/kit/rust", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just rust-lint`/`rust-check`); `claude-rules init` writes the `import '.dev/kit/rust/rust.just'` line and derives `rust_dir` from the lock. Copy rustfmt.toml→<rust_dir>, deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, mutation-ci.yaml→.gitea/workflows/ (set its working-directory to your rust_dir). The map is `.dev/kit/rust/README.md`. Tier 3 also runs LOCALLY: `cargo install cargo-mutants` and uncomment the `mutate-diff` line in your justfile — the CI job is the witness, not the first observation. rust-fmt.sh is a SPECIAL CASE (generated member crate): swap the fmt command in rust-check + add #![allow(clippy::all)] to that crate." }
     ],
     "ts": [
       { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },

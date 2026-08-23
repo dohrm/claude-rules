@@ -1,0 +1,10 @@
+# Witness crate for `just rust-lint` / `just rust-check`.
+# No dependencies: the gate is the subject. See test/rust-gates.test.mjs.
+[package]
+name = "gate_probe"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
