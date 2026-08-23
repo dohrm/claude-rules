@@ -1,0 +1,4 @@
+[*.cs]
+dotnet_diagnostic.GODOT001.severity = error
+dotnet_diagnostic.GODOT002.severity = error
+dotnet_diagnostic.GODOT003.severity = error

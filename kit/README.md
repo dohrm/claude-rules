@@ -106,7 +106,9 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    golangci.base.yml→`<go_dir>/.golangci.yml` (v2), mutation-ci.yaml→`.gitea/workflows/`);
    merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml` (map: `python/README.md`);
    copy `ts/eslint.base.js` (or the web/node/tauri overlay) → `eslint.config.js`
-   and the matching `tsconfig.*.json` → `tsconfig.json`; then `lefthook install`.
+   and the matching `tsconfig.*.json` → `tsconfig.json`;
+   Godot: reference `godot/analyzers/` from the game `.csproj` and merge
+   `analyzers/.editorconfig` (map: `godot/README.md`); then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
    `check` recipe — the script ships with the library and is called from it, so
    there is nothing to move into `scripts/`. The gate makes
@@ -203,6 +205,12 @@ kit/
 │   ├── lefthook.snippet.yml     # Tier 1-2 Python commands → merge into root lefthook.yml
 │   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
+├── godot/                      # JALON — toolchain owns the chain
+│   ├── README.md               # config map: file → destination → recipe
+│   ├── godot.just              # godot-lint / godot-check — not in default check
+│   ├── check-no-new-gd.sh      # tracked .gd vs .godot-gd-allowlist (shrink only)
+│   ├── lefthook.snippet.yml    # Tier 1-2 → merge into root lefthook.yml
+│   └── analyzers/              # GODOT001–003, run inside `dotnet build`
 └── portal-http/                # COMPLETE (frontend, pairs with the portal-http profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```

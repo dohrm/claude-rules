@@ -5,26 +5,18 @@ paths:
 title: "Gameplay Data"
 ---
 
-## Zero hardcoded gameplay values
+GODOT001 (`just godot-lint`) flags numeric literals in a type that
+derives from `Godot.*`. Move the value into a `.tres`, or — for a
+genuine technical constant — mark the member `[TechnicalConstant]`. The
+analyzer skips 0/1, `const`, enums, and attributes. It is not sound:
+syntax cannot prove a number is a design parameter. Use the attribute as
+a deliberate, visible opt-out, not a reflex.
 
-Every gameplay parameter — stats, damage, speeds, drop rates, cooldowns, prices —
-lives in a `.tres` Resource, never as a literal in a script. Scripts read values
-off a typed `Resource`; designers tune the `.tres`.
+What the analyzer cannot see:
 
-Allowed literals: engine/technical constants with no design meaning (a
-normalisation `1f`, an array index, a physics layer bit). Everything a designer
-would ever want to tweak is data.
-
-The `kit/godot` Roslyn analyzer (GODOT001) flags numeric literals in Godot types
-outside this allowance. Move the value into a `.tres`, or — for a genuine
-technical constant — mark the member `[TechnicalConstant]`. Use the attribute as
-a deliberate, visible opt-out, not a reflex to silence the analyzer.
-
-## Resources are typed
-
-- A `.tres` is backed by a `[GlobalClass]` C# `Resource` subclass with `[Export]`
-  fields — not a bag of untyped `Dictionary` entries.
+- A `.tres` is backed by a `[GlobalClass]` C# `Resource` subclass with
+  `[Export]` fields — not a bag of untyped `Dictionary` entries.
 - The design doc under `docs/` carries the intent; the `.tres` is its
-  materialisation. Keep them coherent — a value in the doc but not the `.tres`
-  (or the reverse) is silent drift. If the doc is structured, the docs↔`.tres`
-  coherence is itself checkable.
+  materialisation. Keep them coherent. Docs↔`.tres` coherence is itself
+  checkable if the doc is structured; the factory does not ship that
+  check.

@@ -15,3 +15,7 @@ test/fixtures/python-gate/.mypy_cache/
 test/fixtures/python-gate/.pytest_cache/
 test/fixtures/python-gate/pytest-cache-files-*/
 test/fixtures/ts-gate/node_modules/
+test/fixtures/godot-gate/bin/
+test/fixtures/godot-gate/obj/
+kit/godot/analyzers/bin/
+kit/godot/analyzers/obj/

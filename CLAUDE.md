@@ -22,7 +22,7 @@ outputs.
 - `skills/` — Claude Code skills as canonical `<name>/SKILL.md` dirs, copied into `.claude/skills/` (auto-discovered); frontmatter is `name` + `description` (the description drives auto-triggering)
 - `guidelines/` — patterns for working with Claude Code
 - `registry.json` + `bin/cli.mjs` — the installer (data-driven; the CLI stays dumb)
-- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR. Language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`, `test/go-gates.test.mjs`, `test/ts-gates.test.mjs`) skip when their toolchain is missing; the matching CI jobs install it and set `RUST_GATES=1` / `PYTHON_GATES=1` / `GO_GATES=1` / `TS_GATES=1` so a skip cannot pass.
+- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR. Language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`, `test/go-gates.test.mjs`, `test/ts-gates.test.mjs`, `test/godot-gates.test.mjs`) skip when their toolchain is missing; the matching CI jobs install it and set `RUST_GATES=1` / `PYTHON_GATES=1` / `GO_GATES=1` / `TS_GATES=1` / `GODOT_GATES=1` so a skip cannot pass.
 - `eval/` — agent regression harness; calls `claude` and spends tokens, so it is manual (model bumps only)
 
 ## Working rules

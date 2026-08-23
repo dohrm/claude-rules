@@ -50,6 +50,14 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   filenames stay mentions. Maps: `.dev/kit/ts/README.md` and the
   derivative READMEs.
 
+- **Godot C# is the fifth language jalon.** `just godot-lint` is
+  `dotnet build -warnaserror` (GODOT001–003 in-process) plus
+  `check-no-new-gd.sh`. `just godot-check` adds `dotnet test` and
+  headless import/export. `godot-check` stays off default `check`
+  until `godot_bin` and `godot_export_preset` are real. Co-location,
+  composition, typed `.tres`, and migrate-together stay mentions.
+  Map: `.dev/kit/godot/README.md`.
+
 ### Breaking
 
 - **Codex, OpenCode and Antigravity are no longer targets.** The installer emits

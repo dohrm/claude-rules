@@ -4,40 +4,29 @@ paths:
 title: "Godot C# Quality Gates"
 ---
 
-Every change must pass all gates before being considered done:
-
 ```bash
-dotnet build                                        # Compiles clean — warnings are errors
-dotnet test                                         # GDUnit4 tests pass
-godot --headless --export-release <preset> <out>    # Headless export succeeds
+just godot-check     # godot-lint → dotnet test → headless import + export
 ```
 
-## Why headless export is mandatory
+`godot-lint` is pre-commit (`dotnet build -warnaserror` + `check-no-new-gd.sh`).
+`godot-check` is pre-push — and `just check` only after you override
+`godot_dir` / `godot_bin` / `godot_export_preset` (the lock cannot derive a
+binary or a preset). No Tier 3. Wiring: `.dev/kit/godot/README.md`.
 
-The C# compiler validates code, **not** the scene graph. A renamed node, a moved
-`.tscn`, or a missing `.tres` is a broken reference the build never sees — it
-crashes at runtime. A headless export loads every scene and resource, so it is
-the only gate that catches these. Treat an export failure exactly like a build
+| Recipe | Command | Config |
+|---|---|---|
+| `godot-lint` | `dotnet build -warnaserror` | `.csproj` (`TreatWarningsAsErrors`, `Nullable`) + analyzers GODOT001–003 |
+| `godot-lint` | `check-no-new-gd.sh` | `.godot-gd-allowlist` (shrink only) |
+| `godot-check` | `dotnet test --no-build` | GDUnit4 (or any `dotnet test` runner) |
+| `godot-check` | `godot --headless --import` then `--export-release` | `export_presets.cfg` matching `godot_export_preset` |
+
+The C# compiler does not see the scene graph. Headless export is the only
+gate that loads every `.tscn` / `.tres` — treat a failure like a build
 failure.
 
-## Warnings are errors
+No `#pragma warning disable` without a reason on the same line. Never
+loosen `.editorconfig` (GODOT001–003 as error) to pass.
 
-`.csproj` must set:
-
-```xml
-<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-<Nullable>enable</Nullable>
-<AnalysisLevel>latest-recommended</AnalysisLevel>
-```
-
-Strong typing is the reason C# was chosen over GDScript — do not undercut it by
-suppressing warnings. No `#pragma warning disable` without a justification comment
-on the same line.
-
-## Project-specific gates
-
-Enforced by `kit/godot` (see `just godot-check`):
-
-- **No broken resource references** — every `.tscn`/`.tres` `ext_resource` path resolves (headless export).
-- **No hardcoded gameplay values** — see `data.md`.
-- **No new `.gd`** — see `migration.md`.
+Sibling rules cover what the chain cannot see: co-location, composition,
+typed `.tres`, EventBus-as-the-only-bus beyond `[Signal]` placement,
+migrate-producer-and-consumers-together.
