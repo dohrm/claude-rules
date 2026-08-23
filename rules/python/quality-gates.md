@@ -4,47 +4,22 @@ paths:
 title: "Python Quality Gates"
 ---
 
-Before considering any change complete, the full local gate must pass:
-
 ```bash
-just python-check     # runs: python-lint → types → tests → dependency audit
+just python-check     # python-lint → mypy → pytest → pip-audit + deptry
 ```
 
-Python has **no compiler to fall back on**. Every guarantee `cargo build` or `tsc`
-gives for free is, here, a tool someone has to run. That is why the gate is not
-optional: skipping it does not cost you a warning, it costs you the type system.
+Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is pre-push and `just check`. Tier 3 is `just python-mutate` — never a hook. Wiring: `.dev/kit/python/README.md`.
 
-## The gate, and what it replaces
-
-| Gate | Command | Its counterpart elsewhere |
+| Recipe | Command | Config (merge `pyproject.snippet.toml`) |
 |---|---|---|
-| Format | `ruff format --check` | `cargo fmt --check`, `gofmt` |
-| Lint | `ruff check` | `clippy -D warnings`, `golangci-lint` |
-| Types | `mypy --strict` | the Rust/Go compiler, `tsc --strict` |
-| Tests | `pytest` | `cargo test`, `go test` |
-| Lock freshness | `uv run --locked …` (or `uv lock --check`) | `cargo --locked`, `npm ci` |
-| Vulnerabilities | `pip-audit` | `cargo deny advisories`, `govulncheck` |
-| Unused deps | `deptry .` | `cargo machete` |
+| `python-lint` | `ruff format --check .` | `[tool.ruff]` |
+| `python-lint` | `ruff check .` | `[tool.ruff.lint]` (`S` `TRY` `G`/`LOG` …) |
+| `python-check` | `mypy` | `[tool.mypy]` (`strict = true`) |
+| `python-check` | `pytest` | `[tool.pytest.ini_options]` |
+| `python-check` | `pip-audit` | — |
+| `python-check` | `deptry .` | `[tool.deptry]` |
+| `python-mutate` | `mutmut run` | `[tool.mutmut]` |
 
-`python-lint` (format + lint) runs on pre-commit; `python-check` adds types, tests and the
-audit on pre-push. Any failure is a build failure — a lint warning as much as a
-red test.
+No bare `# noqa` or `# type: ignore` — name the code and why. Never loosen ruff or mypy to pass. A legacy mypy override list may only shrink (`testing/ratchet.md`).
 
-## Suppressions
-
-Same rule as Go's `//nolint` and TypeScript's `@ts-ignore`: a silenced check is a
-gate you no longer have.
-
-- No bare `# noqa` — always `# noqa: E501  # <why>`, with the code and a reason.
-- No bare `# type: ignore` — always `# type: ignore[arg-type]  # <why>`. A bare
-  form hides *every* error on the line, including the ones you never saw.
-- Never loosen a `mypy` or `ruff` setting to make code pass. Fix the code, or
-  argue the exception in the config with a comment next to it.
-
-## mypy strictness
-
-`--strict` from day one on new code (`disallow_untyped_defs`,
-`warn_return_any`, `no_implicit_optional`…). On a legacy codebase, strictness is
-**ratcheted per module** — a global `ignore_errors` that never shrinks is theatre.
-Baseline the modules that fail, then move them one at a time, never enlarge the
-list (see `testing/ratchet.md` for the same sequence applied to coverage).
+Sibling rules cover what ruff/mypy do not: `src/` layout, `__all__`, Protocols, domain exceptions, `extra=` / `print()`.

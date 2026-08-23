@@ -7,3 +7,9 @@ package-lock.json
 .memory/
 /target/
 test/fixtures/rust-gate/target/
+test/fixtures/python-gate/.venv/
+test/fixtures/python-gate/**/__pycache__/
+test/fixtures/python-gate/.ruff_cache/
+test/fixtures/python-gate/.mypy_cache/
+test/fixtures/python-gate/.pytest_cache/
+test/fixtures/python-gate/pytest-cache-files-*/

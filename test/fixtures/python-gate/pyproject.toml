@@ -1,22 +1,27 @@
-# Python tool configuration — MERGE these sections into <python_dir>/pyproject.toml.
-# The installer never merges them. The commands that read them live in
-# python.just (`just python-lint` / `python-check` / `python-mutate`).
-# Map: .dev/kit/python/README.md.
-#
-# One file holds all of it on purpose: ruff, mypy, pytest, deptry and mutmut
-# all read pyproject.toml, so the repo has ONE place where "what counts as
-# correct" lives.
-#
-# The dev tooling belongs in a dev group, never in the runtime dependencies:
-#   uv add --dev ruff mypy pytest pytest-cov pip-audit deptry
-#   uv add --dev mutmut          # Tier 3 only, see python-mutate
+# Witness package for `just python-lint` / `just python-check`.
+# Tool tables below are the shipped pyproject.snippet.toml. See test/python-gates.test.mjs.
+[project]
+name = "gate-probe"
+version = "0.1.0"
+description = "Witness package for the python jalon"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
 
-# ── Interpreter ────────────────────────────────────────────────────────────
-# In [project]. "Python 3" is not a version — pin the floor, and commit a
-# matching .python-version so every machine resolves the same interpreter.
-# requires-python = ">=3.12"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-# ── Ruff — format + lint ───────────────────────────────────────────────────
+[dependency-groups]
+dev = [
+    "deptry",
+    "mypy",
+    "pip-audit",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]          # ADAPT if the package is not under src/
@@ -56,7 +61,6 @@ ignore = [
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "parents"    # `.sibling` fine, `..other_package` not
 
-# ── mypy — the compiler this language does not have ────────────────────────
 [tool.mypy]
 strict = true                   # the whole point; do not soften it to pass
 warn_unreachable = true
@@ -64,14 +68,6 @@ warn_unused_ignores = true      # a `# type: ignore` that stopped being needed i
 show_error_codes = true         # so a suppression can name its code
 files = ["src", "tests"]        # ADAPT
 
-# LEGACY REPOS ONLY — the ratchet (rules/python/quality-gates.md). Baseline the
-# modules that fail today, then move them out one at a time. This list may only
-# ever SHRINK; a `check` that passes because the list grew is not a gate.
-# [[tool.mypy.overrides]]
-# module = ["legacy.billing.*", "legacy.reports.*"]
-# disallow_untyped_defs = false
-
-# ── pytest ─────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # -q quiet, --strict-markers so a typo'd marker fails instead of silently
@@ -79,7 +75,6 @@ testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
 filterwarnings = ["error"]      # a DeprecationWarning is tomorrow's breakage
 
-# ── Coverage — a symptom, never the gate (rules/testing/ratchet.md) ────────
 [tool.coverage.run]
 branch = true
 source = ["src"]                # ADAPT
@@ -88,16 +83,12 @@ source = ["src"]                # ADAPT
 show_missing = true
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 
-# ── deptry — the `cargo machete` counterpart ───────────────────────────────
 [tool.deptry]
 # DEP001 missing, DEP002 unused, DEP003 transitive, DEP004 misplaced dev dep.
 # Nothing ignored by default: add an entry here WITH a reason when a package is
 # genuinely used in a way static analysis cannot see (a plugin, an entry point).
 ignore = []
 
-# ── mutmut — Tier 3, run per block, never in a hook ────────────────────────
-# mutmut has no diff mode: scope it to the package you touched with
-# `--paths-to-mutate`, or narrow source_paths here. Doctrine: rules/testing/ratchet.md.
 [tool.mutmut]
 source_paths = ["src"]                              # ADAPT
 pytest_add_cli_args_test_selection = ["tests"]      # ADAPT

@@ -12,18 +12,18 @@
 
 python_dir := "."  # overridden from the root justfile (managed block)
 
-# Every command goes through `uv run`, so the gate runs against the LOCKED
-# environment and not whatever is on this machine (rules/python/environment.md).
+# Every command goes through `uv run --locked`, so the gate runs against the
+# LOCKED environment and not whatever is on this machine
+# (rules/python/environment.md). A bare `uv run` silently re-locks when
+# pyproject.toml has drifted from uv.lock — the gate would repair the drift and
+# still go green. (`uv lock --check` is the same check, standalone.)
 #
-# `--locked` on EVERY line, and it is not decoration: a bare `uv run` silently
-# re-locks when pyproject.toml has drifted from uv.lock, so the gate would repair
-# the very thing it is supposed to catch and still go green. `--locked` makes the
-# drift an error instead. (`uv lock --check` is the same check, standalone.)
+# Configs the commands read — MERGE pyproject.snippet.toml into
+# {{python_dir}}/pyproject.toml, the installer never merges it. See README.md.
 #
-# `mypy` takes no path: it reads `files` from [tool.mypy] in pyproject.toml, so
-# the scope has one home (and `mypy .` would walk .venv). Same for pytest.
-# On poetry/pdm, swap the runner and keep the rest — the invariant is the
-# lockfile, not the tool.
+# `mypy` takes no path: it reads `files` from [tool.mypy], so the scope has one
+# home (and `mypy .` would walk .venv). Same for pytest. On poetry/pdm, swap the
+# runner and keep the rest — the invariant is the lockfile, not the tool.
 python-lint:
     cd {{python_dir}} && uv run --locked ruff format --check .
     cd {{python_dir}} && uv run --locked ruff check .

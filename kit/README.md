@@ -104,7 +104,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
    move the configs into place (deny.toml+rustfmt.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
-   merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml`;
+   merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml` (map: `python/README.md`);
    adapt eslint `globalIgnores`; then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
    `check` recipe — the script ships with the library and is called from it, so
@@ -178,10 +178,11 @@ kit/
 │   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
 │   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
 │   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
-├── python/                     # COMPLETE
+├── python/                     # JALON — toolchain owns the chain
+│   ├── README.md                # config map: snippet → destination → recipe
 │   ├── python.just              # python-lint / python-check / python-mutate, imported by the justfile
-│   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
-│   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
+│   ├── lefthook.snippet.yml     # Tier 1-2 Python commands → merge into root lefthook.yml
+│   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
 └── portal-http/                # COMPLETE (frontend, pairs with the portal-http profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)

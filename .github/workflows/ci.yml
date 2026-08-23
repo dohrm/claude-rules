@@ -3,10 +3,11 @@ name: CI
 # The factory's own gate. One command per job:
 #   test          — installer + asset-tree (node:test, no language toolchain)
 #   rust-gates    — rust jalon: just rust-lint / rust-check (test/fixtures/rust-gate)
+#   python-gates  — python jalon: just python-lint / python-check (test/fixtures/python-gate)
 #
 # Language jobs are separate so a red toolchain names itself. Local `npm test`
-# skips those files when the toolchain is missing; the rust job sets RUST_GATES=1
-# so a missing tool is a failure, never a skip-as-pass.
+# skips those files when the toolchain is missing; each job sets RUST_GATES=1
+# or PYTHON_GATES=1 so a missing tool is a failure, never a skip-as-pass.
 #
 # The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
 # CLI and spends real tokens. It is a model-bump check, run on demand — see the
@@ -99,11 +100,33 @@ jobs:
       - name: just rust-lint / rust-check (witness crate)
         run: node --test test/rust-gates.test.mjs
 
+  python-gates:
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.9.26'
+          python-version: '3.12'
+          enable-cache: true
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: just python-lint / python-check (witness package)
+        run: node --test test/python-gates.test.mjs
+
   # The single required check (rules/cicd/pipeline.md): protecting the matrix job
   # directly means a renamed or skipped leg silently counts as green.
   ci-ok:
     if: always()
-    needs: [test, rust-gates]
+    needs: [test, rust-gates, python-gates]
     runs-on: ubuntu-latest
     steps:
       - name: Every gate must have actually succeeded

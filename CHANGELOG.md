@@ -22,6 +22,17 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   tracing, UTF-8 stay prose; they are not translated into a fourth clippy
   pass.
 
+- **Python is the second language jalon.** `rules/python/quality-gates.md`
+  is a pointer: the recipes, the `pyproject.toml` tables they read,
+  suppressions. Merge `pyproject.snippet.toml` — the map is
+  `.dev/kit/python/README.md`. `S` / `TRY` / `G` stay in ruff; layout,
+  domain errors, `extra=` log fields stay prose. Every recipe line is
+  `uv run --locked`.
+
+- **Rust and Python sibling rules shrink to a mention** where the jalon
+  already gates (clippy / ruff / mypy / `--locked`). What remains is only
+  what the toolchain cannot see.
+
 ### Breaking
 
 - **Codex, OpenCode and Antigravity are no longer targets.** The installer emits
