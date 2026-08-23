@@ -122,7 +122,7 @@ exact command. Install `product` first, or read the table in
 
 | Group | Profiles | What you get |
 |---|---|---|
-| **Language baseline** | `rust` `ts` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates |
+| **Language baseline** | `rust` `ts` `ts-web` `ts-node` `ts-tauri` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates. `ts` is the floor; `ts-web` / `ts-node` / `ts-tauri` are the runtime overlays |
 | **Architecture** | `hexagonal` `cqrs` | ports/adapters with inward-only deps · the event-sourced write/read split (explicit opt-in) |
 | **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map, layer boundaries and business boundary — transport-agnostic · then **one** transport on top: HTTP (OpenAPI-generated client, TanStack Query, cache-clean policy) or Tauri IPC (invoke/listen, Zustand stores). Never both — they contradict each other by design |
 | **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify) · the cross-language contracts: problem+json errors, config & secrets, health, pagination, API surface design, authorization |
@@ -407,7 +407,7 @@ claude-rules/
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
-├── test/            # `npm test` — installer + asset-tree + rust/python/go jalons (language gates skip without the toolchain)
+├── test/            # `npm test` — installer + asset-tree + rust/python/go/ts jalons (language gates skip without the toolchain)
 └── eval/            # agent regression harness (spends tokens; manual — see eval/README.md)
 ```
 
@@ -423,9 +423,10 @@ node eval/run.mjs --cmd "my-agent {prompt}"  # …or any other command (see eval
 `npm test` needs no install for the installer and the asset tree: `node:test` only,
 and the CLI tests run the installer against the working tree with `--local`. The
 language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`,
-`test/go-gates.test.mjs`) additionally need their toolchain (`just` + rust /
-`uv` / `go`+golangci-lint+govulncheck) — they skip when it is missing so a
-Node-only machine stays green. CI runs each file in its own job
+`test/go-gates.test.mjs`, `test/ts-gates.test.mjs`) additionally need their
+toolchain (`just` + rust / `uv` / `go`+golangci-lint+govulncheck / `just`+npm)
+— they skip when it is missing so a Node-only machine stays green. CI runs
+each file in its own job
 ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml));
 `eval/` is manual (`workflow_dispatch`). The asset-tree suite is what keeps this README honest — it
 fails when a rule, skill or kit directory is unreachable from `registry.json`, when

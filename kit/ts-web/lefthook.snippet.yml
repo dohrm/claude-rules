@@ -1,0 +1,15 @@
+# TypeScript web (React) hooks — MERGE into the repo's root lefthook.yml.
+
+pre-commit:
+  parallel: true
+  commands:
+    ts-web:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-web-lint
+
+pre-push:
+  parallel: true
+  commands:
+    ts-web:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-web-check

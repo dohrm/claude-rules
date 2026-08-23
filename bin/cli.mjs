@@ -139,7 +139,16 @@ const scopeGlobs = (globs, prefixes) =>
 // rule can never fire, so it is not emitted at all: `api/go.md` has no business in
 // a repo with no Go. Anything the table does not claim (yaml, CHANGELOG…) is never
 // filtered, and a repo that locked no language at all is left alone.
-const LANG_EXT = { rust: ['rs'], ts: ['ts', 'tsx'], go: ['go'], python: ['py'], godot: ['cs', 'tscn', 'tres', 'gd'] }
+const LANG_EXT = {
+  rust: ['rs'],
+  ts: ['ts', 'tsx'],
+  'ts-web': ['ts', 'tsx'],
+  'ts-node': ['ts', 'tsx'],
+  'ts-tauri': ['ts', 'tsx'],
+  go: ['go'],
+  python: ['py'],
+  godot: ['cs', 'tscn', 'tres', 'gd'],
+}
 function isLanguageDead(globs, profiles) {
   if (!Array.isArray(globs) || !globs.length) return false
   const locked = new Set(profiles.flatMap(p => LANG_EXT[p] || []))
@@ -425,7 +434,15 @@ async function install(profiles, ref, agents, modules) {
 }
 
 // ----------------------------------------------------------------------- init
-const GLOB = { rust: '**/*.rs', ts: '**/*.{ts,tsx}', go: '**/*.go', python: '**/*.py' }
+const GLOB = {
+  rust: '**/*.rs',
+  ts: '**/*.{ts,tsx}',
+  'ts-web': '**/*.{ts,tsx}',
+  'ts-node': '**/*.{ts,tsx}',
+  'ts-tauri': '**/*.{ts,tsx}',
+  go: '**/*.go',
+  python: '**/*.py',
+}
 // The git floor — the only layer of the gate portable across every
 // agent. It ships with the generated lefthook.yml rather than waiting for a manual
 // merge of common/lefthook.snippet.yml, because a floor nobody wired is not a floor.
@@ -449,7 +466,15 @@ function genLefthook(techs) {
 // tech simply points at the repo root, exactly as the snippet ships it.
 const JUST_START = '# claude-rules:start (managed — derived from .claude-rules.lock)'
 const JUST_END = '# claude-rules:end'
-const DIR_VAR = { rust: 'rust_dir', ts: 'ts_dir', go: 'go_dir', python: 'python_dir' }
+const DIR_VAR = {
+  rust: 'rust_dir',
+  ts: 'ts_dir',
+  'ts-web': 'ts_web_dir',
+  'ts-node': 'ts_node_dir',
+  'ts-tauri': 'ts_tauri_dir',
+  go: 'go_dir',
+  python: 'python_dir',
+}
 function genDirsBlock(modules, only = null) {
   const notes = []
   const lines = Object.entries(DIR_VAR).filter(([p]) => !only || only.includes(p)).map(([profile, name]) => {
@@ -513,7 +538,15 @@ function kitImports() {
   const rank = p => (p.includes('/common/') ? 0 : 1)
   return found.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
-const MUTATOR = { rust: 'rust-mutate', ts: 'ts-mutate', go: 'go-cover', python: 'python-mutate' }
+const MUTATOR = {
+  rust: 'rust-mutate',
+  ts: 'ts-mutate',
+  'ts-web': 'ts-web-mutate',
+  'ts-node': 'ts-node-mutate',
+  'ts-tauri': 'ts-tauri-mutate',
+  go: 'go-cover',
+  python: 'python-mutate',
+}
 function genJustfile(techs, modules) {
   const imports = kitImports()
   const deps = techs.map(checkDep).join(' ')

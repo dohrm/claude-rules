@@ -1,0 +1,15 @@
+# TypeScript Node hooks — MERGE into the repo's root lefthook.yml.
+
+pre-commit:
+  parallel: true
+  commands:
+    ts-node:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-node-lint
+
+pre-push:
+  parallel: true
+  commands:
+    ts-node:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-node-check

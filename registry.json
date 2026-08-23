@@ -15,7 +15,19 @@
     ],
     "ts": [
       { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
-      { "from": "kit/ts", "to": ".dev/kit/ts", "kind": "kit", "_note": "TS language baseline: quality-gate rules + the kit gates. React frontend architecture lives in the `portal-flat` + `portal-http` profiles; a Node/TS backend adds `api` + `backend`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`); `claude-rules init` writes the `import '.dev/kit/ts/ts.just'` line and derives `ts_dir` from the lock. Adapt eslint.config.base.js globalIgnores into your eslint config. Tier 3 (optional): move mutation-ci.yaml→.gitea/workflows/ (or .github/workflows/), `npm i -D @stryker-mutator/core` + a runner, `npx stryker init` — then uncomment the `mutate-diff` line in your justfile to run it locally before pushing (Stryker has no `--since`, so local uses `--incremental`; gitignore reports/). See rules/testing/ratchet.md for the calibrate-then-ratchet sequence." }
+      { "from": "kit/ts", "to": ".dev/kit/ts", "kind": "kit", "_note": "TS language floor: eslint + tsc --strict + vitest. A React portal adds `ts-web` or `ts-tauri` instead of this profile; a Fastify service adds `ts-node`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-lint`/`ts-check`); `claude-rules init` writes the `import '.dev/kit/ts/ts.just'` line and derives `ts_dir` from the lock. Copy eslint.base.js→eslint.config.js and tsconfig.base.json→tsconfig.json. The map is `.dev/kit/ts/README.md`. Recipes are `npm exec --no-install` (eslint / tsc --noEmit / vitest run) — do not wrap them in `npm run lint`. Tier 3 (optional): move mutation-ci.yaml→.gitea/workflows/, `npm i -D @stryker-mutator/core` + a runner, `npx stryker init`, uncomment `mutate-diff`. Gitignore reports/." }
+    ],
+    "ts-web": [
+      { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
+      { "from": "kit/ts-web", "to": ".dev/kit/ts-web", "kind": "kit", "_note": "TS web (React) jalon. Pair with `react` + `portal-flat` + `portal-http`. Never with `ts-tauri`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-web-lint`/`ts-web-check`); `claude-rules init` writes the import and derives `ts_web_dir`. Copy eslint.react.js→eslint.config.js and tsconfig.web.json→tsconfig.json. The map is `.dev/kit/ts-web/README.md`." }
+    ],
+    "ts-node": [
+      { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
+      { "from": "kit/ts-node", "to": ".dev/kit/ts-node", "kind": "kit", "_note": "TS Node jalon. Pair with `api` + `backend` (Fastify). Not a frontend.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-node-lint`/`ts-node-check`); `claude-rules init` writes the import and derives `ts_node_dir`. Copy eslint.node.js→eslint.config.js and tsconfig.node.json→tsconfig.json. The map is `.dev/kit/ts-node/README.md`." }
+    ],
+    "ts-tauri": [
+      { "from": "rules/ts", "to": ".claude/rules/ts", "kind": "rule" },
+      { "from": "kit/ts-tauri", "to": ".dev/kit/ts-tauri", "kind": "kit", "_note": "TS Tauri (React webview) jalon. Pair with `react` + `portal-flat` + `tauri` + `rust`. Never with `portal-http` / `ts-web`.", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just ts-tauri-lint`/`ts-tauri-check`); `claude-rules init` writes the import and derives `ts_tauri_dir`. Copy eslint.react.js→eslint.config.js and tsconfig.webview.json→tsconfig.json. The map is `.dev/kit/ts-tauri/README.md`. The Rust host is `just rust-check` — this recipe does not run `cargo tauri build`." }
     ],
     "go": [
       { "from": "rules/go", "to": ".claude/rules/go", "kind": "rule" },

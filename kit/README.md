@@ -105,7 +105,8 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    move the configs into place (deny.toml+rustfmt.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
    golangci.base.yml→`<go_dir>/.golangci.yml` (v2), mutation-ci.yaml→`.gitea/workflows/`);
    merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml` (map: `python/README.md`);
-   adapt eslint `globalIgnores`; then `lefthook install`.
+   copy `ts/eslint.base.js` (or the web/node/tauri overlay) → `eslint.config.js`
+   and the matching `tsconfig.*.json` → `tsconfig.json`; then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
    `check` recipe — the script ships with the library and is called from it, so
    there is nothing to move into `scripts/`. The gate makes
@@ -168,11 +169,28 @@ kit/
 │   ├── deny.toml               # Tier 2 supply-chain — copy to <rust_dir>/ (adapt registry / private crates)
 │   ├── mutants.toml            # Tier 3 config → copy to <rust_dir>/.cargo/ (adapt exclusions)
 │   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
-├── ts/                         # COMPLETE
-│   ├── ts.just                 # ts-lint / ts-check / ts-mutate, imported by the justfile
-│   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
-│   ├── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
-│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker, changed files) → .gitea/ or .github/workflows/
+├── ts/                         # JALON — language floor
+│   ├── README.md               # config map: file → destination → recipe
+│   ├── ts.just                 # ts-lint / ts-check / ts-mutate — npm exec --no-install
+│   ├── eslint.base.js          # no-explicit-any + no-non-null-assertion → COPY to eslint.config.js
+│   ├── tsconfig.base.json      # strict, no DOM → COPY to tsconfig.json
+│   ├── lefthook.snippet.yml    # Tier 1-2 → merge into root lefthook.yml
+│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker) → .gitea/ or .github/workflows/
+├── ts-web/                     # JALON — React portal (HTTP)
+│   ├── README.md
+│   ├── ts-web.just             # ts-web-lint / ts-web-check (react-hooks + jsx-a11y + DOM)
+│   ├── eslint.react.js
+│   └── tsconfig.web.json
+├── ts-node/                    # JALON — Fastify service
+│   ├── README.md
+│   ├── ts-node.just            # ts-node-lint / ts-node-check (Node globals, no DOM)
+│   ├── eslint.node.js
+│   └── tsconfig.node.json
+├── ts-tauri/                   # JALON — React webview (same overlay as ts-web)
+│   ├── README.md
+│   ├── ts-tauri.just           # ts-tauri-lint / ts-tauri-check — not cargo tauri build
+│   ├── eslint.react.js
+│   └── tsconfig.webview.json
 ├── go/                         # JALON — toolchain owns the chain
 │   ├── README.md                # config map: file → destination → recipe
 │   ├── go.just                  # go-lint / go-check / go-cover, imported by the justfile

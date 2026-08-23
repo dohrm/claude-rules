@@ -1,9 +1,8 @@
-# TypeScript/React hooks — MERGE into the repo's root lefthook.yml.
+# TypeScript language-floor hooks — MERGE into the repo's root lefthook.yml.
 #
-# Thin triggers only: commands live in the justfile recipes (ts-lint / ts-check),
-# which hold the path via the `ts_dir` variable. Layout-agnostic glob.
-# Generated code is excluded in eslint.config.js via globalIgnores (see
-# eslint.config.base.js) — never lint generated client/route code.
+# Thin triggers only: commands live in the justfile recipes (ts-lint / ts-check).
+# A React portal uses the ts-web / ts-tauri snippet instead; a Fastify service
+# uses the ts-node snippet.
 
 pre-commit:
   parallel: true

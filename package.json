@@ -11,7 +11,7 @@
     "registry.json"
   ],
   "scripts": {
-    "test": "node --test test/registry.test.mjs test/cli.test.mjs test/gates.test.mjs test/skills.test.mjs test/hooks.test.mjs test/eval-harness.test.mjs test/rust-gates.test.mjs test/python-gates.test.mjs test/go-gates.test.mjs"
+    "test": "node --test test/registry.test.mjs test/cli.test.mjs test/gates.test.mjs test/skills.test.mjs test/hooks.test.mjs test/eval-harness.test.mjs test/rust-gates.test.mjs test/python-gates.test.mjs test/go-gates.test.mjs test/ts-gates.test.mjs"
   },
   "dependencies": {
     "giget": "^1.2.3"

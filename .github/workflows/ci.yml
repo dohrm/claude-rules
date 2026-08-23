@@ -5,10 +5,11 @@ name: CI
 #   rust-gates    — rust jalon: just rust-lint / rust-check (test/fixtures/rust-gate)
 #   python-gates  — python jalon: just python-lint / python-check (test/fixtures/python-gate)
 #   go-gates      — go jalon: just go-lint / go-check (test/fixtures/go-gate)
+#   ts-gates      — ts jalon + derivatives (test/fixtures/ts-gate)
 #
 # Language jobs are separate so a red toolchain names itself. Local `npm test`
 # skips those files when the toolchain is missing; each job sets RUST_GATES=1,
-# PYTHON_GATES=1 or GO_GATES=1 so a missing tool is a failure, never a skip-as-pass.
+# PYTHON_GATES=1, GO_GATES=1 or TS_GATES=1 so a missing tool is a failure, never a skip-as-pass.
 #
 # The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
 # CLI and spends real tokens. It is a model-bump check, run on demand — see the
@@ -159,11 +160,33 @@ jobs:
       - name: just go-lint / go-check (witness module)
         run: node --test test/go-gates.test.mjs
 
+  ts-gates:
+    runs-on: ubuntu-latest
+    env:
+      TS_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: test/fixtures/ts-gate/package-lock.json
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install the witness lock
+        working-directory: test/fixtures/ts-gate
+        run: npm ci --ignore-scripts
+      - name: just ts-check / ts-web-check / ts-node-check / ts-tauri-check
+        run: node --test test/ts-gates.test.mjs
+
   # The single required check (rules/cicd/pipeline.md): protecting the matrix job
   # directly means a renamed or skipped leg silently counts as green.
   ci-ok:
     if: always()
-    needs: [test, rust-gates, python-gates, go-gates]
+    needs: [test, rust-gates, python-gates, go-gates, ts-gates]
     runs-on: ubuntu-latest
     steps:
       - name: Every gate must have actually succeeded

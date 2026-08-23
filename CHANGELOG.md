@@ -41,6 +41,15 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   `golangci-lint migrate` if you still own a v1 file. slog, proto /
   `pb.*`, `internal/`, `%w` stay mentions.
 
+- **TypeScript is the fourth language jalon, with three derivatives.**
+  Recipes own the tools (`npm exec --no-install -- eslint / tsc / vitest`)
+  — they no longer delegate to `npm run lint`. `ts` is the floor
+  (`no-explicit-any`, `no-non-null-assertion`, `strict`). `ts-web` and
+  `ts-tauri` add react-hooks + jsx-a11y + DOM; `ts-node` adds Node
+  globals and drops DOM. Fastify schemas, Zustand / invoke, kebab-case
+  filenames stay mentions. Maps: `.dev/kit/ts/README.md` and the
+  derivative READMEs.
+
 ### Breaking
 
 - **Codex, OpenCode and Antigravity are no longer targets.** The installer emits

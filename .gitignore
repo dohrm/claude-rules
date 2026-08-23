@@ -3,6 +3,7 @@ site/.astro/
 site/dist/
 node_modules/
 package-lock.json
+!test/fixtures/ts-gate/package-lock.json
 .work/
 .memory/
 /target/
@@ -13,3 +14,4 @@ test/fixtures/python-gate/.ruff_cache/
 test/fixtures/python-gate/.mypy_cache/
 test/fixtures/python-gate/.pytest_cache/
 test/fixtures/python-gate/pytest-cache-files-*/
+test/fixtures/ts-gate/node_modules/

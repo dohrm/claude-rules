@@ -20,7 +20,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 | Profile | What | Install when |
 |---------|------|--------------|
-| `rust` / `go` / `ts` / `python` | language baseline (style, gates, logging) | always, per language in use |
+| `rust` / `go` / `ts` / `ts-web` / `ts-node` / `ts-tauri` / `python` | language baseline (style, gates, logging). `ts` is the floor; a React portal uses `ts-web` or `ts-tauri`, a Fastify service uses `ts-node` | always, per language in use |
 | `godot` | Godot 4 + C# game (co-location, typed EventBus, data in `.tres`) | shape is **gamedev** |
 | `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | always, as soon as the repo has tests |
 | `cicd` | pipeline + release doctrine, reference workflows, `/ci-setup` | as soon as the repo has a forge — i.e. always, in practice |
@@ -41,10 +41,10 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 Examples:
 - Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
-- React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat portal-http`
-- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat portal-http`
-- Tauri desktop app → `add ts rust testing cicd react portal-flat tauri` (the architecture, then the IPC transport — never `portal-http` too)
-- Node/TS backend → `add ts testing cicd api backend` (Fastify; no portal profile)
+- React frontend → `npx github:dohrm/claude-rules add ts-web testing cicd react portal-flat portal-http`
+- Rust API + React portal (fullstack) → `add rust ts-web testing cicd hexagonal api backend react portal-flat portal-http`
+- Tauri desktop app → `add ts-tauri rust testing cicd react portal-flat tauri` (the architecture, then the IPC transport — never `portal-http` too)
+- Node/TS backend → `add ts-node testing cicd api backend` (Fastify; no portal profile)
 - Python service → `add python testing cicd ops backend` (`api` ships no Python variant yet — name the framework in an ADR)
 
 `python` carries one decision the others don't: it assumes a **committed lockfile
@@ -59,9 +59,9 @@ IPC rules off the web app's files, and vice versa:
 
 ```
 add rust hexagonal api backend        --module apps/api
-add ts react portal-flat portal-http  --module apps/web
-add ts react portal-flat tauri        --module apps/desktop   # same layers, IPC transport
-add ts react                          --module apps/mobile    # Expo: React, but not a portal
+add ts-web react portal-flat portal-http  --module apps/web
+add ts-tauri react portal-flat tauri      --module apps/desktop   # same layers, IPC transport
+add ts-web react                          --module apps/mobile    # Expo: React, but not a portal
 add testing cicd product                                      # repo-wide
 ```
 

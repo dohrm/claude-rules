@@ -45,7 +45,17 @@ A thing.
 // assembles the whole thing the way `init` does and asks `just` itself. Skipped when
 // just is not installed: this must not turn a machine without it into a red suite.
 const JUST = spawnSync('just', ['--version'], { encoding: 'utf8' })
-const LIBS = ['common/gate.just', 'rust/rust.just', 'ts/ts.just', 'go/go.just', 'python/python.just', 'godot/godot.just']
+const LIBS = [
+  'common/gate.just',
+  'rust/rust.just',
+  'ts/ts.just',
+  'ts-web/ts-web.just',
+  'ts-node/ts-node.just',
+  'ts-tauri/ts-tauri.just',
+  'go/go.just',
+  'python/python.just',
+  'godot/godot.just',
+]
 
 test('the whole kit library parses, and the root justfile overrides it', { skip: JUST.error ? 'just not installed' : false }, () => {
   withTmpRepo(dir => {
@@ -64,8 +74,9 @@ test('the whole kit library parses, and the root justfile overrides it', { skip:
     // Every recipe the shipped snippets promise, in one flat namespace — `mod` would
     // have namespaced them (and moved the working directory), breaking every trigger.
     const recipes = new Set(summary.stdout.trim().split(/\s+/))
-    for (const r of ['check', 'rust-check', 'ts-check', 'go-check', 'python-check', 'godot-check',
-                     'rust-mutate', 'ts-mutate', 'go-cover', 'python-mutate',
+    for (const r of ['check', 'rust-check', 'ts-check', 'ts-web-check', 'ts-node-check', 'ts-tauri-check',
+                     'go-check', 'python-check', 'godot-check',
+                     'rust-mutate', 'ts-mutate', 'ts-web-mutate', 'go-cover', 'python-mutate',
                      'code-review', 'review-guard', 'adr-check', 'docs-check', 'rules-check', 'dup-check', 'status'])
       assert.ok(recipes.has(r), `${r} is not resolvable`)
 
