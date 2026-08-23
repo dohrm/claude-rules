@@ -33,6 +33,14 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   already gates (clippy / ruff / mypy / `--locked`). What remains is only
   what the toolchain cannot see.
 
+- **Go is the third language jalon.** `rules/go/quality-gates.md` is a
+  pointer: `just go-lint` / `go-check` / `go-cover`. Copy
+  `golangci.base.yml` → `<go_dir>/.golangci.yml` — the map is
+  `.dev/kit/go/README.md`. The shipped file is **golangci-lint v2**
+  (`gofmt` under `formatters`, `gosimple` folded into `staticcheck`);
+  `golangci-lint migrate` if you still own a v1 file. slog, proto /
+  `pb.*`, `internal/`, `%w` stay mentions.
+
 ### Breaking
 
 - **Codex, OpenCode and Antigravity are no longer targets.** The installer emits

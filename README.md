@@ -407,7 +407,7 @@ claude-rules/
 ├── skills/          # canonical <name>/SKILL.md dirs — see the slash-command table above
 ├── agents/          # thin subagent defs (code-reviewer, code-simplifier)
 ├── guidelines/      # how to work with Claude Code (rules, prompting, CLAUDE.md hierarchy)
-├── test/            # `npm test` — installer + asset-tree + rust/python jalons (language gates skip without the toolchain)
+├── test/            # `npm test` — installer + asset-tree + rust/python/go jalons (language gates skip without the toolchain)
 └── eval/            # agent regression harness (spends tokens; manual — see eval/README.md)
 ```
 
@@ -422,9 +422,10 @@ node eval/run.mjs --cmd "my-agent {prompt}"  # …or any other command (see eval
 
 `npm test` needs no install for the installer and the asset tree: `node:test` only,
 and the CLI tests run the installer against the working tree with `--local`. The
-language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`)
-additionally need their toolchain (`just` + rust / `uv`) — they skip when it is
-missing so a Node-only machine stays green. CI runs each file in its own job
+language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`,
+`test/go-gates.test.mjs`) additionally need their toolchain (`just` + rust /
+`uv` / `go`+golangci-lint+govulncheck) — they skip when it is missing so a
+Node-only machine stays green. CI runs each file in its own job
 ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml));
 `eval/` is manual (`workflow_dispatch`). The asset-tree suite is what keeps this README honest — it
 fails when a rule, skill or kit directory is unreachable from `registry.json`, when

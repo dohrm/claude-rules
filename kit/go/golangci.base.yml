@@ -1,22 +1,21 @@
-# golangci-lint base config — COPY to `.golangci.yml` at the module root.
-# Mirrors rules/go/quality-gates.md (single source of doctrine).
+# golangci-lint v2 — COPY to <go_dir>/.golangci.yml. The installer never merges
+# it. Read by `just go-lint`. Map: .dev/kit/go/README.md.
 #
-# NB: golangci-lint v2 changed the schema (`version: "2"`, `gofmt` moved under
-# `formatters`, `gosimple` folded into `staticcheck`). This is the v1-style
-# enable list from the rule; ADAPT to v2 if that is what you run.
+# v1 schema (`gofmt` under linters.enable, `gosimple` as its own linter) will
+# not parse. `golangci-lint migrate` converts an old file you already own.
+
+version: "2"
 
 linters:
   enable:
-    - staticcheck   # SA*, S1*, QF* checks
     - errcheck      # unhandled errors
-    - govet         # go vet checks
-    - gofmt         # formatting
-    - gosimple      # simplification suggestions
-    - unused        # unused code
+    - govet
+    - staticcheck   # SA* / S1* / QF* — gosimple folded in
+    - unused
     - gosec         # security anti-patterns
 
-# No `//nolint` without a justification comment on the same line.
-# No `staticcheck:ignore` without justification.
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+
+# No `//nolint` without a reason on the same line.

@@ -103,7 +103,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    override it here instead. Needs just >= 1.27.
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
    move the configs into place (deny.toml+rustfmt.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
-   golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
+   golangci.base.yml→`<go_dir>/.golangci.yml` (v2), mutation-ci.yaml→`.gitea/workflows/`);
    merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml` (map: `python/README.md`);
    adapt eslint `globalIgnores`; then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
@@ -173,10 +173,11 @@ kit/
 │   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
 │   ├── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
 │   └── mutation-ci.yaml        # Tier 3 CI job (Stryker, changed files) → .gitea/ or .github/workflows/
-├── go/                         # COMPLETE
+├── go/                         # JALON — toolchain owns the chain
+│   ├── README.md                # config map: file → destination → recipe
 │   ├── go.just                  # go-lint / go-check / go-cover, imported by the justfile
-│   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
-│   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+│   ├── lefthook.snippet.yml     # Tier 1-2 Go commands → merge into root lefthook.yml
+│   ├── golangci.base.yml        # v2 config → COPY to <go_dir>/.golangci.yml
 │   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
 ├── python/                     # JALON — toolchain owns the chain
 │   ├── README.md                # config map: snippet → destination → recipe
