@@ -4,4 +4,4 @@
 # cannot invent a local rustfmt.toml that loosens them.
 #
 # ADAPT: edition must match the workspace (Cargo.toml).
-edition = "2021"
+edition = "2024"

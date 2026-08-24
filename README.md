@@ -96,6 +96,7 @@ docs/
 ```bash
 # in your repo, from its root — aliases unpack; --root is the glob lever:
 npx github:dohrm/claude-rules add rust-api --root apps/api --level gates
+npx github:dohrm/claude-rules add python-api --root apps/api --level gates
 npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
 npx github:dohrm/claude-rules add agent testing cicd --level gates   # repo-wide; not on the language tree
@@ -125,13 +126,13 @@ exact command. Install `product` first, or read the table in
 | **Language baseline** | `rust` `ts` `ts-web` `ts-node` `ts-tauri` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine. Kit at `--level gates`. `ts` is the floor; `ts-web` / `ts-node` / `ts-tauri` are the runtime overlays |
 | **Architecture** | `hexagonal` `cqrs` | ports/adapters with inward-only deps · the event-sourced write/read split (explicit opt-in, no prescribed library). Both carry SOLID as vocabulary, not a scorecard |
 | **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map — transport-agnostic · then **one** transport on top. Never both |
-| **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify) · problem+json, config, health, pagination |
+| **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify / FastAPI) · problem+json, config, health, pagination |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
 | **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
 
-**Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
+**Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
 Every profile also pulls **`rules/common`** (artifacts in English). The agent OS is `add agent`.
 

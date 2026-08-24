@@ -8,6 +8,7 @@
   "aliases": {
     "rust-api": ["rust", "hexagonal", "api", "backend"],
     "go-api": ["go", "hexagonal", "api", "backend"],
+    "python-api": ["python", "hexagonal", "api", "backend"],
     "ts-node-api": ["ts-node", "api", "backend"],
     "ts-web-app": ["ts-web", "react", "portal-flat", "portal-http"],
     "ts-tauri-app": ["ts-tauri", "react", "portal-flat", "tauri"]
@@ -51,7 +52,7 @@
       { "from": "kit/godot", "to": ".dev/kit/godot", "kind": "kit", "wire": "Merge lefthook.snippet.yml into lefthook.yml (thin triggers → `just godot-lint`/`godot-check`). `claude-rules init` writes the `import '.dev/kit/godot/godot.just'` line; override godot_dir/godot_bin/godot_export_preset in your justfile (the lock cannot derive a Godot binary or an export preset) and add `godot-check` to `check` once they are right. chmod +x check-no-new-gd.sh. Reference analyzers/Factory.Godot.Analyzers.csproj from the game .csproj and merge analyzers/.editorconfig — the map is `.dev/kit/godot/README.md`. Needs Godot 4 .NET + export templates + a matching export preset. Factory CI witnesses lint + `dotnet test`; headless export is consumer-side." }
     ],
     "hexagonal": [
-      { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go), path-scoped so only your language's loads. `architect` recommends this for backend/fullstack shapes." }
+      { "from": "rules/hexagonal", "to": ".claude/rules/hexagonal", "kind": "rule", "_note": "Architecture pattern — gate: backend/fullstack. Ships the agnostic principle + language idioms (rust/go/python), path-scoped so only your language's loads. `architect` recommends this for backend/fullstack shapes." }
     ],
     "cqrs": [
       { "from": "rules/cqrs", "to": ".claude/rules/cqrs", "kind": "rule", "_note": "Architecture pattern — gate: EXPLICIT opt-in only (non-standard). Write/read split + event sourcing principles, no prescribed library. Add explicitly: `add cqrs`." }
@@ -89,7 +90,7 @@
       { "from": "rules/tauri", "to": ".claude/rules/tauri", "kind": "rule", "_note": "Tauri v2 desktop app — gate: EXPLICIT opt-in. The desktop TRANSPORT of `portal-flat`, the counterpart of `portal-http`: invoke/listen, no HTTP, no OpenAPI, no TanStack Query — Zustand stores under `features/{domain}/api/` instead. Install alongside `ts react portal-flat rust`, and NEVER with `portal-http`." }
     ],
     "api": [
-      { "from": "rules/api", "to": ".claude/rules/api", "kind": "rule", "_note": "Opinionated HTTP-API stack — gate: backend/fullstack. rust=axum+utoipa, go=chi+Huma, node=Fastify. All emit OpenAPI (the contract `portal-http` generates its client from). Path-scoped per language; add explicitly: `add api`." }
+      { "from": "rules/api", "to": ".claude/rules/api", "kind": "rule", "_note": "Opinionated HTTP-API stack — gate: backend/fullstack. rust=axum+utoipa, go=chi+Huma, node=Fastify, python=FastAPI+Pydantic. All emit OpenAPI (the contract `portal-http` generates its client from). Path-scoped per language; add explicitly: `add api`." }
     ],
     "backend": [
       { "from": "rules/backend", "to": ".claude/rules/backend", "kind": "rule", "_note": "Cross-language backend conventions — gate: backend/fullstack. Error contract (problem+json), config & secrets, health & lifecycle, pagination. Language-agnostic; add explicitly: `add backend`." }

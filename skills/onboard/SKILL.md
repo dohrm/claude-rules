@@ -66,6 +66,7 @@ the old seven-profile bag on one language tree. Typical:
 
 ```
 npx github:dohrm/claude-rules add rust-api agent --root apps/api --level gates
+npx github:dohrm/claude-rules add python-api agent --root apps/api --level gates
 npx github:dohrm/claude-rules add testing cicd
 ```
 

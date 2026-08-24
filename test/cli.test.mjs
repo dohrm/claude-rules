@@ -858,6 +858,18 @@ test('aliases unpack on add; lock stores the atoms', () => {
   })
 })
 
+test('python-api unpacks and emits the python HTTP/hexagonal rules', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'python-api', '--agent', 'claude'], dir))
+    assert.match(r.stdout, /unpack python-api/)
+    assert.deepEqual(lockOf(dir).profiles, ['python', 'hexagonal', 'api', 'backend'])
+    assert.ok(has(dir, '.claude/rules/api/python.md'))
+    assert.ok(has(dir, '.claude/rules/hexagonal/python.md'))
+    assert.ok(!has(dir, '.claude/rules/api/rust.md'), 'no Rust here — the rule can never fire')
+    assert.ok(!has(dir, '.dev/kit/python'), 'kit is --level gates')
+  })
+})
+
 test('--root is the same lever as --module', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude', '--root', 'apps/api'], dir))

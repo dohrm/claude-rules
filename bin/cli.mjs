@@ -1189,7 +1189,7 @@ async function main() {
         + '  add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
         + '                                   install/pin profiles (default: both agents, --level rules)\n'
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
-        + '                                   aliases unpack (rust-api, go-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
+        + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'

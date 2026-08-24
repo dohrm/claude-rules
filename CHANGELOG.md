@@ -29,11 +29,19 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   (prose, no kit). `--level gates` copies the language kit. `--level
   ratchet` is never the default; `init` then writes `mutate-diff` live.
 - **`--root` is the glob lever** (`--module` still works). `/architect`
-  recommends aliases (`rust-api`, `go-api`, `ts-web-app`, `ts-tauri-app`,
-  `ts-node-api`) plus `--root` and `--level gates`, not the seven-profile
+  recommends aliases (`rust-api`, `go-api`, `python-api`, `ts-web-app`,
+  `ts-tauri-app`, `ts-node-api`) plus `--root` and `--level gates`, not the seven-profile
   bag that loaded 21 rules on a domain entity.
 
 ### Added
+
+- **Python HTTP API matches the other languages.** `rules/api/python.md` is
+  FastAPI + Pydantic v2 (types generate OpenAPI); `rules/hexagonal/python.md`
+  is the import graph (`domain/` must not import FastAPI/SQLAlchemy/httpx).
+  Alias `python-api` unpacks `python hexagonal api backend`, same shape as
+  `rust-api`. FastAPI's default `{"detail": …}` is not the error contract —
+  problem+json stays in `backend/errors.md`. A worker/script is still
+  `add python` without `api`.
 
 - **`/onboard`** — brownfield twin of `/interview`. Inventory, CLAUDE.md
   scaffold, `.work/onboard.md`. No ADR, no PRD. Hands off to `/prd` /

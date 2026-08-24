@@ -22,4 +22,4 @@ Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is 
 
 No bare `# noqa` or `# type: ignore` — name the code and why. Never loosen ruff or mypy to pass. A legacy mypy override list may only shrink (`testing/ratchet.md`).
 
-Sibling rules cover what ruff/mypy do not: `src/` layout, `__all__`, Protocols, domain exceptions, `extra=` / `print()`.
+Sibling rules cover what ruff/mypy do not: `src/` layout, `__all__`, Protocols, domain exceptions, `extra=` / `print()`. FastAPI typed routes and problem+json: `rules/api/python.md`.

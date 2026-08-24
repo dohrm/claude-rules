@@ -26,7 +26,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | as soon as the repo has tests — its own add, not bundled into a language pack |
 | `cicd` | pipeline + release doctrine, reference workflows, `/ci-setup` | as soon as the repo has a forge — i.e. always, in practice |
 | `hexagonal` | ports/adapters, inward deps | shape is **backend** or **fullstack** |
-| `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify) | shape is **backend** or **fullstack** |
+| `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify, python=FastAPI) | shape is **backend** or **fullstack** |
 | `backend` | error contract, config, health, pagination | shape is **backend** or **fullstack** |
 | `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
 | `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
@@ -46,7 +46,8 @@ Examples (aliases unpack; `--root` is the glob lever; `--level gates` brings the
 - Rust API + React portal → two roots, two adds: `add rust-api --root apps/api --level gates` then `add ts-web-app --root apps/web --level gates` then `add agent testing cicd --level gates`
 - Tauri desktop app → `add ts-tauri-app rust agent --root apps/desktop --level gates` (never `portal-http` too)
 - Node/TS backend → `add ts-node-api agent --root apps/api --level gates`
-- Python service → `add python backend agent --root <dir> --level gates` (`api` ships no Python variant yet — name the framework in an ADR)
+- Python HTTP API → `add python-api agent --root <dir> --level gates`
+- Python worker / script (no HTTP) → `add python agent --root <dir> --level gates` (add `hexagonal` / `backend` only if they apply — no FastAPI)
 - Then, separately, when they apply: `add testing`, `add cicd`, `add ops --root deploy`, `add k8s`, `add incident`
 
 Do **not** recommend `rust testing cicd ops hexagonal api backend` as one bag. That is how 21 rules land on a domain entity. `testing` / `cicd` / `ops` are their own adds; `ops` is not rooted on the same tree as `rust`.

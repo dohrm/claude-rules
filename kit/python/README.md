@@ -51,6 +51,7 @@ Commit `pyproject.toml`, `uv.lock`, and `.python-version`.
 ## What this chain cannot see
 
 `src/` layout, `__all__` / barrels, Protocols vs ABCs, domain exception
-hierarchies, adapter translation, `extra=` log fields, `print()`. Those
-stay in `rules/python/` as short prose for the reviewer. Do not invent
-a second ruff pass to "translate" them.
+hierarchies, adapter translation, `extra=` log fields, `print()`. FastAPI
+route annotations and problem+json live in `rules/api/python.md` — this
+chain does not see a handler without a return type. Do not invent a
+second ruff pass to "translate" them.

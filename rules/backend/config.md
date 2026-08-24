@@ -22,6 +22,7 @@ Config comes from the environment (12-factor). It is **loaded once, validated at
 
 - **Rust** — a `Config` struct deserialized via `serde` + `envy`/`figment`; validated in `Config::from_env()`.
 - **Go** — a `Config` struct via `env`/`envconfig`; validated in `LoadConfig()`.
+- **Python** — a Pydantic `BaseSettings` (pydantic-settings) loaded once in the composition root; never `os.environ[...]` in domain.
 - **Node** — a schema (TypeBox/Zod) parsed from `process.env` at boot; `@fastify/env` if using Fastify.
 
 ## Checklist
