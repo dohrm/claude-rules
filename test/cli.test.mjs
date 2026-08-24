@@ -11,34 +11,47 @@ import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './he
 const lockOf = dir => JSON.parse(read(dir, '.claude-rules.lock'))
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
 
-test('add rust --agent claude: verbatim rules, kit, agents, shared, lock', () => {
+test('add rust --agent claude: rules only by default; common language is the only shared', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
 
-    // rules are copied byte-for-byte for Claude (no transform)
     assert.equal(read(dir, '.claude/rules/rust/code-style.md'), read(REPO, 'rules/rust/code-style.md'))
     assert.ok(has(dir, '.claude/rules/rust/utf8-safety.md'))
-    // shared assets come along with any profile
-    assert.ok(has(dir, '.claude/rules/agent/guardrails.md'), 'shared agent rules missing')
     assert.ok(has(dir, '.claude/rules/common/language.md'), 'shared common rules missing')
-    assert.ok(has(dir, '.claude/agents/code-reviewer.md'), 'shared subagents missing')
-    // kit is copied, not merged
-    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
-    assert.ok(has(dir, '.dev/kit/common/gate.just'), 'the gate library ships with kit/common')
-    assert.ok(has(dir, '.dev/kit/rust/rust.just'), "and one per tech, with that tech's kit")
+    assert.ok(!has(dir, '.claude/rules/agent/guardrails.md'), 'agent is a profile, not a gift')
+    assert.ok(!has(dir, '.claude/agents/code-reviewer.md'))
+    assert.ok(!has(dir, '.dev/kit/rust/deny.toml'), 'kit is --level gates')
+    assert.ok(!has(dir, '.dev/kit/common/gate.just'))
     assert.ok(!has(dir, 'lefthook.yml'), 'the installer must never write build config')
 
     const lock = lockOf(dir)
     assert.deepEqual(lock.profiles, ['rust'])
+    assert.equal(lock.levels.rust, 'rules')
     assert.deepEqual(lock.agents, ['claude'])
     assert.equal(lock.ref, registry.defaultRef)
     assert.equal(lock.repo, registry.repo)
   })
 })
 
-test('add --agent cursor: path-scoped rules get globs, cross-cutting ones alwaysApply', () => {
+test('add rust --level gates copies the kit; add agent --level gates copies kit/common', () => {
   withTmpRepo(dir => {
-    const r = ok(runCli(['add', 'rust', '--agent', 'cursor'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
+    assert.ok(has(dir, '.dev/kit/rust/rust.just'))
+    assert.ok(!has(dir, '.dev/kit/common/gate.just'), 'common is the agent profile')
+    assert.equal(lockOf(dir).levels.rust, 'gates')
+
+    ok(runCli(['add', 'agent', '--level', 'gates', '--agent', 'claude'], dir))
+    assert.ok(has(dir, '.claude/rules/agent/guardrails.md'))
+    assert.ok(has(dir, '.claude/agents/code-reviewer.md'))
+    assert.ok(has(dir, '.dev/kit/common/gate.just'))
+    assert.equal(lockOf(dir).levels.agent, 'gates')
+  })
+})
+
+test('add --agent cursor: path-scoped rules get globs, agent rules alwaysApply', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust', 'agent', '--level', 'gates', '--agent', 'cursor'], dir))
 
     const scoped = read(dir, '.cursor/rules/rust/code-style.mdc')
     assert.match(scoped, /^---\n/)
@@ -50,10 +63,8 @@ test('add --agent cursor: path-scoped rules get globs, cross-cutting ones always
     assert.match(crossCutting, /alwaysApply: true/)
     assert.doesNotMatch(crossCutting, /globs:/)
 
-    // Cursor has no file-based subagents: the agent entry is skipped, with a note.
     assert.ok(!has(dir, '.cursor/agents'))
     assert.match(r.stdout, /no file-based subagents/)
-    // skills and kit go to the agent-neutral locations
     assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
   })
 })
@@ -72,7 +83,7 @@ test('retired --agent names fail loudly', () => {
 test('add product: skills land as <name>/SKILL.md directories', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
-    for (const name of ['prd', 'architect', 'plan', 'tasks', 'pre-mortem']) {
+    for (const name of ['prd', 'architect', 'plan', 'tasks', 'pre-mortem', 'onboard', 'interview']) {
       assert.ok(has(dir, `.claude/skills/${name}/SKILL.md`), `skill ${name} not installed`)
     }
     assert.equal(read(dir, '.claude/skills/prd/SKILL.md'), read(REPO, 'skills/prd/SKILL.md'))
@@ -97,10 +108,10 @@ test('no --agent installs both remaining agents', () => {
 // and orphaned by `remove all` — which deletes the lock, leaving no way to find them.
 test('add extends the lock instead of replacing it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCli(['add', 'go', '--agent', 'claude'], dir))
 
-    assert.deepEqual(lockOf(dir).profiles, ['rust', 'go'])
+    assert.deepEqual(lockOf(dir).profiles, ['agent', 'rust', 'go'])
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'), 'the first profile must survive a second add')
     assert.ok(has(dir, '.claude/rules/go/quality-gates.md'))
   })
@@ -108,7 +119,7 @@ test('add extends the lock instead of replacing it', () => {
 
 test('add without --agent keeps the locked agent set (never widens to all)', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCli(['add', 'go'], dir))
 
     assert.deepEqual(lockOf(dir).agents, ['claude'])
@@ -118,7 +129,7 @@ test('add without --agent keeps the locked agent set (never widens to all)', () 
 
 test('add --agent adds a target to the locked set, and back-fills the locked profiles', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCli(['add', 'go', '--agent', 'cursor'], dir))
 
     assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
@@ -131,7 +142,7 @@ test('add --agent adds a target to the locked set, and back-fills the locked pro
 // (empty parent dirs like .claude/rules/ may remain — assets are what must go)
 test('remove all after several adds deletes every installed asset', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCli(['add', 'go', '--agent', 'claude'], dir))
     ok(runCliBare(['remove', 'all'], dir))
 
@@ -147,7 +158,7 @@ test('remove all after several adds deletes every installed asset', () => {
 // say so once, or the next reader assumes there is a second copy somewhere.
 test('the kit has one home whatever the agents, and is copied once', () => {
   withTmpRepo(dir => {
-    const r = ok(runCli(['add', 'rust', '--agent', 'claude,cursor'], dir))
+    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude,cursor'], dir))
     assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
     assert.ok(!has(dir, '.claude/kit'), 'the kit must not land under an agent directory')
     assert.equal(r.stdout.split('kit/rust  \u2192').length - 1, 1, 'kit/rust copied twice')
@@ -164,7 +175,7 @@ test('add purges the legacy .claude/kit, keeping what is not ours', () => {
     mkdirSync(join(dir, '.claude/kit/mine'), { recursive: true })
     writeFileSync(join(dir, '.claude/kit/mine/notes.md'), 'mine\n')
 
-    const r = ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     assert.ok(!has(dir, '.claude/kit/rust'), 'the legacy kit copy must go')
     assert.ok(has(dir, '.claude/kit/mine/notes.md'), 'only registry-known kit dirs may be deleted')
     assert.match(r.stdout, /\.claude\/kit/, 'a silent move leaves the reader with two trees')
@@ -174,14 +185,14 @@ test('add purges the legacy .claude/kit, keeping what is not ours', () => {
 
 test('remove <profile> deletes only that profile and updates the lock', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', 'hexagonal', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', 'hexagonal', '--level', 'gates', '--agent', 'claude'], dir))
     assert.ok(has(dir, '.claude/rules/hexagonal/principle.md'))
 
     ok(runCliBare(['remove', 'hexagonal'], dir))
     assert.ok(!has(dir, '.claude/rules/hexagonal'), 'hexagonal rules should be gone')
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'), 'rust must survive')
-    assert.ok(has(dir, '.claude/rules/agent/guardrails.md'), 'shared must survive a partial remove')
-    assert.deepEqual(lockOf(dir).profiles, ['rust'])
+    assert.ok(has(dir, '.claude/rules/agent/guardrails.md'), 'agent survives a partial remove')
+    assert.deepEqual(lockOf(dir).profiles, ['agent', 'rust'])
   })
 })
 
@@ -202,7 +213,7 @@ test('add/update purge leftover trees from retired agent targets', () => {
       '',
     ].join('\n'))
 
-    const r = ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     assert.ok(!has(dir, '.dev/rules'), 'Codex/opencode rule copies must go')
     assert.ok(!has(dir, '.opencode'), 'the opencode tree must go')
     assert.ok(!has(dir, '.agents/rules'), 'Antigravity rules must go')
@@ -213,7 +224,7 @@ test('add/update purge leftover trees from retired agent targets', () => {
 
 test('update drops retired agents from an old lock', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     const lock = lockOf(dir)
     lock.agents = ['claude', 'cursor', 'antigravity', 'codex', 'opencode']
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
@@ -243,10 +254,10 @@ test('remove all uninstalls everything including shared and the lock', () => {
 
 test('update replays the locked profiles and agents', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCli(['update'], dir))
     const lock = lockOf(dir)
-    assert.deepEqual(lock.profiles, ['rust'])
+    assert.deepEqual(lock.profiles, ['agent', 'rust'])
     assert.deepEqual(lock.agents, ['claude'], 'update must not widen the agent set')
     assert.ok(!has(dir, '.cursor/rules'))
   })
@@ -279,14 +290,14 @@ test('list shows every registry profile and the installed state', () => {
     for (const p of Object.keys(registry.profiles)) assert.match(before.stdout, new RegExp(`\\b${p}\\b`))
     assert.match(before.stdout, /Installed: none/)
 
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
-    assert.match(ok(runCliBare(['list'], dir)).stdout, /Installed: \[rust\]/)
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    assert.match(ok(runCliBare(['list'], dir)).stdout, /Installed: \[agent, rust\]/)
   })
 })
 
 test('init assembles justfile + lefthook from the installed kit', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', 'ts', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', 'ts', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
 
     // The generated justfile is the COMPOSITION: the imports, the dirs, and `check`
@@ -317,7 +328,7 @@ test('init assembles justfile + lefthook from the installed kit', () => {
 // that predates the library is in exactly this state, and migrating is the human's call.
 test('doctor warns about a justfile that redefines the library instead of importing it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, 'justfile'), 'rust_dir := "."\ncheck: rust-check\nrust-check:\n    @echo mine\n')
 
     const r = runCliBare(['doctor'], dir)
@@ -337,7 +348,7 @@ test('doctor warns about a justfile that redefines the library instead of import
 // Rust sends the reader at a recipe that does not exist.
 test('init writes no invented recipe when no language is locked', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'cicd', 'product', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'cicd', 'product', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
 
     const just = read(dir, 'justfile')
@@ -380,7 +391,7 @@ test('no args prints usage without failing', () => {
 
 test('doctor on a coherent install reports nothing and exits 0', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     mkdirSync(join(dir, 'src'), { recursive: true })
     writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
     writeFileSync(join(dir, 'CLAUDE.md'), '# Project\n')
@@ -397,7 +408,7 @@ test('doctor on a coherent install reports nothing and exits 0', () => {
 
 test('doctor fails when the lock promises a destination that is not on disk', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     rmSync(join(dir, '.claude/rules/rust'), { recursive: true })
 
     const r = runCliBare(['doctor'], dir)
@@ -408,7 +419,7 @@ test('doctor fails when the lock promises a destination that is not on disk', ()
 
 test('doctor fails on assets no locked profile explains', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     // What a pre-80c5344 `add` left behind: files on disk, absent from the lock.
     mkdirSync(join(dir, '.claude/rules/go'), { recursive: true })
     writeFileSync(join(dir, '.claude/rules/go/logging.md'), '---\npaths:\n  - "**/*.go"\n---\nx\n')
@@ -435,7 +446,7 @@ test('doctor warns (not fails) on rules whose globs match no file, and --strict 
 
 test('doctor reports the always-on budget and a missing CLAUDE.md', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     mkdirSync(join(dir, 'src'), { recursive: true })
     writeFileSync(join(dir, 'src/main.rs'), 'fn main() {}\n')
 
@@ -462,7 +473,7 @@ test('doctor without a lock exits 1', () => {
 
 test('doctor notices the harness guards are installed but unwired, and confirms them once merged', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
 
     const unwired = ok(runCliBare(['doctor'], dir))
     assert.match(unwired.stdout, /claude: harness guards installed .* but nothing wires them/)
@@ -479,7 +490,7 @@ test('doctor notices the harness guards are installed but unwired, and confirms 
 
 test('doctor fails when a wired guard is not on disk', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, '.claude/settings.json'), read(dir, '.dev/kit/common/hooks/settings.snippet.json'))
     rmSync(join(dir, '.dev/kit/common/hooks/bash-guard.mjs'))
 
@@ -491,7 +502,7 @@ test('doctor fails when a wired guard is not on disk', () => {
 
 test('doctor fails on leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
     mkdirSync(join(dir, '.dev/rules/rust'), { recursive: true })
     writeFileSync(join(dir, '.dev/rules/rust/code-style.md'), 'stale\n')
@@ -505,7 +516,7 @@ test('doctor fails on leftover trees from retired agent targets', () => {
 
 test('doctor fails on a lefthook.yml git was never told about', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     mkdirSync(join(dir, '.git/hooks'), { recursive: true })
     writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit:\n  commands:\n    no-commit-on-trunk:\n      run: exit 1\n')
 
@@ -537,7 +548,7 @@ test('--module anchors the profile globs, for Claude and Cursor alike', () => {
 
 test('a profile no module claims stays repo-wide', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCli(['add', 'testing'], dir))
 
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
@@ -560,14 +571,14 @@ test('a rule whose every glob targets an unlocked language is not emitted', () =
 
 test('an install with no --module writes a lock with no modules key', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     assert.ok(!('modules' in lockOf(dir)), 'an unscoped install must stay byte-compatible with older locks')
   })
 })
 
 test('--module extends the map instead of replacing it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
 
     assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'], 'apps/web': ['ts'] })
@@ -587,7 +598,7 @@ test('remove drops the module bindings of the profiles it removes', () => {
 
 test('update clears a rule directory instead of leaving orphans in it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, '.claude/rules/rust/dropped-upstream.md'), '---\ntitle: x\n---\nstale\n')
 
     ok(runCli(['update'], dir))
@@ -606,7 +617,7 @@ test('update clears a rule directory instead of leaving orphans in it', () => {
 
 test('init derives the *_dir block from the lock modules, and nothing outside it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCliBare(['init'], dir))
 
     const just = read(dir, 'justfile')
@@ -623,7 +634,7 @@ test('init derives the *_dir block from the lock modules, and nothing outside it
 // wrote, or the "managed block" promise is a rewrite lottery.
 test('init is idempotent on the justfile it generated', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
     const first = read(dir, 'justfile')
     assert.match(first, /rust_dir\s+:= "\."/, 'no module declared: the repo root')
@@ -636,7 +647,7 @@ test('init is idempotent on the justfile it generated', () => {
 // it — only say what to add, and how to prove the migration lost nothing.
 test('init reports the missing imports on a pre-library justfile', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     const legacy = 'rust_dir := "api"\ncheck: rust-check\nrust-check:\n    @echo mine\n'
     writeFileSync(join(dir, 'justfile'), legacy)
     const r = ok(runCliBare(['init'], dir))
@@ -651,12 +662,13 @@ test('init reports the missing imports on a pre-library justfile', () => {
 
 test('init writes a CLAUDE.md once and never rewrites it', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCliBare(['init'], dir))
 
     const md = read(dir, 'CLAUDE.md')
     assert.match(md, /\| `apps\/api` \| rust \| `just rust-check` \|/)
     assert.match(md, /just check/)
+    assert.doesNotMatch(md, /autonomy\.md/, 'agent is not installed — do not point at a missing rule')
 
     writeFileSync(join(dir, 'CLAUDE.md'), '# mine\n')
     const r = ok(runCliBare(['init'], dir))
@@ -669,7 +681,7 @@ test('init writes a CLAUDE.md once and never rewrites it', () => {
 // out of the one command the agent closes its loop on. It is derived from the lock.
 test('init derives the check recipe from the locked language profiles', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'python', 'testing', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'python', 'testing', '--level', 'gates', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
 
     const just = read(dir, 'justfile')
@@ -682,7 +694,7 @@ test('init derives the check recipe from the locked language profiles', () => {
 
 test('init reports check drift instead of rewriting an existing justfile', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'python', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'python', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, 'justfile'), 'check: rust-check adr-check\nrust-check:\n    @echo mine\n')
 
     const r = ok(runCliBare(['init'], dir))
@@ -695,7 +707,7 @@ test('init reports check drift instead of rewriting an existing justfile', () =>
 
 test('init writes no CLAUDE.md when claude is not a target', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'cursor'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'cursor'], dir))
     ok(runCliBare(['init'], dir))
     assert.ok(!has(dir, 'CLAUDE.md'))
   })
@@ -713,7 +725,7 @@ test('doctor fails on a module path that does not exist', () => {
 
 test('doctor reads module-anchored globs against the real tree', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     mkdirSync(join(dir, 'apps/api/src'), { recursive: true })
     writeFileSync(join(dir, 'apps/api/src/main.rs'), 'fn main() {}\n')
     writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
@@ -740,7 +752,8 @@ test('budget <path> lists what loads for that file, and what it costs', () => {
 
     const r = ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir))
     assert.match(r.stdout, /Context for apps\/api\/src\/main\.rs/)
-    assert.match(r.stdout, /always-on rules \(4\)/)
+    assert.match(r.stdout, /always-on rules \(1\)/)
+    assert.match(r.stdout, /common\/language\.md/)
     assert.match(r.stdout, /rust\/code-style\.md.*apps\/api\/\*\*\/\*\.rs/)
     assert.match(r.stdout, /total/)
     assert.doesNotMatch(r.stdout, /ts\/code-style\.md/, 'a TS rule must not show up for a .rs file')
@@ -749,7 +762,7 @@ test('budget <path> lists what loads for that file, and what it costs', () => {
 
 test('budget shows the module anchor doing its job', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude', '--module', 'apps/api'], dir))
+    ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
 
     assert.match(ok(runCliBare(['budget', 'apps/api/src/main.rs'], dir)).stdout, /rust\/code-style\.md/)
     // the same extension outside the module gets nothing — that is the whole point
@@ -780,7 +793,7 @@ test('budget without an install exits 1', () => {
 
 test('doctor fails on a leftover AGENTS.md managed block', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
     writeFileSync(join(dir, 'AGENTS.md'), [
       '# Mine',
@@ -832,5 +845,56 @@ test('portal transports are separable, and never load on each other files', () =
     assert.doesNotMatch(tauri, /apps\/web/, 'Zustand/IPC rules must not reach the web portal')
     // tauri governs TypeScript — it describes stores and IPC wrappers, not Rust
     assert.match(tauri, /- "apps\/desktop\/\*\*\/\*\.tsx?"/)
+  })
+})
+
+test('aliases unpack on add; lock stores the atoms', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust-api', '--agent', 'claude'], dir))
+    assert.match(r.stdout, /unpack rust-api/)
+    assert.deepEqual(lockOf(dir).profiles, ['rust', 'hexagonal', 'api', 'backend'])
+    assert.ok(has(dir, '.claude/rules/hexagonal/principle.md'))
+    assert.ok(has(dir, '.claude/rules/api/rust.md'))
+  })
+})
+
+test('--root is the same lever as --module', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--root', 'apps/api'], dir))
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
+    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'] })
+  })
+})
+
+test('a language-glob profile without --root is hinted, not blocked', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'ops', '--agent', 'claude'], dir))
+    assert.match(r.stdout, /--root/)
+    assert.ok(has(dir, '.claude/rules/ops/slo.md'))
+  })
+})
+
+test('legacy lock without levels migrates agent at gates', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    delete lock.levels
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+    const r = ok(runCli(['update'], dir))
+    assert.match(r.stdout, /agent is now a profile/)
+    const next = lockOf(dir)
+    assert.ok(next.profiles.includes('agent'))
+    assert.equal(next.levels.rust, 'gates')
+    assert.equal(next.levels.agent, 'gates')
+    assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
+    assert.ok(has(dir, '.dev/kit/common/gate.just'))
+  })
+})
+
+test('init writes mutate-diff live at --level ratchet', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--level', 'ratchet', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    assert.match(read(dir, 'justfile'), /^mutate-diff: rust-mutate$/m)
   })
 })

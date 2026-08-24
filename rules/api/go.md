@@ -6,6 +6,9 @@ title: "HTTP API — Go (chi + Huma)"
 
 Opinionated default for a Go HTTP API: **chi** for routing/middleware + **Huma** for an OpenAPI-first layer generated from Go structs and tags. The OpenAPI document is the contract the frontend generates its client from — it is not optional.
 
+`just go-check` owns golangci / test / govulncheck. It does not see a handler
+outside `huma.Register`, nor a leaked field on a json-tagged struct.
+
 ## Stack
 
 - **chi** — lightweight router + `middleware` stack (RequestID, RealIP, Recoverer, Timeout).

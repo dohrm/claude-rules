@@ -24,10 +24,8 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 | Per coherent block, before push | `just mutate-diff` then `just code-review` | do the tests *assert*? judgment a gate cannot make |
 | Per push | CI | a **witness**, same tools on the PR diff |
 
-`just code-review` writes `.work/review-report.md`. **`just review-guard`**
-(pre-push, no LLM) reads the two markers at its end: a `CRITICAL` blocks
-**whatever sha it was written against** — committing on top does not expire it.
-A stale `CLEAN`/`WARNINGS` passes with a notice.
+`just code-review` writes `.work/review-report.md`. `just review-guard` (pre-push,
+no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.
 
 **Detect, never assume.** Tier 3 is sometimes absent (`just --list`):
 
@@ -60,7 +58,8 @@ tree; it never gates.
   `# type: ignore`.
 
 The git floor (`lefthook`) and the harness layer (`kit/common/hooks/`, opt-in)
-make bypass expensive and loud, not impossible. This rule is still the rule.
+make bypass expensive and loud, not impossible. Wiring:
+`.dev/kit/common/hooks/README.md`. This rule is still the rule.
 
 **Declare every bypass.** No silent TODO, skipped test, placeholder, or stub.
 

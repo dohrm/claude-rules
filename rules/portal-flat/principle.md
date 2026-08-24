@@ -41,6 +41,24 @@ core/ → (nothing — no feature imports)
 - `pages/` contains no logic — it assembles layouts and features only
 - `layouts/` defines injection zones (slots/children) but carries no business content
 
+## SOLID, applied here
+
+Vocabulary, not a scorecard. The module map already is the cut. Do not add
+a folder, a context, or a "service" to "be SOLID".
+
+- **S** — a feature directory has one domain reason to change. `pages/`
+  assemble; they do not grow logic. Do not split `logic/` per button.
+- **O** — a new screen is a feature (and a page), not an edit of `core/`
+  or of another feature. Skip a new `core/` module when one feature still
+  owns the data.
+- **L** — a `ui/` primitive stays substitutable: same props, no hidden
+  business rule. A Button that silently submits a form is not a Button.
+- **I** — `core/` stays small (http, auth, i18n). Do not dump every shared
+  helper there. A helper one feature uses stays in that feature.
+- **D** — features depend on `core/` and `ui/`, never the reverse;
+  features do not import each other. Server state is the shared language,
+  not a cross-feature store.
+
 ## Layer Responsibilities
 
 ### `ui/` — Design System

@@ -27,20 +27,13 @@ The legitimate exceptions are the things that *cannot* run locally, and they are
 fewer than they look: publishing, and anything requiring a secret. That is the
 list. **Tier 3 is not on it** — "it needs the PR diff" is not a reason, because
 `git diff <base>...HEAD` computes the same merge-base set on a laptop. Mutation
-stays out of the *hooks* (minutes per run), not out of the machine: the kit ships
-it as `just mutate-diff`, and the PR job re-runs it as a witness.
+stays out of the *hooks* (minutes per run), not out of the machine: `just
+mutate-diff` before the push, the PR job as a witness.
 
-## Tiers → jobs
-
-| Tier | Where | Blocks |
-|------|-------|--------|
-| 1 — fmt, lint | pre-commit hook, and inside `just <tech>-check` on PR | yes |
-| 2 — tests, deny/vulncheck, build | pre-push hook, and `just check` on PR | yes |
-| 3 — mutation / coverage ratchet | `just mutate-diff` before the push, and the PR job — never a hook | not until ratcheted |
-
-One job per technology so they run in parallel and a red one names its own
-toolchain. Tier 3 is a separate job (see `kit/rust/mutation-ci.yaml`,
-`kit/ts/mutation-ci.yaml`, `kit/go/coverage-ci.yaml`).
+Snippet: `.dev/kit/cicd/ci.snippet.yaml`. Tiers and when they run:
+`.dev/kit/README.md`. One job per technology so a red one names its own
+toolchain; Tier 3 is a separate job until ratcheted. The snippet does not see
+pinning, fork-PR secrets, or a skipped required check reading as green.
 
 ## Rules
 
@@ -83,14 +76,3 @@ both. The adaptation surface is deliberately tiny:
   a repo/org secret you set by hand, and the wiring note must say which.
 - Self-hosted runners are **not** ephemeral by default: never assume a clean
   workspace, and never write outside the workspace.
-
-## Checklist
-
-- [ ] Every gate job runs `just …` — no command duplicated from the justfile
-- [ ] One job per technology; Tier 3 separate and non-blocking until ratcheted
-- [ ] Actions, toolchains and images pinned; lockfiles committed
-- [ ] Concurrency group cancels superseded runs
-- [ ] Toolchain cached, verdict never cached
-- [ ] Token read-only by default; no secret reachable from a fork PR
-- [ ] Required checks always run (no skip-as-pass)
-- [ ] Artifact built once and promoted, config injected at run time

@@ -12,6 +12,15 @@ Most of this code is written by an agent, and an agent can produce a suite that
 executes every line while asserting nothing. Coverage cannot see that. **Mutation
 score can**: it changes the code and asks whether any test notices.
 
+```bash
+just mutate-diff     # the locked techs' mutate / cover recipes; never a hook
+```
+
+CI re-runs the same recipes as a **witness**. Wiring and tool limits (Stryker has
+no `--since`, mutmut is path-scoped, Go has no production-grade mutator): the
+language kit README. `just mutate-diff` does not see whether a survivor should
+be deleted, asserted, or excluded.
+
 ## Coverage is a symptom, never a target
 
 - Coverage answers "was this line executed?", not "would a bug here fail the
@@ -29,20 +38,24 @@ statement, a swapped return. If the suite still passes, that mutant **survived**
 and the behavior it changed is unprotected. This is the check that lets
 agent-written tests be trusted without reading every assertion by hand.
 
-- **Scope it to changed code** (`--in-diff` and equivalents). Whole-repo mutation
-  runs take hours; a diff-scoped run takes minutes.
+- **Scope it to changed code.** Whole-repo mutation runs take hours; a diff-scoped
+  run takes minutes.
 - **Never a git hook.** Anything that re-runs the suite once per mutant destroys
   the fast local loop (see `kit/README.md` for the tiers).
-- **But run it locally, before the push.** "Scoped to the diff" does not mean
-  "only CI can compute it": `git diff <base>...HEAD` gives the same merge-base
-  set on a laptop that the PR job computes on a runner. The kit ships it as
-  `just mutate-diff`. Learning at PR time what you could have learned in the
-  editor costs a round trip per survivor, and it teaches the agent that Tier 3
-  is somebody else's problem. CI re-runs it as a **witness** — so the verdict is
-  reproducible by someone other than the author — not as the first observation.
+- **But run it locally, before the push.** `git diff <base>...HEAD` gives the same
+  merge-base set on a laptop that the PR job computes. Learning at PR time what
+  you could have learned in the editor costs a round trip per survivor.
 - **Exclude what mutation cannot judge**: pure I/O adapters, generated code,
   getters, `Display`/logging. Keep the exclusion list in the tool's config, next to
   the code, not in the CI file.
+
+| Lang | Recipe | Tool |
+|---|---|---|
+| Rust | `just rust-mutate` | cargo-mutants `--in-diff` |
+| TS | `just ts-mutate` (or `ts-web-mutate` / `ts-node-mutate` / `ts-tauri-mutate`) | Stryker `--incremental` |
+| Python | `just python-mutate` | mutmut, path-scoped |
+| Go | `just go-cover` | coverage map — weaker signal, named as such |
+
 ## Triaging a survivor — three outcomes, not one
 
 "A mutant survived" is a symptom, not a diagnosis. Reaching for a new test every
@@ -83,37 +96,4 @@ Introduce it as a ratchet instead:
    never a quiet edit to make a red PR green.
 
 The same shape applies to any repo-level metric (bundle size, build time, lint
-debt): baseline, observe, ratchet, never regress.
-
-## Per-language note
-
-Local recipe = what the agent runs before pushing; CI job = the witness that
-re-runs it on the PR. Both ship in the kit.
-
-- **Rust** — `cargo-mutants`, `--in-diff pr.diff`; config in `<workspace>/.cargo/mutants.toml`.
-  Local: `just rust-mutate`. Reference job: `kit/rust/mutation-ci.yaml`.
-- **TS** — Stryker. It has no `--since`; locally use `--incremental` (reuses the
-  previous report, re-tests what changed), and in CI `--mutate` on the changed
-  files, with `thresholds.break` set from the baseline once calibrated.
-  Local: `just ts-mutate`. Reference job: `kit/ts/mutation-ci.yaml`.
-- **Python** — mutmut. It has no diff mode at all (no `--in-diff`, no `--since`):
-  it is path-scoped, and it caches, so locally you re-run it and only what changed
-  is re-tested, while CI passes the PR's changed files to `--paths-to-mutate`.
-  Mutation is therefore measured per *file*, not per hunk — a two-line change in a
-  large module still mutates the whole module.
-  Local: `just python-mutate`. Reference job: `kit/python/mutation-ci.yaml`.
-- **Go** — mutation tooling is not production-grade; use a **coverage ratchet on
-  changed packages** plus `go test -race -count=1` instead, and be explicit that it
-  is the weaker signal. Locally the useful output is the map of uncovered
-  statements, not the score: `just go-cover`. Reference job: `kit/go/coverage-ci.yaml`.
-
-## Checklist
-
-- [ ] No coverage percentage is used as a goal anywhere in CI or docs
-- [ ] Mutation (or, for Go, the coverage ratchet) is runnable locally on the diff
-      in one command, and CI re-runs it on the PR — never a git hook
-- [ ] Survivors are triaged three ways (delete / assert / exclude), not always tested
-- [ ] A baseline is committed; the gate compares against it, not a round number
-- [ ] The gate starts non-blocking and is flipped deliberately
-- [ ] Exclusions live in the tool config with a reason
-- [ ] Lowering the baseline is a reviewed decision, never a silent edit
+debt, `just dup-check`): baseline, observe, ratchet, never regress.

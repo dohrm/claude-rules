@@ -14,6 +14,11 @@
 # root justfile's managed block, which overrides this default.
 rust_dir := "."
 
+# Merge-base for Tier 3. kit/common/gate.just defines the same default when `agent
+# --level gates` is installed; allow-duplicate-variables on the root justfile
+# lets either win. Defined here so `just rust-mutate` parses without common.
+base := "origin/main"
+
 # Each line runs in its own shell, so `cd {{dir}} &&` per line (portable: works
 # in sh/cmd/pwsh). Split: *-lint is the fast pre-commit tier, *-check the full.
 #

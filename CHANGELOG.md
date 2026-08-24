@@ -12,7 +12,47 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking
+
+- **`cqrs` drops `cqrs-rust-lib`.** The profile is the write/read +
+  event-sourcing principles. `rules/cqrs/rust.md` is gone (it was a
+  cookbook for that library). A generator that owns HTTP is still an
+  exception in `api/rust.md`, unnamed. Pick any crate; the rule will
+  not name one.
+
+- **`agent` is a profile, not shared.** `add rust` no longer installs
+  autonomy, subagents, or `kit/common`. Shared is `rules/common` only.
+  `add agent --level gates` is the previous gift. A lock written before
+  this, on `update`, is migrated at `--level gates` (so existing installs
+  keep their kit) and gains `agent`; `remove agent` drops it.
+- **`--level rules|gates|ratchet`.** Default on a new `add` is `rules`
+  (prose, no kit). `--level gates` copies the language kit. `--level
+  ratchet` is never the default; `init` then writes `mutate-diff` live.
+- **`--root` is the glob lever** (`--module` still works). `/architect`
+  recommends aliases (`rust-api`, `go-api`, `ts-web-app`, `ts-tauri-app`,
+  `ts-node-api`) plus `--root` and `--level gates`, not the seven-profile
+  bag that loaded 21 rules on a domain entity.
+
+### Added
+
+- **`/onboard`** — brownfield twin of `/interview`. Inventory, CLAUDE.md
+  scaffold, `.work/onboard.md`. No ADR, no PRD. Hands off to `/prd` /
+  `/architect` / the `add` command.
+
 ### Changed
+
+- **Architecture principles carry SOLID.** `hexagonal/principle.md`,
+  `cqrs/principle.md`, and `portal-flat/principle.md` map S/O/L/I/D
+  onto the cuts they already make, and say when *not* to add a type
+  or interface. Not a scorecard.
+
+- **Cross-cutting rules that restated a kit gate shrink to a pointer.**
+  `product/documents.md`, `agent/decision-records.md`, `testing/ratchet.md`,
+  and `cicd/pipeline.md` name the recipe and keep what the gate cannot see
+  (one home per fact, `Implemented`, survivor triage, pinning / skip-as-pass).
+  `api/rust.md` and `api/go.md` get the same does-not-see line as
+  `api/node.md`. `autonomy.md` and `guardrails.md` drop the paragraph the
+  scripts already enforce.
 
 - **Rust is the first language jalon.** `just rust-lint` now denies
   `clippy::unwrap_used` / `expect_used` on `--lib --bins` (tests stay free).

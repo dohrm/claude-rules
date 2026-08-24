@@ -100,7 +100,7 @@ test('document-producing skills name a path under docs/', () => {
 // would collide head-on with the durable docs/PLAN.md that /plan owns — the two have
 // opposite lifetimes, and one name for both is how they get confused.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['tasks', 'loop-setup']) {
+  for (const name of ['tasks', 'loop-setup', 'onboard']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,

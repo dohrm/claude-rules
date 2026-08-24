@@ -60,13 +60,9 @@ or ask before writing code.
 - Architecture changes without documentation updates.
 - The same block pasted into three places, each copy drifting on its own.
 
-Every indicator above is a judgment except the last one, and that one is an
-agent's native failure mode: generating a near-copy is cheaper than finding the
-existing helper. So measure it — `just dup-check` (jscpd) if the repo wires it.
-Baseline the number first and ratchet it down (`testing/ratchet.md`); a
-duplication gate switched on at a round number on day one gets switched off on
-day two. A green number is not permission to stop reading the diff — the other
-indicators still need eyes.
+Every indicator above is a judgment except the last one. Measure that one —
+`just dup-check` if the repo wires it — then ratchet (`testing/ratchet.md`). A
+green number is not permission to stop reading the diff.
 
 ## Dependency rule
 

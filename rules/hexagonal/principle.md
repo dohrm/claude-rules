@@ -16,6 +16,25 @@ Dependencies flow **inward only**. The domain (core) layer is pure and has zero 
                                             anything above
 ```
 
+## SOLID, applied here
+
+Vocabulary, not a scorecard. Use a letter when it names a cut you already
+need. Do not add a type, a file, or an interface to "be SOLID".
+
+- **S** — a module has one reason to change. Domain does not change because
+  the HTTP framework did. Do not split a 30-line helper so each function
+  has its own type.
+- **O** — a new store or transport is a new adapter, not an edit of core.
+  Skip the extra port when there is one implementation and no second one
+  in sight.
+- **L** — an adapter honours the port's contract. A "faster" impl that
+  drops a guarantee is not a substitute. One implementation is enough;
+  do not invent a second to prove Liskov.
+- **I** — ports are small and capability-shaped. `UserRepository` is not
+  `EverythingStore`. Do not extract an interface that only one caller uses.
+- **D** — core depends on ports, never on adapters. That is this profile.
+  A concrete type in an entrypoint is fine.
+
 ## Layer Responsibilities
 
 ### Domain / Core

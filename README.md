@@ -94,20 +94,20 @@ docs/
 ## Install
 
 ```bash
-# in your repo, from its root — combine profiles freely:
-npx github:dohrm/claude-rules add rust testing cicd hexagonal api backend   # a Rust backend
-npx github:dohrm/claude-rules add ts testing cicd portal-flat portal-http   # a React frontend
-npx github:dohrm/claude-rules add ts rust testing cicd portal-flat tauri    # …or the same portal as a desktop app
-npx github:dohrm/claude-rules add ops k8s incident                          # + running it in production
-npx github:dohrm/claude-rules add product                                   # the product-lifecycle skills
+# in your repo, from its root — aliases unpack; --root is the glob lever:
+npx github:dohrm/claude-rules add rust-api --root apps/api --level gates
+npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
+npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
+npx github:dohrm/claude-rules add agent testing cicd --level gates   # repo-wide; not on the language tree
+npx github:dohrm/claude-rules add ops --root deploy --level gates    # + k8s incident when they apply
+npx github:dohrm/claude-rules add product                            # /interview, /onboard, /prd, /architect, …
 
-npx github:dohrm/claude-rules list                     # available & installed
+npx github:dohrm/claude-rules list                     # available, installed, and aliases
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that file, and what it costs
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: both)
-npx github:dohrm/claude-rules add ts portal-flat portal-http --module apps/web   # monorepo: anchor to a directory
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
 npx github:dohrm/claude-rules remove cqrs              # delete a profile's files, update the lock
 npx github:dohrm/claude-rules remove all               # full uninstall
@@ -122,16 +122,18 @@ exact command. Install `product` first, or read the table in
 
 | Group | Profiles | What you get |
 |---|---|---|
-| **Language baseline** | `rust` `ts` `ts-web` `ts-node` `ts-tauri` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine + the executable gates. `ts` is the floor; `ts-web` / `ts-node` / `ts-tauri` are the runtime overlays |
-| **Architecture** | `hexagonal` `cqrs` | ports/adapters with inward-only deps · the event-sourced write/read split (explicit opt-in) |
-| **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map, layer boundaries and business boundary — transport-agnostic · then **one** transport on top: HTTP (OpenAPI-generated client, TanStack Query, cache-clean policy) or Tauri IPC (invoke/listen, Zustand stores). Never both — they contradict each other by design |
-| **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify) · the cross-language contracts: problem+json errors, config & secrets, health, pagination, API surface design, authorization |
-| **Delivery** | `testing` `cicd` | test levels & determinism, contract tests, the mutation ratchet · pipeline & release doctrine, reference workflows, `/ci-setup` |
-| **Run** | `ops` `k8s` `incident` | what to emit & what you promise (SLO, error budget), migrations & rollback, `/observability` · the manifest layer · `/runbook` + `/postmortem` |
-| **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills + the living-documents rule · a 4-phase debug methodology · framing a self-terminating agent loop |
+| **Language baseline** | `rust` `ts` `ts-web` `ts-node` `ts-tauri` `go` `python` `godot` | style, error handling, logging, quality-gate doctrine. Kit at `--level gates`. `ts` is the floor; `ts-web` / `ts-node` / `ts-tauri` are the runtime overlays |
+| **Architecture** | `hexagonal` `cqrs` | ports/adapters with inward-only deps · the event-sourced write/read split (explicit opt-in, no prescribed library). Both carry SOLID as vocabulary, not a scorecard |
+| **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map — transport-agnostic · then **one** transport on top. Never both |
+| **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify) · problem+json, config, health, pagination |
+| **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
+| **Run** | `ops` `k8s` `incident` | SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` |
+| **Agent OS** | `agent` | autonomy, decisions, subagents; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
+| **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
 
-Every profile also pulls the **shared** assets: the agent rules (autonomy,
-guardrails, decisions), the language rule, the two subagents, and `kit/common`.
+**Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
+
+Every profile also pulls **`rules/common`** (artifacts in English). The agent OS is `add agent`.
 
 ### What the installer does, and does not
 
@@ -161,28 +163,33 @@ guardrails, decisions), the language rule, the two subagents, and `kit/common`.
   that exists is never rewritten — from the moment it is there, it is yours.
 - The ref and the agent set are pinned in `.claude-rules.lock`, so `update` replays
   your choices. Updates are reviewable: re-run `update` and read the `git diff`.
-- **`add` is additive.** It extends the lock — profiles *and* agents — and re-emits
-  everything it now holds, so a second `add` never drops the first one. A bare `add`
-  on an existing install keeps its agent set rather than widening to both; pass
-  `--agent` to add a target. Narrowing is `remove`'s job, never a side effect of `add`.
+- **`add` is additive.** It extends the lock — profiles, agents, **levels**, and
+  **roots** — and re-emits everything it now holds, so a second `add` never drops
+  the first one. Default `--level` is `rules` (prose). `--level gates` copies the
+  kit. `--level ratchet` is never the default; `init` then writes `mutate-diff`
+  live. `--root <dir>` (alias `--module`) is the glob lever: without it,
+  language-glob profiles load repo-wide — that is how 21 rules land on a domain
+  entity. A bare `add` on an existing install keeps its agent set rather than
+  widening to both; pass `--agent` to add a target. Narrowing is `remove`'s job,
+  never a side effect of `add`.
 - `remove` is the exact inverse: it deletes what each profile emitted and updates
   the lock. It never touches your `justfile`/`lefthook` wiring — delete those
   recipes yourself. Review with `git status` before committing.
 
-### `--module` — the globs a monorepo actually needs
+### `--root` — the globs a monorepo actually needs
 
 A rule ships an extension-level glob (`**/*.ts`) because the library cannot know
 your layout. In a monorepo that is too coarse: `**/*.ts` makes the Fastify rules
 and the `backend` error contract load on a React component — roughly **30 % of the
 per-file context, spent on guidance that is wrong for that file**.
 
-`--module` anchors the profiles of that invocation to a directory:
+`--root` (alias `--module`) anchors the profiles of that invocation to a directory:
 
 ```bash
-npx github:dohrm/claude-rules add rust hexagonal api backend  --module apps/api
-npx github:dohrm/claude-rules add ts portal-flat portal-http  --module apps/web
-npx github:dohrm/claude-rules add ts portal-flat tauri        --module apps/desktop
-npx github:dohrm/claude-rules add testing cicd product        # no --module: repo-wide
+npx github:dohrm/claude-rules add rust-api --root apps/api --level gates
+npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
+npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
+npx github:dohrm/claude-rules add testing cicd agent --level gates   # no --root: repo-wide
 ```
 
 That third line is the case anchoring exists for. `apps/web` and `apps/desktop` share
@@ -198,8 +205,8 @@ It lands in the lock, so `update` replays it:
 ```json
 "modules": {
   "apps/api":     ["rust", "hexagonal", "api", "backend"],
-  "apps/web":     ["ts", "portal-flat", "portal-http"],
-  "apps/desktop": ["ts", "portal-flat", "tauri"]
+  "apps/web":     ["ts-web", "react", "portal-flat", "portal-http"],
+  "apps/desktop": ["ts-tauri", "react", "portal-flat", "tauri"]
 }
 ```
 
@@ -271,14 +278,14 @@ npx github:dohrm/claude-rules budget      # no path: the session floor
 ```
 Context for apps/web/src/api/client.ts
 
-  always-on rules (4)             13.2 KB  (~3.4k tokens)
-      agent/autonomy.md            7.1 KB
+  always-on rules (4)              9.1 KB  (~2.3k tokens)
+      agent/autonomy.md            3.0 KB
       agent/guardrails.md          3.7 KB
       agent/decisions.md           2.1 KB
       common/language.md           0.3 KB
   skills, descriptions (12)        6.4 KB  (~1.6k tokens)
-  path-scoped rules (8)           30.9 KB  (~7.9k tokens)
-      testing/ratchet.md           6.5 KB    **/*.ts
+  path-scoped rules (8)           29.2 KB  (~7.5k tokens)
+      testing/ratchet.md           4.9 KB    **/*.ts
       portal-flat/principle.md     5.5 KB    apps/web/**/*.ts
       portal-http/react.md         5.1 KB    apps/web/**/*.ts
       testing/strategy.md          4.1 KB    **/*.ts
@@ -286,8 +293,12 @@ Context for apps/web/src/api/client.ts
       portal-http/state.md         2.8 KB    apps/web/**/*.ts
       ts/quality-gates.md          1.8 KB    apps/web/**/*.ts
       ts/code-style.md             1.4 KB    apps/web/**/*.ts
-  total                           50.5 KB  (~12.9k tokens)
+  total                           44.7 KB  (~11.5k tokens)
 ```
+
+That snapshot is a repo **with `agent` installed**. Without it, always-on is
+`common/language.md` alone — extracting the agent OS from shared is what dropped
+the session floor from four files to one.
 
 Each path-scoped row names **the glob that matched**, which is what makes a
 mis-anchored module visible: a rule firing on `**/*.ts` when you expected
@@ -309,7 +320,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/onboard` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 
