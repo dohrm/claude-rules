@@ -76,7 +76,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
+      # The factory is not a Cargo workspace. Cache the witness crate, or
+      # rust-cache runs `cargo metadata` at the repo root and exits 101.
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: test/fixtures/rust-gate
       - name: Ensure just
         run: |
           command -v just >/dev/null 2>&1 || \
@@ -99,9 +103,10 @@ jobs:
             "cargo-machete-v${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl/cargo-machete"
           chmod +x "$HOME/.local/bin/cargo-deny" "$HOME/.local/bin/cargo-machete"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # kit/rust has deny.toml but no Cargo.toml; fetch against the witness.
       - name: Fetch the advisory database
-        working-directory: kit/rust
-        run: cargo deny fetch db
+        working-directory: test/fixtures/rust-gate
+        run: cargo deny --config ../../../kit/rust/deny.toml fetch
       - name: just rust-lint / rust-check (witness crate)
         run: node --test test/rust-gates.test.mjs
 
@@ -118,7 +123,10 @@ jobs:
         with:
           version: '0.9.26'
           python-version: '3.12'
-          enable-cache: true
+          # Tests copy the witness into /tmp and set UV_CACHE_DIR there. A
+          # GHA cache of the repo root has nothing to save (no uv.lock here)
+          # and the action fails when the cache path is missing.
+          enable-cache: false
       - name: Ensure just
         run: |
           command -v just >/dev/null 2>&1 || \

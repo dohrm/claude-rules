@@ -11,7 +11,10 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Extended rules (RS2008 release-tracking files, etc.) are for a
+         published analyzer package. This project is copied into consuming
+         repos as source and built as a ProjectReference. -->
+    <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
 
   <ItemGroup>
