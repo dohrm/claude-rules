@@ -1,8 +1,9 @@
 # kit/godot — the Godot 4 + C# validation chain
 
-This is a **jalon**: the toolchain already sees types (`dotnet build
--warnaserror`), the three Roslyn analyzers (GODOT001–003), the no-new-`.gd`
-file-set, tests, and (when the engine is present) a headless export.
+This is a **jalon**: the toolchain already sees types (`dotnet build`
+with `TreatWarningsAsErrors` on the game `.csproj`), the three Roslyn
+analyzers (GODOT001–003), the no-new-`.gd` file-set, tests, and (when
+the engine is present) a headless export.
 The recipes own the commands. The installer copies this directory to
 `.dev/kit/godot/` and **never merges** the analyzer reference into the
 game `.csproj` — you add it once.
@@ -19,7 +20,7 @@ There is no Tier 3. Godot has no production-grade mutation tool.
 
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `just godot-lint` | 1 | pre-commit | `dotnet build -warnaserror` (GODOT001–003 in-process) · `check-no-new-gd.sh` |
+| `just godot-lint` | 1 | pre-commit | `dotnet build` (GODOT001–003 in-process; `TreatWarningsAsErrors` on the game `.csproj`) · `check-no-new-gd.sh` |
 | `just godot-check` | 2 | pre-push, and `check` once wired | godot-lint · `dotnet test --no-build` · `godot --headless --import` · `--export-release` |
 
 `check-no-new-gd.sh` stays a script: it is a question about which files

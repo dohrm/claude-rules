@@ -8,14 +8,14 @@ title: "Godot C# Quality Gates"
 just godot-check     # godot-lint → dotnet test → headless import + export
 ```
 
-`godot-lint` is pre-commit (`dotnet build -warnaserror` + `check-no-new-gd.sh`).
+`godot-lint` is pre-commit (`dotnet build` + `check-no-new-gd.sh`).
 `godot-check` is pre-push — and `just check` only after you override
 `godot_dir` / `godot_bin` / `godot_export_preset` (the lock cannot derive a
 binary or a preset). No Tier 3. Wiring: `.dev/kit/godot/README.md`.
 
 | Recipe | Command | Config |
 |---|---|---|
-| `godot-lint` | `dotnet build -warnaserror` | `.csproj` (`TreatWarningsAsErrors`, `Nullable`) + analyzers GODOT001–003 |
+| `godot-lint` | `dotnet build` | `.csproj` (`TreatWarningsAsErrors`, `Nullable`) + analyzers GODOT001–003 |
 | `godot-lint` | `check-no-new-gd.sh` | `.godot-gd-allowlist` (shrink only) |
 | `godot-check` | `dotnet test --no-build` | GDUnit4 (or any `dotnet test` runner) |
 | `godot-check` | `godot --headless --import` then `--export-release` | `export_presets.cfg` matching `godot_export_preset` |

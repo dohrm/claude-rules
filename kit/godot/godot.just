@@ -14,9 +14,11 @@ godot_bin := "godot"                 # Godot 4 .NET build
 godot_export_preset := "Linux/X11"   # must exist in export_presets.cfg
 
 # Pre-commit: the compiler + the three Roslyn analyzers (GODOT001-003)
-# + the file-set gate (no new .gd).
+# + the file-set gate (no new .gd). Warn-as-error lives on the game
+# .csproj (`TreatWarningsAsErrors`). Passing `-warnaserror` here would
+# also promote RS2008 on the analyzer ProjectReference.
 godot-lint:
-    cd {{godot_dir}} && dotnet build -warnaserror
+    cd {{godot_dir}} && dotnet build
     sh .dev/kit/godot/check-no-new-gd.sh
 
 # Pre-push: lint + tests + the engine (broken .tscn/.tres refs).

@@ -13,8 +13,10 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <!-- Extended rules (RS2008 release-tracking files, etc.) are for a
          published analyzer package. This project is copied into consuming
-         repos as source and built as a ProjectReference. -->
+         repos as source and built as a ProjectReference. NoWarn keeps
+         `dotnet build -warnaserror` on the game from failing the analyzers. -->
     <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
+    <NoWarn>$(NoWarn);RS2008</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
