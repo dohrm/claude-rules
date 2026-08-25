@@ -83,7 +83,7 @@ test('retired --agent names fail loudly', () => {
 test('add product: skills land as <name>/SKILL.md directories', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
-    for (const name of ['prd', 'architect', 'plan', 'tasks', 'pre-mortem', 'onboard', 'interview']) {
+    for (const name of ['prd', 'architect', 'plan', 'tasks', 'pre-mortem', 'onboard', 'interview', 'migrate']) {
       assert.ok(has(dir, `.claude/skills/${name}/SKILL.md`), `skill ${name} not installed`)
     }
     assert.equal(read(dir, '.claude/skills/prd/SKILL.md'), read(REPO, 'skills/prd/SKILL.md'))

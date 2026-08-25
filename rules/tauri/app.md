@@ -139,19 +139,9 @@ onAssistantStream(({ content, phase }) => {
 })
 ```
 
-## Dependency Flow
-
-```
-pages/ → features/ → ui/
-pages/ → layouts/
-features/ → core/tauri/   (commands + events)
-features/ → core/config/
-ui/ → (nothing)
-core/ → (nothing — no feature imports)
-```
-
-Features consume `core/tauri/commands` for request/response and subscribe to events
-via `core/tauri/events`. Features never import `@tauri-apps/api` directly.
+Dependency arrows match `portal-flat/principle.md`; features reach the backend
+through `core/tauri/` (commands + events), not `core/http/`. Features never
+import `@tauri-apps/api` directly.
 
 ## Store Hygiene
 

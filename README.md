@@ -52,6 +52,8 @@ flowchart LR
 
 Nothing forces you through all of it. A library repo installs `rust testing cicd`
 and never runs a product skill; a greenfield product starts at `/interview`.
+An existing install of an older harness is `/migrate` (gap table, then compose
+the lock and justfile) — not `/onboard`.
 
 ### Two boundaries the whole library is built around
 
@@ -101,7 +103,7 @@ npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
 npx github:dohrm/claude-rules add agent testing cicd --level gates   # repo-wide; not on the language tree
 npx github:dohrm/claude-rules add ops --root deploy --level gates    # + k8s incident when they apply
-npx github:dohrm/claude-rules add product                            # /interview, /onboard, /prd, /architect, …
+npx github:dohrm/claude-rules add product                            # /interview, /onboard, /migrate, /prd, /architect, …
 
 npx github:dohrm/claude-rules list                     # available, installed, and aliases
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
@@ -130,7 +132,7 @@ exact command. Install `product` first, or read the table in
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
-| **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
+| **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
 
 **Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
@@ -321,7 +323,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/onboard` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/onboard` `/migrate` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 

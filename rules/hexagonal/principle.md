@@ -19,8 +19,7 @@ Dependencies flow **inward only**. The domain (core) layer is pure and has zero 
 
 ## SOLID, applied here
 
-Vocabulary, not a scorecard. Use a letter when it names a cut you already
-need. Do not add a type, a file, or an interface to "be SOLID".
+Use a letter only when it names a cut you already need.
 
 - **S** — a module has one reason to change. Domain does not change because
   the HTTP framework did. Do not split a 30-line helper so each function

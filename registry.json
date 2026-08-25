@@ -104,7 +104,8 @@
     "product": [
       { "from": "rules/product", "to": ".claude/rules/product", "kind": "rule", "_note": "The one convention behind the product skills: a document that must GROW is a directory of append-only units plus a compacted index (the shape `docs/adr/` already has), never one file that gets longer. Carries the per-document split thresholds (plan → phase units, PRD → capability units), the unit/index budgets, the freeze-on-shipped rule, and the one-home-per-fact routing table. Path-scoped to `docs/**/*.md`, so it loads when the agent touches the documents it governs. /prd, /plan and /architect defer to it rather than restating the budgets." },
       { "from": "skills/interview", "to": ".claude/skills/interview", "kind": "skill" },
-      { "from": "skills/onboard", "to": ".claude/skills/onboard", "kind": "skill", "_note": "Brownfield twin of /interview. Existing repo, no product workflow yet. Does not write ADRs or a PRD. Hands off .work/onboard.md + a CLAUDE.md scaffold." },
+      { "from": "skills/onboard", "to": ".claude/skills/onboard", "kind": "skill", "_note": "Brownfield twin of /interview. Existing repo, no product workflow yet. Does not write ADRs or a PRD. Hands off .work/onboard.md + a CLAUDE.md scaffold. A stale claude-rules install is /migrate, not this." },
+      { "from": "skills/migrate", "to": ".claude/skills/migrate", "kind": "skill", "_note": "Upgrade an existing claude-rules install: gap table in .work/migrate.md, then lock --root, imported just library, leftover-tree purge, CI callers. Not /onboard (no lock yet) and not /ci-setup (pipeline only)." },
       { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
       { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },
       { "from": "skills/design-system", "to": ".claude/skills/design-system", "kind": "skill" },

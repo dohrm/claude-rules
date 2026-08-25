@@ -5,11 +5,10 @@ paths:
 title: "Frontend Architecture — Flat-Domain Modular Portal"
 ---
 
-A flat-domain modular structure for a React/TypeScript single-page portal.
-Transport-agnostic: this rule owns the layers and their boundaries. How the portal
-talks to its backend — and where server state lives — belongs to a companion
-profile: `portal-http/state.md` for an HTTP/OpenAPI portal, `tauri/app.md` for a
-Tauri app.
+A flat-domain modular structure for a React/TypeScript portal. Transport-agnostic:
+this rule owns the layers and their boundaries. How the portal reaches its backend
+and where server state lives is in the transport profile — `portal-http/` for
+OpenAPI + TanStack Query, `tauri/app.md` for IPC + Zustand. Never both.
 
 ## Module Map
 
@@ -17,12 +16,12 @@ Tauri app.
 src/
 ├── ui/          # Design system — atomic & molecular components
 ├── layouts/     # Structural shells — slot/children injection only
-├── core/        # Global infrastructure — HTTP client, auth, i18n, config
+├── core/        # Global infrastructure — auth, i18n, config, transport client
 ├── features/    # Business modules — one directory per domain
 │   └── {domain}/
 │       ├── components/   # Domain-coupled components (e.g. InvoiceList)
-│       ├── api/          # The backend boundary — transport calls live here
-│       └── logic/        # Screen behaviour — UI state machines, display derivations
+│       ├── api/          # Backend boundary — transport calls live here
+│       └── logic/        # Screen behaviour — UI state machines, form drafts
 └── pages/       # Route entry points — assembly only
 ```
 
@@ -36,128 +35,55 @@ ui/ → (nothing — zero business knowledge)
 core/ → (nothing — no feature imports)
 ```
 
-- `ui/` has **zero** knowledge of the API, business domain, or global state
-- `features/` never imports from another `features/` module — cross-feature data goes through `core/`
-- `pages/` contains no logic — it assembles layouts and features only
-- `layouts/` defines injection zones (slots/children) but carries no business content
+- `ui/` — pure visual; no API, domain, or global state. Tailwind + CVA; no dynamic class strings that escape the compiler scan.
+- `layouts/` — shells with slots/children only; no business content.
+- `core/` — shared infrastructure initialized once (auth, i18n, transport client). Stays small — a helper one feature uses stays in that feature.
+- `features/{domain}/` — self-contained vertical slice. Deleting a feature = deleting its directory.
+- `pages/` — glue only: layout + features for a route; no logic.
+
+Features never import from another `features/` module. Cross-feature data goes
+through server state (each feature fetches independently; the transport deduplicates).
 
 ## SOLID, applied here
 
-Vocabulary, not a scorecard. The module map already is the cut. Do not add
-a folder, a context, or a "service" to "be SOLID".
+Use a letter only when it names a cut you already need — the module map is the cut.
 
-- **S** — a feature directory has one domain reason to change. `pages/`
-  assemble; they do not grow logic. Do not split `logic/` per button.
-- **O** — a new screen is a feature (and a page), not an edit of `core/`
-  or of another feature. Skip a new `core/` module when one feature still
-  owns the data.
-- **L** — a `ui/` primitive stays substitutable: same props, no hidden
-  business rule. A Button that silently submits a form is not a Button.
-- **I** — `core/` stays small (http, auth, i18n). Do not dump every shared
-  helper there. A helper one feature uses stays in that feature.
-- **D** — features depend on `core/` and `ui/`, never the reverse;
-  features do not import each other. Server state is the shared language,
-  not a cross-feature store.
-
-## Layer Responsibilities
-
-### `ui/` — Design System
-
-Pure visual components. No API calls, no global state, no business types.
-Styling via Tailwind CSS with static variant definitions (CVA pattern) — no dynamic class strings that escape the compiler scan.
-
-```
-ui/
-├── button/
-├── input/
-├── modal/
-└── table/
-```
-
-### `layouts/` — Structural Shells
-
-High-level page structures that define where content goes. Accept children/slots only.
-
-```
-layouts/
-├── main-layout/
-├── sidebar-layout/
-└── dashboard-shell/
-```
-
-### `core/` — Global Infrastructure
-
-Shared primitives needed to communicate with the outside world. Initialized once, consumed everywhere.
-
-```
-core/
-├── http/       # Base HTTP client, interceptors
-├── auth/       # Token management, session
-└── i18n/       # Translations, locale
-```
-
-### `features/{domain}/` — Business Module
-
-Self-contained vertical slice. Everything a feature needs lives inside its own directory.
-Deleting a feature = deleting its directory, with no dead code left behind.
-
-```
-features/billing/
-├── components/   # BillingList, InvoiceCard — coupled to billing data
-├── api/          # the backend boundary for this domain
-└── logic/        # screen behaviour — wizard steps, display derivations, form drafts
-```
-
-### `pages/` — Route Orchestration
-
-Glue only. Imports a layout and one or more features, wires them together for a route.
-
-```
-pages/
-├── dashboard/
-└── settings/
-```
+- **S** — one domain reason to change per feature. `pages/` assemble; they do not grow logic.
+- **O** — a new screen is a feature (and a page), not an edit of `core/` or another feature.
+- **L** — a `ui/` primitive stays substitutable: same props, no hidden business rule.
+- **I** — `core/` stays small. Do not dump every shared helper there.
+- **D** — features depend on `core/` and `ui/`, never the reverse; features do not import each other.
 
 ## State Categories
-
-Four distinct categories — never conflate them:
 
 | Category | What | Lives in | Example |
 |----------|------|----------|---------|
 | **Server state** | Data from the backend | `features/{domain}/api/` | invoice list, user profile |
 | **App state** | Portal-wide context | `core/` | current_user, locale, theme |
-| **URL / view state** | Shareable navigation state | the router's typed search params | active tab, filters, pagination, search query |
+| **URL / view state** | Shareable navigation state | router search params | tab, filters, pagination, search |
 | **Local state** | UI-only, ephemeral — never a copy of server state | `features/{domain}/logic/` | modal open, form draft |
 
-**URL-worthy state goes in search params, not component state** — anything a user
-would expect to survive a reload, a shared link, or the back button (active tab,
-filters, pagination, search query). Validate it at the route boundary with Zod.
-
-**Cross-feature data goes through server state** — two features that need the same
-data each fetch it independently, and the transport layer deduplicates. Never route
-data between features via a shared store or props-drilling.
+URL-worthy state (reload, shared link, back button) lives in search params, not
+component state — validation belongs to the transport (`portal-http/react.md`).
 
 ## Where Business Logic Lives
 
 The backend. Eligibility, pricing, quotas, permissions and status derivation are
-never recomputed in the browser; the screen owns only its own behaviour —
-navigation, disclosure, formatting, form drafts. The full boundary, and the cache
-or store policy that enforces it, is in your transport profile
-(`portal-http/state.md`, or `tauri/app.md` for a Tauri app).
+never recomputed in the browser; the screen owns navigation, disclosure,
+formatting, form drafts. Cache or store policy that enforces the boundary is in
+the transport profile (`portal-http/state.md`, `tauri/app.md`).
 
 ## Business Models
 
-Business models are the shared language between frontend and backend, and the
-backend owns them. Where it publishes a machine-readable contract, they are
-**generated** from it — never hand-written twice. The generation workflow belongs to
-the transport profile.
+The backend owns them. Where it publishes a machine-readable contract, types are
+**generated** from it — never hand-written twice. Generation workflow: transport profile.
 
-## Rules for Adding a Feature
+## Adding a Feature
 
 1. Create `features/{domain}/` with `components/`, `api/`, `logic/`
-2. Build UI elements from `ui/` — do not create ad-hoc styled elements in `features/`
-3. Register the route entry point in `pages/`
-4. If global infrastructure is needed (auth token, HTTP client) → consume from `core/`, do not duplicate
+2. Build from `ui/` — no ad-hoc styled elements in `features/`
+3. Register the route in `pages/`
+4. Global infrastructure → consume from `core/`, do not duplicate
 
 ## LLM Boundary Contract
 
@@ -167,4 +93,4 @@ When asked to build a new view:
 - New data fetching → `features/{domain}/api/`
 - New route → `pages/`
 - Never mix layers within a single component file
-- Never move a business decision into the browser — see `portal-http/state.md`
+- Never move a business decision into the browser — see the transport profile's state rule

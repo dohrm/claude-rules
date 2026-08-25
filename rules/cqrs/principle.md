@@ -15,8 +15,7 @@ rule named it.
 
 ## SOLID, applied here
 
-Vocabulary, not a scorecard. Do not add a command type, a port, or a
-projection to "be SOLID".
+Use a letter only when it names a cut you already need.
 
 - **S** — a command handler does not answer queries; a projection does not
   validate writes. That is the split. Do not extract a type per field of a

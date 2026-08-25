@@ -36,7 +36,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `portal-http` | the HTTP transport of that portal: OpenAPI-generated client, TanStack Query, cache policy | the portal talks HTTP — i.e. every web portal, on top of `portal-flat` |
 | `tauri` | the desktop transport instead: IPC (invoke/listen), Zustand stores, no OpenAPI | the frontend ships as a **desktop app** — on top of `ts react portal-flat`, and never with `portal-http` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; principles, no prescribed library |
-| `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
+| `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
 | `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 

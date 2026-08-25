@@ -10,6 +10,9 @@ not inventing a product and you are not choosing a stack.
 
 `/interview` is the greenfield twin (an idea, little or no code). If this repo
 is empty or the user is starting from a sentence, stop and send them there.
+If `.claude-rules.lock` already exists and the job is upgrading the harness
+(old snippet kit, no `modules` / imported just library), stop and send them
+to `/migrate`.
 
 ## What you never write
 
