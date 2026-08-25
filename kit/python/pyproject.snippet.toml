@@ -1,13 +1,15 @@
-# Python tool configuration — MERGE these sections into your `pyproject.toml`.
-# Mirrors rules/python/quality-gates.md (single source of doctrine); the commands
-# that run them live in the justfile (`just py-lint` / `py-check`).
+# Python tool configuration — MERGE these sections into <python_dir>/pyproject.toml.
+# The installer never merges them. The commands that read them live in
+# python.just (`just python-lint` / `python-check` / `python-mutate`).
+# Map: .dev/kit/python/README.md.
 #
-# One file holds all of it on purpose: ruff, mypy, pytest and mutmut all read
-# pyproject.toml, so the repo has ONE place where "what counts as correct" lives.
+# One file holds all of it on purpose: ruff, mypy, pytest, deptry and mutmut
+# all read pyproject.toml, so the repo has ONE place where "what counts as
+# correct" lives.
 #
 # The dev tooling belongs in a dev group, never in the runtime dependencies:
 #   uv add --dev ruff mypy pytest pytest-cov pip-audit deptry
-#   uv add --dev mutmut          # Tier 3 only, see the justfile's mutate-diff
+#   uv add --dev mutmut          # Tier 3 only, see python-mutate
 
 # ── Interpreter ────────────────────────────────────────────────────────────
 # In [project]. "Python 3" is not a version — pin the floor, and commit a

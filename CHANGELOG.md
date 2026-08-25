@@ -14,6 +14,109 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Breaking
 
+- **`cqrs` drops `cqrs-rust-lib`.** The profile is the write/read +
+  event-sourcing principles. `rules/cqrs/rust.md` is gone (it was a
+  cookbook for that library). A generator that owns HTTP is still an
+  exception in `api/rust.md`, unnamed. Pick any crate; the rule will
+  not name one.
+
+- **`agent` is a profile, not shared.** `add rust` no longer installs
+  autonomy, subagents, or `kit/common`. Shared is `rules/common` only.
+  `add agent --level gates` is the previous gift. A lock written before
+  this, on `update`, is migrated at `--level gates` (so existing installs
+  keep their kit) and gains `agent`; `remove agent` drops it.
+- **`--level rules|gates|ratchet`.** Default on a new `add` is `rules`
+  (prose, no kit). `--level gates` copies the language kit. `--level
+  ratchet` is never the default; `init` then writes `mutate-diff` live.
+- **`--root` is the glob lever** (`--module` still works). `/architect`
+  recommends aliases (`rust-api`, `go-api`, `python-api`, `ts-web-app`,
+  `ts-tauri-app`, `ts-node-api`) plus `--root` and `--level gates`, not the seven-profile
+  bag that loaded 21 rules on a domain entity.
+
+### Added
+
+- **Python HTTP API matches the other languages.** `rules/api/python.md` is
+  FastAPI + Pydantic v2 (types generate OpenAPI); `rules/hexagonal/python.md`
+  is the import graph (`domain/` must not import FastAPI/SQLAlchemy/httpx).
+  Alias `python-api` unpacks `python hexagonal api backend`, same shape as
+  `rust-api`. FastAPI's default `{"detail": …}` is not the error contract —
+  problem+json stays in `backend/errors.md`. A worker/script is still
+  `add python` without `api`.
+
+- **`/onboard`** — brownfield twin of `/interview`. Inventory, CLAUDE.md
+  scaffold, `.work/onboard.md`. No ADR, no PRD. Hands off to `/prd` /
+  `/architect` / the `add` command.
+
+### Changed
+
+- **Architecture principles carry SOLID.** `hexagonal/principle.md`,
+  `cqrs/principle.md`, and `portal-flat/principle.md` map S/O/L/I/D
+  onto the cuts they already make, and say when *not* to add a type
+  or interface. Not a scorecard.
+
+- **Cross-cutting rules that restated a kit gate shrink to a pointer.**
+  `product/documents.md`, `agent/decision-records.md`, `testing/ratchet.md`,
+  and `cicd/pipeline.md` name the recipe and keep what the gate cannot see
+  (one home per fact, `Implemented`, survivor triage, pinning / skip-as-pass).
+  `api/rust.md` and `api/go.md` get the same does-not-see line as
+  `api/node.md`. `autonomy.md` and `guardrails.md` drop the paragraph the
+  scripts already enforce.
+
+- **Rust is the first language jalon.** `just rust-lint` now denies
+  `clippy::unwrap_used` / `expect_used` on `--lib --bins` (tests stay free).
+  `rules/rust/quality-gates.md` is a pointer: the recipes, the configs they
+  read, suppressions. Copy `rustfmt.toml` next to `deny.toml` and
+  `mutants.toml` — the map is `.dev/kit/rust/README.md`. Style, errors,
+  tracing, UTF-8 stay prose; they are not translated into a fourth clippy
+  pass.
+
+- **Python is the second language jalon.** `rules/python/quality-gates.md`
+  is a pointer: the recipes, the `pyproject.toml` tables they read,
+  suppressions. Merge `pyproject.snippet.toml` — the map is
+  `.dev/kit/python/README.md`. `S` / `TRY` / `G` stay in ruff; layout,
+  domain errors, `extra=` log fields stay prose. Every recipe line is
+  `uv run --locked`.
+
+- **Rust and Python sibling rules shrink to a mention** where the jalon
+  already gates (clippy / ruff / mypy / `--locked`). What remains is only
+  what the toolchain cannot see.
+
+- **Go is the third language jalon.** `rules/go/quality-gates.md` is a
+  pointer: `just go-lint` / `go-check` / `go-cover`. Copy
+  `golangci.base.yml` → `<go_dir>/.golangci.yml` — the map is
+  `.dev/kit/go/README.md`. The shipped file is **golangci-lint v2**
+  (`gofmt` under `formatters`, `gosimple` folded into `staticcheck`);
+  `golangci-lint migrate` if you still own a v1 file. slog, proto /
+  `pb.*`, `internal/`, `%w` stay mentions.
+
+- **TypeScript is the fourth language jalon, with three derivatives.**
+  Recipes own the tools (`npm exec --no-install -- eslint / tsc / vitest`)
+  — they no longer delegate to `npm run lint`. `ts` is the floor
+  (`no-explicit-any`, `no-non-null-assertion`, `strict`). `ts-web` and
+  `ts-tauri` add react-hooks + jsx-a11y + DOM; `ts-node` adds Node
+  globals and drops DOM. Fastify schemas, Zustand / invoke, kebab-case
+  filenames stay mentions. Maps: `.dev/kit/ts/README.md` and the
+  derivative READMEs.
+
+- **Godot C# is the fifth language jalon.** `just godot-lint` is
+  `dotnet build` (`TreatWarningsAsErrors` on the game `.csproj`, GODOT001–003 in-process) plus
+  `check-no-new-gd.sh`. `just godot-check` adds `dotnet test` and
+  headless import/export. `godot-check` stays off default `check`
+  until `godot_bin` and `godot_export_preset` are real. Co-location,
+  composition, typed `.tres`, and migrate-together stay mentions.
+  Map: `.dev/kit/godot/README.md`.
+
+### Breaking
+
+- **Codex, OpenCode and Antigravity are no longer targets.** The installer emits
+  for Claude Code and Cursor only (`--agent claude,cursor`; default: both).
+  `--agent codex` / `opencode` / `antigravity` fails. An old lock that still lists
+  them is rewritten on `add`/`update`; leftover `.dev/rules/`, `.opencode/`,
+  `.agents/rules/` and the managed `AGENTS.md` block are purged. `doctor` fails
+  until that `update` has run. Nested `CLAUDE.md` / `AGENTS.md` is now possible
+  (the Codex-concatenates / OpenCode-replaces conflict is gone) — the installer
+  does not emit those files yet.
+
 - **`/rust-add-domain` is gone.** It was a transformation recipe for one AppState DI
   scaffold, not a reusable methodology — the `hexagonal` profile keeps the rules
   (`rust-di-container.md` and friends), not the skill. After `update`, delete the

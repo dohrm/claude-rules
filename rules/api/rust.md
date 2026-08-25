@@ -6,6 +6,9 @@ title: "HTTP API — Rust (axum + utoipa)"
 
 Opinionated default for a Rust HTTP API: **axum** for routing + **utoipa** for an OpenAPI spec generated from the types. The OpenAPI document is the contract the frontend generates its client from — it is not optional.
 
+`just rust-check` owns clippy / test / deny. It does not see a handler without
+`#[utoipa::path]`, nor a leaked field on a `ToSchema` type.
+
 ## Stack
 
 - **axum** — router, extractors, middleware (`tower`/`tower-http` for the cross-cutting layers).
@@ -15,7 +18,7 @@ Opinionated default for a Rust HTTP API: **axum** for routing + **utoipa** for a
 
 ## Rules
 
-- Every route is registered through `OpenApiRouter` — a hand-written handler without `#[utoipa::path]` is a bug, not a shortcut. *(Exception: a code generator that owns route registration — then follow that generator's profile, e.g. `cqrs-rust-lib` → the `cqrs` profile.)*
+- Every route is registered through `OpenApiRouter` — a hand-written handler without `#[utoipa::path]` is a bug, not a shortcut. *(Exception: a code generator that owns route registration — then follow that generator; with event-sourced writes, see the `cqrs` profile.)*
 - **Default to passthrough — don't mint a DTO that duplicates the type your service/query already returns.** That type is usually already consumption-shaped: serialize it directly (derive `Serialize` + `ToSchema`) and accept the request/command type directly as input. With a generated, type-checked client, a domain rename that ripples to the wire is a compile error in the same build — not a contract you must insulate by hand. If a code generator owns the HTTP layer and derives the schema from your own types, that is this rule taken to its conclusion — follow that generator's profile.
 - **Introduce a distinct wire DTO only when the wire must diverge from that returned type**, for one concrete reason: (1) a field must not reach the wire (secrets, internal flags) — a hard security boundary; (2) a deprecated shape must be held through a data-migration window; (3) the wire has consumers that do not recompile in lockstep (public API, third-party, separately-shipped mobile). Absent one of these, the DTO is ceremony. When you do map, keep it trivial (`From`/`Into`), never a field-by-field copy that can silently drop a field.
 - **Leak is deny-by-default.** Because passthrough is the default, the moment a serialized type gains a field that must not be public, split off a DTO **in the same change** — never let a field reach the wire by accretion. The `Serialize`/`ToSchema` derive is the marker that a type is wire-facing: audit its fields on every change.
@@ -24,7 +27,7 @@ Opinionated default for a Rust HTTP API: **axum** for routing + **utoipa** for a
 - `State`/DI is injected via `axum::extract::State` holding the app container — no globals, no service locator.
 - Version the API under a path prefix (`/api/v1`).
 
-> **When a generator owns the HTTP layer** (e.g. `cqrs-rust-lib` deriving the schema from aggregate/commands), the hand-rolled `#[utoipa::path]` + DTO checks above do not apply — follow the `cqrs` profile. The one invariant that still holds regardless: **no infrastructure or DB type on the wire.**
+> **When a generator owns the HTTP layer** (deriving the schema from aggregates / commands / read models), the hand-rolled `#[utoipa::path]` + DTO checks above do not apply — follow the `cqrs` profile. The one invariant that still holds regardless: **no infrastructure or DB type on the wire.**
 
 ## Shape
 

@@ -4,7 +4,7 @@
 // blocks `git commit -m "drop the -n flag"` gets uninstalled by lunchtime.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO } from './helpers.mjs'
@@ -240,7 +240,7 @@ test('edit-guard names WHY the file is protected', () => {
 // A snippet that does not parse is a snippet nobody can merge, and a path typo makes
 // the hook silently never fire — which is indistinguishable from no hook at all.
 test('the hook snippets are valid JSON and point at scripts that exist', () => {
-  const files = ['settings.snippet.json', 'opencode.snippet.json', 'cursor-hooks.snippet.json']
+  const files = ['settings.snippet.json', 'cursor-hooks.snippet.json']
   for (const name of files) {
     const text = readFileSync(join(HOOKS, name), 'utf8')
     let json
@@ -251,31 +251,6 @@ test('the hook snippets are valid JSON and point at scripts that exist', () => {
       assert.ok(readFileSync(join(REPO, 'kit', script), 'utf8'), `${name}: ${m[1]} does not exist in the kit`)
     }
   }
-})
-
-// opencode has no hook process, so its half of the gate layer is a set of PATTERNS —
-// and a pattern that matches nothing is a guard that is silently absent. The kit lives
-// in a DOTTED directory (.dev/), which is exactly where a `**/` globstar is not
-// guaranteed to descend, so coverage is asserted against the files the kit really ships
-// rather than trusted to the matcher.
-test('the opencode patterns cover every gate file the kit ships', () => {
-  const pats = Object.keys(JSON.parse(readFileSync(join(HOOKS, 'opencode.snippet.json'), 'utf8')).permission.edit)
-  const covers = p => pats.some(k =>
-    k === p || (k.endsWith('/**') && p.startsWith(k.slice(0, -3) + '/'))
-    || (k.startsWith('**/') && p.endsWith(k.slice(2)))
-    || (k === '**/*.just' && p.endsWith('.just')))
-
-  const shipped = ['common/gate.just', 'rust/rust.just', 'ts/ts.just', 'go/go.just',
-    'python/python.just', 'godot/godot.just', 'common/adr-check.mjs', 'common/docs-check.mjs',
-    'common/review-guard.mjs', 'common/worktree-status.mjs', 'common/review-prompt.md',
-    'common/hooks/bash-guard.mjs', 'common/hooks/edit-guard.mjs']
-  for (const f of shipped) {
-    assert.ok(existsSync(join(REPO, 'kit', f)), `kit/${f} is asserted but not shipped`)
-    assert.ok(covers(`.dev/kit/${f}`), `.dev/kit/${f} matches no opencode pattern — the guard would be silently absent`)
-  }
-  // An ordinary file must NOT be caught, or "ask" becomes noise the user learns to skip.
-  for (const p of ['src/main.rs', 'docs/PRD.md', 'package.json'])
-    assert.ok(!covers(p), `${p} is escalated by an opencode pattern`)
 })
 
 test('the Claude snippet wires both guards on PreToolUse', () => {
@@ -305,6 +280,9 @@ test('no `run:` command hides a colon-space in a plain scalar', () => {
     join(REPO, 'kit', 'common', 'lefthook.snippet.yml'),
     join(REPO, 'kit', 'rust', 'lefthook.snippet.yml'),
     join(REPO, 'kit', 'ts', 'lefthook.snippet.yml'),
+    join(REPO, 'kit', 'ts-web', 'lefthook.snippet.yml'),
+    join(REPO, 'kit', 'ts-node', 'lefthook.snippet.yml'),
+    join(REPO, 'kit', 'ts-tauri', 'lefthook.snippet.yml'),
     join(REPO, 'kit', 'go', 'lefthook.snippet.yml'),
     join(REPO, 'kit', 'python', 'lefthook.snippet.yml'),
     join(REPO, 'kit', 'godot', 'lefthook.snippet.yml'),

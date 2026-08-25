@@ -1,34 +1,39 @@
-# kit/godot — Godot 4 + C# quality gates
+# kit/godot — the Godot 4 + C# validation chain
 
-Wiring (the installer never merges build config — do this by hand):
+This is a **jalon**: the toolchain already sees types (`dotnet build`
+with `TreatWarningsAsErrors` on the game `.csproj`), the three Roslyn
+analyzers (GODOT001–003), the no-new-`.gd` file-set, tests, and (when
+the engine is present) a headless export.
+The recipes own the commands. The installer copies this directory to
+`.dev/kit/godot/` and **never merges** the analyzer reference into the
+game `.csproj` — you add it once.
 
-1. Merge `lefthook.snippet.yml` into your root `lefthook.yml` (thin triggers → `just godot-lint` / `godot-check`).
-2. `claude-rules init` writes `import '.dev/kit/godot/godot.just'` into your root `justfile`; override `godot_dir`, `godot_bin` and `godot_export_preset` there (the lock cannot derive them) and add `godot-check` to `check`.
-3. `chmod +x check-no-new-gd.sh` (copied to `.dev/kit/godot/`).
-4. In the Godot project: enable C# (.NET), install export templates, add GDUnit4, and configure an export preset matching `godot_export_preset`.
+`claude-rules init` writes `import '.dev/kit/godot/godot.just'`. It does
+**not** add `godot-check` to `check`: override `godot_dir`, `godot_bin`
+and `godot_export_preset` first (the lock cannot derive a binary or a
+preset), then add the recipe. Lefthook is a thin trigger: merge
+`lefthook.snippet.yml`.
 
-## The gates
+There is no Tier 3. Godot has no production-grade mutation tool.
 
-Prefer **predictive tooling** — analyzers that understand the code — over grep. Most gates
-run *inside* `dotnet build` (the Roslyn analyzers), so they cost nothing extra and can't drift
-from the compiler's view.
+## The chain
 
-| Gate | Kind | When | Catches |
+| Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `dotnet build -warnaserror` | compiler | commit | type errors, all warnings |
-| GODOT001 | analyzer | commit (in build) | hardcoded gameplay value → move to `.tres` |
-| GODOT002 | analyzer | commit (in build) | `[Signal]` declared outside `EventBus` |
-| GODOT003 | analyzer | commit (in build) | `GetNode("string")` → use `[Export]` handle |
-| `check-no-new-gd.sh` | file set | commit | new `.gd` off the allowlist (migration.md) |
-| `dotnet test` | GDUnit4 | push | test regressions |
-| headless `--export-release` | engine | push | broken `.tscn`/`.tres` refs the compiler can't see |
+| `just godot-lint` | 1 | pre-commit | `dotnet build` (GODOT001–003 in-process; `TreatWarningsAsErrors` on the game `.csproj`) · `check-no-new-gd.sh` |
+| `just godot-check` | 2 | pre-push, and `check` once wired | godot-lint · `dotnet test --no-build` · `godot --headless --import` · `--export-release` |
 
-`check-no-new-gd.sh` stays a script on purpose: it is a question about which files *exist*, not
-about code — an analyzer is the wrong tool. Everything about *code* is an analyzer.
+`check-no-new-gd.sh` stays a script: it is a question about which files
+*exist*, not about code. Everything about *code* is an analyzer.
 
-## Wiring the analyzers
+## Configs — copy once, then they are yours
 
-Reference the analyzer project from the game `.csproj` so it runs in every build:
+| File | Destination | Read by | Adapt |
+|---|---|---|---|
+| `analyzers/` | referenced from `<godot_dir>/*.csproj` | `dotnet build` | nothing |
+| `analyzers/.editorconfig` | merge into `<godot_dir>/.editorconfig` | Roslyn | severities (error) |
+| `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just godot-*` exists |
+| `.godot-gd-allowlist` | repo root | `check-no-new-gd.sh` | shrink only |
 
 ```xml
 <ItemGroup>
@@ -37,23 +42,31 @@ Reference the analyzer project from the game `.csproj` so it runs in every build
 </ItemGroup>
 ```
 
-Merge `analyzers/.editorconfig` into the project's `.editorconfig` (sets GODOT00x = error).
+`.csproj` must also set `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`,
+`<Nullable>enable</Nullable>`. Needs Godot 4 **.NET**, export templates,
+GDUnit4 (or any `dotnet test` runner), and an export preset matching
+`godot_export_preset`.
 
-GODOT001's opt-out — define this attribute once in the game project and mark genuine technical
-constants with it:
+GODOT001's opt-out — define this once and mark genuine technical constants:
 
 ```csharp
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
 public sealed class TechnicalConstantAttribute : System.Attribute { }
 ```
 
-## Honest limits
+## What this chain cannot see
 
-- **GODOT001 is not sound.** Syntax can't prove a number is a design parameter. The analyzer
-  is far tighter than grep (respects types, skips const/enum/attribute/0/1, honours
-  `[TechnicalConstant]`) but will still have false positives — mark them, don't fight them.
-  GODOT002/003 are sound (pure structural facts).
-- **docs↔`.tres` coherence** — only checkable once the design doc under `docs/` is structured.
-  Deferred; it too should be a parser, not a grep.
-- The analyzers are a **starter**: authored against the Roslyn API, not yet built in this repo.
-  Compile the analyzer project once and run it on the game before trusting severities.
+Co-location by entity, composition / `*Component`, typed `[Export]`
+handles (GODOT003 only sees a string `GetNode`), EventBus-as-the-only-bus
+beyond `[Signal]` placement (GODOT002), typed `.tres` Resources, docs↔`.tres`
+coherence, migrate-producer-and-consumers-together. Those stay in
+`rules/godot-csharp/` as mentions. Do not invent a fourth analyzer to
+"translate" them.
+
+GODOT001 is not sound: syntax cannot prove a number is a design
+parameter. Mark a genuine technical constant; do not fight the analyzer.
+GODOT002/003 are sound.
+
+The factory's own CI witnesses `godot-lint` and `dotnet test`. Headless
+export needs the engine on the consuming runner — that line is why
+`godot-check` is not in `check` until `godot_bin` is a real binary.

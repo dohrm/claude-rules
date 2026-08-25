@@ -5,27 +5,15 @@ paths:
 title: "TypeScript Code Style"
 ---
 
-## File & Directory Naming
+`any`, `!`, unused names, and `strict` signatures: `just ts-check` (or
+the derivative `ts-*-check`).
 
-- **File names are `kebab-case`** — `my-button.tsx`, `use-auth.ts`, `billing-list.tsx`.
-  Never `PascalCase` or `camelCase` filenames. Applies to every file: components,
-  hooks, utils, types. Directories follow the same rule (`main-layout/`, not
-  `MainLayout/`).
-- **Identifiers keep standard casing**, independent of the kebab file name:
-  `PascalCase` for types, interfaces, classes, enums, and React components;
-  `camelCase` for functions, variables, and hooks. So `use-auth.ts` exports
-  `useAuth`, and `billing-list.tsx` exports `BillingList`.
+What they do not decide:
 
-## Module Layout — Flat by Default, Promote on Growth
-
-- **A single-file module is a flat file** — `my-button.tsx`, not
-  `my-button/index.ts` + `my-button/my-button.tsx`. Wrapping one file in a folder
-  with a barrel is premature ceremony.
-- **Promote to a folder only when the module gains co-located siblings** —
-  sub-components, a dedicated hook, styles, tests, stories. Then create
-  `my-button/` with an `index.ts` that re-exports **only that module's public
-  surface**, so consumers import `from '.../my-button'`, never
-  `from '.../my-button/my-button'`.
-- **One barrel per module folder, that module only.** Never an aggregation
-  `index.ts` that re-exports a whole feature/directory tree — it breaks
-  tree-shaking, slows HMR, and invites circular imports.
+- File and directory names are `kebab-case` (`my-button.tsx`,
+  `use-auth.ts`). Identifiers keep standard casing: `PascalCase` types
+  and components, `camelCase` functions and hooks — so `use-auth.ts`
+  exports `useAuth`.
+- A single-file module stays a flat file. Promote to a folder only when
+  co-located siblings appear; then one `index.ts` re-exports **that
+  module's** public surface. No aggregation barrels.

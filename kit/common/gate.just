@@ -46,8 +46,6 @@ review_prompt := kit / "review-prompt.md"
 # sha, so it needs no shell for the job at all.
 review_deny := "Bash,Write,Edit,NotebookEdit,Task,Agent,Artifact,WebFetch,WebSearch,Monitor,Workflow,Skill,ToolSearch,CronCreate,CronDelete,CronList,EnterWorktree,ExitWorktree,LSP,PushNotification,RemoteTrigger,SendMessage,ScheduleWakeup,TaskOutput,TaskStop,ListAgents,ListMcpResourcesTool,ReadMcpResourceTool,WaitForMcpServers,mcp__*"
 review_cmd  := "claude -p --disallowedTools '" + review_deny + "' --allowedTools 'Read,Glob,Grep'"
-#   codex:      codex exec -s read-only          # sandboxed by the flag, no list needed
-#   opencode:   opencode run --auto
 #   cursor:     cursor-agent -p
 #
 # `{{{{base}}` is how a justfile writes the literal string `{{base}}` (an opening `{{`

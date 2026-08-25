@@ -2,19 +2,19 @@
 #
 # Thin triggers only: commands live in the justfile recipes (godot-lint / godot-check),
 # which hold the paths via godot_dir + the Godot binary. Layout-agnostic globs.
-# Aligned with rules/godot-csharp/quality-gates.md (build / GDUnit4 / headless export).
-# Requires Godot 4 with .NET export templates + GDUnit4 added to the project.
+# Aligned with rules/godot-csharp/quality-gates.md (godot-lint / godot-check).
+# Requires Godot 4 .NET + export templates + a matching export preset.
 
 pre-commit:
   parallel: true
   commands:
     godot:
-      glob: "*.{cs,tscn,tres,gd}"
+      glob: "**/*.{cs,tscn,tres,gd}"
       run: just godot-lint
 
 pre-push:
   parallel: true
   commands:
     godot:
-      glob: "*.{cs,tscn,tres,gd}"
+      glob: "**/*.{cs,tscn,tres,gd}"
       run: just godot-check

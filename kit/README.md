@@ -102,10 +102,13 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    a `check` recipe listing your techs. Never edit a `.just` under `.dev/kit/`:
    override it here instead. Needs just >= 1.27.
 3. Merge each `<tech>/lefthook.snippet.yml` (thin triggers) into `lefthook.yml`;
-   move the configs into place (deny.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
-   golangci.base.yml→`.golangci.yml`, mutation-ci.yaml→`.gitea/workflows/`);
-   merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml`;
-   adapt eslint `globalIgnores`; then `lefthook install`.
+   move the configs into place (deny.toml+rustfmt.toml→`<rust_dir>`, mutants.toml→`.cargo/`,
+   golangci.base.yml→`<go_dir>/.golangci.yml` (v2), mutation-ci.yaml→`.gitea/workflows/`);
+   merge `python/pyproject.snippet.toml` into `<python_dir>/pyproject.toml` (map: `python/README.md`);
+   copy `ts/eslint.base.js` (or the web/node/tauri overlay) → `eslint.config.js`
+   and the matching `tsconfig.*.json` → `tsconfig.json`;
+   Godot: reference `godot/analyzers/` from the game `.csproj` and merge
+   `analyzers/.editorconfig` (map: `godot/README.md`); then `lefthook install`.
 4. **Decision records** (only if the repo keeps ADRs): add `adr-check` to the
    `check` recipe — the script ships with the library and is called from it, so
    there is nothing to move into `scripts/`. The gate makes
@@ -128,7 +131,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    gates, so it belongs in neither `check` nor a hook.
    Doctrine: `../rules/agent/autonomy.md` ("One tree, one writer").
 7. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
-   into `.claude/settings.json` — or the opencode / cursor / codex snippet beside it.
+   into `.claude/settings.json` — or the cursor snippet beside it.
    This is the **harness layer**, and the split matters: `lefthook` is the git floor (portable,
    every agent), the hooks catch what git never gets to see — the `--no-verify`, the
    `lefthook uninstall`, the `rm` on the review report. Both guards fail open and
@@ -155,32 +158,59 @@ kit/
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
 │       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest
-│       └── *.snippet.*         #   one wiring snippet per tool: claude · opencode · cursor · codex
+│       └── *.snippet.*         #   one wiring snippet per tool: claude · cursor
 ├── cicd/                       # the pipeline that CALLS the above (Gitea Actions = GitHub Actions)
 │   ├── ci.snippet.yaml         # Tier 1-2 gate, one job per tech → `just <tech>-check` + a single required check
 │   └── release.snippet.yaml    # tag-driven: tag==manifest, gates, build once, checksum, publish
-├── rust/                       # COMPLETE
+├── rust/                       # JALON — toolchain owns the chain
+│   ├── README.md               # config map: file → destination → recipe
 │   ├── rust.just               # rust-lint / rust-check / rust-mutate, imported by the justfile
+│   ├── rustfmt.toml            # Tier 1 fmt — copy to <rust_dir>/
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml
-│   ├── deny.toml               # Tier 2 supply-chain (adapt registry / private crates)
-│   ├── mutants.toml            # Tier 3 config → copy to <workspace>/.cargo/ (adapt exclusions)
+│   ├── deny.toml               # Tier 2 supply-chain — copy to <rust_dir>/ (adapt registry / private crates)
+│   ├── mutants.toml            # Tier 3 config → copy to <rust_dir>/.cargo/ (adapt exclusions)
 │   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
-├── ts/                         # COMPLETE
-│   ├── ts.just                 # ts-lint / ts-check / ts-mutate, imported by the justfile
-│   ├── lefthook.snippet.yml    # Tier 1-2 TS commands → merge into root lefthook.yml
-│   ├── eslint.config.base.js   # base flat config — the reusable part is globalIgnores (generated)
-│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker, changed files) → .gitea/ or .github/workflows/
-├── go/                         # COMPLETE
+├── ts/                         # JALON — language floor
+│   ├── README.md               # config map: file → destination → recipe
+│   ├── ts.just                 # ts-lint / ts-check / ts-mutate — npm exec --no-install
+│   ├── eslint.base.js          # no-explicit-any + no-non-null-assertion → COPY to eslint.config.js
+│   ├── tsconfig.base.json      # strict, no DOM → COPY to tsconfig.json
+│   ├── lefthook.snippet.yml    # Tier 1-2 → merge into root lefthook.yml
+│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker) → .gitea/ or .github/workflows/
+├── ts-web/                     # JALON — React portal (HTTP)
+│   ├── README.md
+│   ├── ts-web.just             # ts-web-lint / ts-web-check (react-hooks + jsx-a11y + DOM)
+│   ├── eslint.react.js
+│   └── tsconfig.web.json
+├── ts-node/                    # JALON — Fastify service
+│   ├── README.md
+│   ├── ts-node.just            # ts-node-lint / ts-node-check (Node globals, no DOM)
+│   ├── eslint.node.js
+│   └── tsconfig.node.json
+├── ts-tauri/                   # JALON — React webview (same overlay as ts-web)
+│   ├── README.md
+│   ├── ts-tauri.just           # ts-tauri-lint / ts-tauri-check — not cargo tauri build
+│   ├── eslint.react.js
+│   └── tsconfig.webview.json
+├── go/                         # JALON — toolchain owns the chain
+│   ├── README.md                # config map: file → destination → recipe
 │   ├── go.just                  # go-lint / go-check / go-cover, imported by the justfile
-│   ├── lefthook.snippet.yml     # Tier 1-2 Go commands (golangci-lint / test -race / govulncheck)
-│   ├── golangci.base.yml        # linter set, mirrors rules/go/quality-gates.md
+│   ├── lefthook.snippet.yml     # Tier 1-2 Go commands → merge into root lefthook.yml
+│   ├── golangci.base.yml        # v2 config → COPY to <go_dir>/.golangci.yml
 │   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
-├── python/                     # COMPLETE
+├── python/                     # JALON — toolchain owns the chain
+│   ├── README.md                # config map: snippet → destination → recipe
 │   ├── python.just              # python-lint / python-check / python-mutate, imported by the justfile
-│   ├── lefthook.snippet.yml     # Tier 1-2 Python commands (ruff / mypy --strict / pytest / audit)
-│   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut config → MERGE into pyproject.toml
+│   ├── lefthook.snippet.yml     # Tier 1-2 Python commands → merge into root lefthook.yml
+│   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut → MERGE into pyproject.toml
 │   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
+├── godot/                      # JALON — toolchain owns the chain
+│   ├── README.md               # config map: file → destination → recipe
+│   ├── godot.just              # godot-lint / godot-check — not in default check
+│   ├── check-no-new-gd.sh      # tracked .gd vs .godot-gd-allowlist (shrink only)
+│   ├── lefthook.snippet.yml    # Tier 1-2 → merge into root lefthook.yml
+│   └── analyzers/              # GODOT001–003, run inside `dotnet build`
 └── portal-http/                # COMPLETE (frontend, pairs with the portal-http profile)
     └── openapi-ts.config.ts     # hey-api codegen config → copy to frontend root, adapt (NOT a gate)
 ```

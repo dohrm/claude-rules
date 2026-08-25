@@ -93,7 +93,19 @@ test('architect gating table lists exactly the registry profiles', () => {
   for (const p of Object.keys(registry.profiles))
     assert.ok(listed.has(p), `profile "${p}" exists but the architect gating table never mentions it`)
   for (const p of listed)
-    assert.ok(registry.profiles[p], `architect gating table offers "${p}" — no such profile in the registry`)
+    assert.ok(registry.profiles[p] || (registry.aliases || {})[p],
+      `architect gating table offers "${p}" — no such profile or alias in the registry`)
+})
+
+test('aliases unpack to existing profiles and never collide with a profile name', () => {
+  const aliases = registry.aliases || {}
+  assert.ok(Object.keys(aliases).length, 'registry.aliases is missing')
+  for (const [name, ps] of Object.entries(aliases)) {
+    assert.ok(!registry.profiles[name], `alias "${name}" collides with a profile`)
+    assert.ok(ps.length, `alias "${name}" is empty`)
+    for (const p of ps)
+      assert.ok(registry.profiles[p], `alias "${name}" unpacks unknown profile "${p}"`)
+  }
 })
 
 // GitHub/Gitea Actions expressions accept ONLY single-quoted string literals; a double

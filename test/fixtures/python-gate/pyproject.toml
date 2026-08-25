@@ -1,0 +1,94 @@
+# Witness package for `just python-lint` / `just python-check`.
+# Tool tables below are the shipped pyproject.snippet.toml. See test/python-gates.test.mjs.
+[project]
+name = "gate-probe"
+version = "0.1.0"
+description = "Witness package for the python jalon"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "deptry",
+    "mypy",
+    "pip-audit",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]          # ADAPT if the package is not under src/
+target-version = "py312"        # ADAPT to your requires-python floor
+
+[tool.ruff.lint]
+# A curated set, not "everything": each family below is a rule in
+# rules/python/ that a machine can check instead of a reviewer.
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes — the undefined name, the unused import
+    "I",        # isort — import order, so a diff never argues about it
+    "N",        # pep8-naming — code-style.md's naming section
+    "UP",       # pyupgrade — no syntax kept alive for a version you dropped
+    "B",        # bugbear — mutable default args, and friends
+    "A",        # no shadowing of builtins
+    "C4",       # comprehensions
+    "SIM",      # simplifications
+    "RET",      # return-path consistency
+    "PTH",      # pathlib over os.path
+    "ARG",      # unused arguments
+    "TID",      # tidy imports — bans relative imports beyond the package
+    "S",        # bandit: security anti-patterns (the `gosec` counterpart)
+    "TRY",      # tryceratops: the error-handling.md rules, mechanically
+    "LOG", "G", # logging: no f-string in the message, no bare exception logging
+    "RUF",      # ruff's own
+]
+ignore = [
+    "TRY003",   # long messages in raise — allowed; the CONTRACT is the attributes
+]
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is the point of a test, and a hardcoded password in a fixture is not
+# a finding. Narrow the exemption to the test tree, never repo-wide.
+"tests/**" = ["S101", "S105", "S106", "ARG"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"    # `.sibling` fine, `..other_package` not
+
+[tool.mypy]
+strict = true                   # the whole point; do not soften it to pass
+warn_unreachable = true
+warn_unused_ignores = true      # a `# type: ignore` that stopped being needed is noise
+show_error_codes = true         # so a suppression can name its code
+files = ["src", "tests"]        # ADAPT
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -q quiet, --strict-markers so a typo'd marker fails instead of silently
+# selecting nothing, and a failed test is never a warning.
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error"]      # a DeprecationWarning is tomorrow's breakage
+
+[tool.coverage.run]
+branch = true
+source = ["src"]                # ADAPT
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.deptry]
+# DEP001 missing, DEP002 unused, DEP003 transitive, DEP004 misplaced dev dep.
+# Nothing ignored by default: add an entry here WITH a reason when a package is
+# genuinely used in a way static analysis cannot see (a plugin, an entry point).
+ignore = []
+
+[tool.mutmut]
+source_paths = ["src"]                              # ADAPT
+pytest_add_cli_args_test_selection = ["tests"]      # ADAPT

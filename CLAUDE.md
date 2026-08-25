@@ -6,14 +6,13 @@ This repository is a shared library of reusable coding-agent assets, installed
 into consuming repos via the npx installer (`bin/cli.mjs`, driven by
 `registry.json`) — shadcn-style: copy, own, pin. Not a submodule.
 
-**Agent-agnostic.** Claude Code is the canonical authoring format; the installer
-emits/transforms each asset per target agent via `--agent`
-(`claude`|`cursor`|`codex`|`opencode`). Each `registry.json` entry carries a
-`kind` (`skill`|`kit`|`rule`|`agent`) that selects the per-agent emitter in
-`cli.mjs` (`EMITTERS` table). Skills (`SKILL.md`) and kit are portable as-is;
-rules → Cursor `.mdc` or an idempotent `AGENTS.md` block for Codex/opencode;
-subagents → `.opencode/agent/` (Cursor/Codex have no file-based subagents). Author
-in Claude format only — never hand-maintain the transformed outputs.
+**Two targets.** Claude Code is the canonical authoring format; the installer
+emits/transforms each asset for Cursor via `--agent` (`claude`|`cursor`). Each
+`registry.json` entry carries a `kind` (`skill`|`kit`|`rule`|`agent`) that
+selects the per-agent emitter in `cli.mjs` (`EMITTERS` table). Skills (`SKILL.md`)
+and kit are portable as-is; rules → Cursor `.mdc`. Cursor has no file-based
+subagents. Author in Claude format only — never hand-maintain the transformed
+outputs.
 
 ## Repository Structure
 
@@ -23,7 +22,7 @@ in Claude format only — never hand-maintain the transformed outputs.
 - `skills/` — Claude Code skills as canonical `<name>/SKILL.md` dirs, copied into `.claude/skills/` (auto-discovered); frontmatter is `name` + `description` (the description drives auto-triggering)
 - `guidelines/` — patterns for working with Claude Code
 - `registry.json` + `bin/cli.mjs` — the installer (data-driven; the CLI stays dumb)
-- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR.
+- `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR. Language jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`, `test/go-gates.test.mjs`, `test/ts-gates.test.mjs`, `test/godot-gates.test.mjs`) skip when their toolchain is missing; the matching CI jobs install it and set `RUST_GATES=1` / `PYTHON_GATES=1` / `GO_GATES=1` / `TS_GATES=1` / `GODOT_GATES=1` so a skip cannot pass.
 - `eval/` — agent regression harness; calls `claude` and spends tokens, so it is manual (model bumps only)
 
 ## Working rules

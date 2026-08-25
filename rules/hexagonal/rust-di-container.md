@@ -4,84 +4,116 @@ paths:
 title: "Dependency Injection — Rust"
 ---
 
-## Structure
+Composition root only — wiring, not domain. No globals, no service locator.
+`AppState` holds adapters and ports; handlers take `State<AppState>`.
 
-```
-DependencyContainer  →  build_app_state()  →  AppState
-                                               ├── infrastructure clients (db, APIs)
-                                               └── XxxContainer × N
+## Small app — flat `AppState`
 
-di/
-├── dependency_container.rs  → DependencyContainer + AppState + AppState::new() + init_side_effects()
-├── routes_container.rs      → route registry (axum)
-└── {module}_container.rs    → impl AppState accessors for that module
-```
-
-## Two-Phase Initialization
-
-**Phase 1** (`new()`) — resolve all containers in topological order, direct deps as constructor args.
-**Phase 2** (`init_side_effects()`) — wire cross-module callbacks. Each `register_xxx` **consumes `self`** to prevent double-registration.
+One struct, every direct dep as a constructor arg. Prefer this until a second
+module appears.
 
 ```rust
+pub struct AppState {
+    pub users: Arc<dyn UserRepository>,
+    pub mail: Arc<dyn Mailer>,
+}
+
 impl AppState {
-    async fn new(config: AppConfig) -> Result<Self> {
-        let company = CompanyContainer::new(database.clone()).await?;
-        let license = LicenseContainer::new(database.clone(), company.services().clone()).await?;
-        Ok(Self { company, license })
+    pub async fn new(config: &Config) -> Result<Self> {
+        let db = Database::connect(&config.database_url).await?;
+        Ok(Self {
+            users: Arc::new(PgUserRepository::new(db.clone())),
+            mail: Arc::new(SmtpMailer::new(&config.smtp)?),
+        })
     }
-    async fn init_side_effects(mut self) -> Result<Self> {
-        self.tenant = self.tenant.register_notifications(self.notification.clone())?;
-        Ok(self)
+
+    pub fn router(self) -> Router {
+        Router::new()
+            .route("/api/v1/users/{id}", get(get_user))
+            .with_state(self)
     }
 }
 ```
 
-## Module Container
+Eager for anything that should fail at boot (DB, required clients). Optional
+infra is `Option<_>` — degrade, do not panic later.
+
+## Lazy — `tokio::sync::OnceCell`
+
+Connection pools, compiled assets, clients a route may never touch: pay the cost
+on first use, not in `new()`. `OnceCell` runs the init closure once; concurrent
+callers await the same future.
 
 ```rust
-pub struct XxxContainer {
-    services: Arc<XxxServicesImpl>,
-    heavy_resource: OnceCell<Arc<HeavyResource>>,  // lazy: cost paid on first access
+use tokio::sync::OnceCell;
+
+pub struct ReportsContainer {
+    db: Database,
+    compiler: OnceCell<Arc<ReportCompiler>>,
 }
-impl XxxContainer {
-    pub async fn new(database: Database, dep: Arc<dyn DepServices + Send + Sync>) -> Result<Self> { }
-    pub fn services(&self) -> &Arc<XxxServicesImpl> { &self.services }
-    pub async fn heavy_resource(&self) -> Result<&Arc<HeavyResource>> {
-        self.heavy_resource.get_or_try_init(|| async { HeavyResource::connect().await }).await
+
+impl ReportsContainer {
+    pub fn new(db: Database) -> Self {
+        Self { db, compiler: OnceCell::new() }
     }
-    pub fn register_notifications(mut self, notifier: Arc<dyn Notifier>) -> Result<Self> { Ok(self) }
+
+    pub async fn compiler(&self) -> Result<&Arc<ReportCompiler>> {
+        self.compiler
+            .get_or_try_init(|| async {
+                ReportCompiler::connect(&self.db).await.map(Arc::new)
+            })
+            .await
+    }
 }
 ```
 
-Each `{module}_container.rs` — accessors only, no logic:
+Handlers call `container.compiler().await?` — boot stays cheap; the first call
+pays connect and later calls reuse the cell. Still wiring-only: no business
+logic inside the init closure beyond constructing the adapter.
+
+## When it grows — module containers
+
+Split only when the flat struct becomes a bag of unrelated fields. One
+container per module; `AppState` composes them; **one** registry lists routes.
 
 ```rust
+pub struct UsersContainer {
+    services: Arc<UsersServices>,
+}
+
+impl UsersContainer {
+    pub async fn new(db: Database) -> Result<Self> { /* wire adapters */ }
+    pub fn services(&self) -> &Arc<UsersServices> { &self.services }
+    pub fn routes(&self) -> Router<AppState> { /* users routes only */ }
+}
+
+pub struct AppState {
+    pub users: UsersContainer,
+    pub billing: BillingContainer,
+}
+
 impl AppState {
-    pub fn xxx_services(&self) -> &Arc<XxxServicesImpl> { self.xxx.services() }
-}
-```
+    pub async fn new(config: &Config) -> Result<Self> {
+        let db = Database::connect(&config.database_url).await?;
+        let users = UsersContainer::new(db.clone()).await?;
+        let billing = BillingContainer::new(db, users.services().clone()).await?;
+        Ok(Self { users, billing })
+    }
 
-## Route Registry
-
-```rust
-impl AppState {
-    pub async fn all_routes(&self) -> Result<Vec<(&'static str, Router)>> {
-        Ok(vec![("/api/v1/companies", self.company.routes().await?)])
+    pub fn router(self) -> Router {
+        Router::new()
+            .merge(self.users.routes())
+            .merge(self.billing.routes())
+            .with_state(self)
     }
 }
 ```
 
-Adding a module = one line here. Only place modules are listed.
-
-## Eager vs Lazy Init
-
-- Services, repositories, clients → eager in `new()` (fail-fast on bad config)
-- Connection pools, compiled assets → lazy via `OnceCell` (cheap startup)
-- Optional infra clients → `Option<Client>` (degrade gracefully)
+Cross-module callbacks after construction (if needed) consume `self` so they
+cannot register twice.
 
 ## Rules
 
-- `new(...)` — all direct dependencies explicit, no global state, no service locator
-- `register_xxx(self, ...)` — consuming, Phase 2 only, prevents double-registration
-- No business logic in `DependencyContainer` or `AppState` — wiring only
-- Route registry is the only place modules are listed
+- `new(...)` — all direct dependencies explicit
+- No business logic in `AppState` or a module container — wiring only
+- Route (or handler) registration has one home; adding a module is one line there

@@ -18,7 +18,7 @@
 //   node eval/run.mjs                      # all cases, default runner (claude), default model
 //   node eval/run.mjs --model <alias|id>   # re-run against a candidate model
 //   node eval/run.mjs runbook-commands     # a single case
-//   node eval/run.mjs --runner opencode    # another agent CLI (see eval/runners.mjs)
+//   node eval/run.mjs --runner cursor      # Cursor's agent CLI (see eval/runners.mjs)
 //   node eval/run.mjs --bin ./my-claude    # same preset, a different binary
 //   node eval/run.mjs --cmd "agy run {prompt}" --format text   # any other command
 //   node eval/run.mjs --answers-inline     # fold scripted answers into the prompt (non-streaming runners)

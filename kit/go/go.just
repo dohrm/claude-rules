@@ -12,6 +12,12 @@
 
 go_dir := "."      # overridden from the root justfile (managed block)
 
+# Config golangci-lint reads — COPY golangci.base.yml → {{go_dir}}/.golangci.yml,
+# the installer never merges it. Needs golangci-lint v2 (v1 will not parse the
+# shipped file). See README.md.
+#
+# errcheck is the unhandled-error gate. gofmt lives under formatters in the
+# v2 config and still runs as part of `golangci-lint run`.
 go-lint:
     cd {{go_dir}} && golangci-lint run ./...
 go-check: go-lint

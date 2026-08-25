@@ -1,0 +1,15 @@
+# TypeScript Tauri hooks — MERGE into the repo's root lefthook.yml.
+
+pre-commit:
+  parallel: true
+  commands:
+    ts-tauri:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-tauri-lint
+
+pre-push:
+  parallel: true
+  commands:
+    ts-tauri:
+      glob: "**/*.{ts,tsx}"
+      run: just ts-tauri-check

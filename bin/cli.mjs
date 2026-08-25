@@ -4,12 +4,12 @@
 // truth is registry.json. It NEVER merges build config (lefthook/eslint) — kit
 // entries are scaffolded and their wiring is printed for you to do once.
 //
-// Agent-agnostic: Claude is the canonical source format; the installer emits/
-// transforms each asset to the target agent(s). Skills (SKILL.md) and kit are
+// Two targets: Claude is the canonical source format; the installer emits/
+// transforms each asset for Cursor too. Skills (SKILL.md) and kit are
 // portable as-is; rules and agents are transformed per target.
 //
 // Usage:
-//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor,antigravity,codex,opencode] [--module apps/api] [--ref v1.2.0]
+//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
@@ -25,7 +25,9 @@ import { spawnSync } from 'node:child_process'
 
 const registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
-const KNOWN_AGENTS = ['claude', 'cursor', 'antigravity', 'codex', 'opencode']
+const KNOWN_AGENTS = ['claude', 'cursor']
+const RETIRED_AGENTS = ['antigravity', 'codex', 'opencode']
+const RETIRED_DIRS = ['.dev/rules', '.opencode', '.agents/rules']
 
 // ---------------------------------------------------------------- arg parsing
 const argv = process.argv.slice(2)
@@ -35,38 +37,89 @@ const refFlag = flag('--ref')
 const agentFlag = flag('--agent')
 const localFlag = flag('--local')
 const moduleFlag = flag('--module')
+const rootFlag = flag('--root')
+const levelFlag = flag('--level')
 const strictFlag = argv.includes('--strict')
-const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--strict'].filter(Boolean))
+if (rootFlag && moduleFlag) {
+  console.error('--root and --module are the same flag; pass one.')
+  process.exit(1)
+}
+const scopeFlag = rootFlag || moduleFlag
+const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
-// Default is ALL agents — narrowing to a subset is a deliberate --agent choice.
-// `update` falls back to the locked set (or, for legacy locks with none, all).
+const LEVELS = ['rules', 'gates', 'ratchet']
+const levelRank = l => { const i = LEVELS.indexOf(l); return i < 0 ? 0 : i }
+const maxLevel = (a, b) => LEVELS[Math.max(levelRank(a), levelRank(b))]
+const entryLevel = e => e.level || (e.kind === 'kit' ? 'gates' : 'rules')
+const entriesAt = (profile, level) => (registry.profiles[profile] || []).filter(e => levelRank(entryLevel(e)) <= levelRank(level))
+// Language-globbing profiles: without --root they load on every matching file in
+// the repo. That is how ops/slo lands on a domain entity. Hint, never block.
+const ROOT_HINT = new Set(['rust', 'ts', 'ts-web', 'ts-node', 'ts-tauri', 'go', 'python', 'godot', 'hexagonal', 'cqrs', 'api', 'backend', 'ops', 'testing', 'react', 'portal-flat', 'portal-http', 'tauri'])
+
+function unpackNames(names) {
+  const aliases = registry.aliases || {}
+  const out = []
+  const seen = new Set()
+  const walk = n => {
+    if (aliases[n]) {
+      if (!seen.has(n)) {
+        seen.add(n)
+        console.log(`  unpack ${n} → ${aliases[n].join(' ')}`)
+        aliases[n].forEach(walk)
+      }
+      return
+    }
+    if (!seen.has(n)) { seen.add(n); out.push(n) }
+  }
+  names.forEach(walk)
+  return out
+}
+
+function parseLevel() {
+  if (!levelFlag) return null
+  if (!LEVELS.includes(levelFlag)) {
+    console.error(`Unknown --level ${levelFlag}. Known: ${LEVELS.join(', ')}`)
+    process.exit(1)
+  }
+  return levelFlag
+}
+
+// Default is both targets — narrowing is a deliberate --agent choice.
+// `update` falls back to the locked set (or, for legacy locks with none, both).
 function parseAgents(fallback) {
   const raw = agentFlag || fallback || KNOWN_AGENTS.join(',')
   const list = raw.split(',').map(s => s.trim()).filter(Boolean)
-  const bad = list.filter(a => !KNOWN_AGENTS.includes(a))
+  const retired = list.filter(a => RETIRED_AGENTS.includes(a))
+  const bad = list.filter(a => !KNOWN_AGENTS.includes(a) && !RETIRED_AGENTS.includes(a))
+  if (retired.length) {
+    console.error(`Retired agent(s): ${retired.join(', ')}. Targets are ${KNOWN_AGENTS.join(', ')} (Codex, OpenCode and Antigravity were dropped).`)
+    process.exit(1)
+  }
   if (bad.length) { console.error(`Unknown agent(s): ${bad.join(', ')}. Known: ${KNOWN_AGENTS.join(', ')}`); process.exit(1) }
   return [...new Set(list)]
 }
 
+// A lock written before the cut may still list retired targets. Keep the ones
+// that remain, drop the rest, and say so — `update` then rewrites the lock.
+function agentsFromLock(lock) {
+  const raw = (lock && lock.agents) ? lock.agents : []
+  return {
+    kept: raw.filter(a => KNOWN_AGENTS.includes(a)),
+    dropped: raw.filter(a => !KNOWN_AGENTS.includes(a)),
+  }
+}
+
 // ------------------------------------------------------------- destinations
-// `.agents/` is Antigravity's native directory (skills, workflows AND rules), and
-// the de-facto neutral home the other AGENTS.md-era tools read too. Skills there are
-// a happy collision — a SKILL.md is portable. Rules are NOT: Antigravity reads
-// .agents/rules/ with ITS frontmatter, so the codex/opencode copies (which carry
-// `paths:`, meaningless to it) live in .dev/rules/ instead — same neighbourhood as
-// .dev/kit/, and nothing picks them up by accident.
-const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills', antigravity: '.agents/skills', codex: '.agents/skills', opencode: '.opencode/skills' }
-// The kit is the ONE kind no emitter transforms: executable gates, copied verbatim,
-// byte-identical for every agent. And nothing reads it the way Claude auto-reads
-// .claude/rules/ — its only consumers name the path themselves (the justfile,
-// lefthook, settings.json). So a per-agent destination bought nothing and cost two
-// things: a second identical tree in a multi-agent install, and a justfile whose
-// import path depended on whichever agent happened to be first in the lock. ONE home,
-// agent-neutral, next to .dev/rules/.
+// Skills for Cursor live in `.agents/skills/` — the portable SKILL.md home.
+// Rules do not: Cursor reads `.cursor/rules/*.mdc`. The kit is the ONE kind no
+// emitter transforms: executable gates, copied verbatim, byte-identical for every
+// agent. Nothing reads it the way Claude auto-reads .claude/rules/ — its only
+// consumers name the path themselves (the justfile, lefthook, settings.json).
+// ONE home, agent-neutral.
+const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills' }
 const KIT_DIR = '.dev/kit'
 const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put it
-const AGENTS_RULE_DIR = '.dev/rules'
 
 // ------------------------------------------------------------------ fs utils
 const ensureDir = d => mkdirSync(d, { recursive: true })
@@ -130,7 +183,16 @@ const scopeGlobs = (globs, prefixes) =>
 // rule can never fire, so it is not emitted at all: `api/go.md` has no business in
 // a repo with no Go. Anything the table does not claim (yaml, CHANGELOG…) is never
 // filtered, and a repo that locked no language at all is left alone.
-const LANG_EXT = { rust: ['rs'], ts: ['ts', 'tsx'], go: ['go'], python: ['py'], godot: ['cs', 'tscn', 'tres', 'gd'] }
+const LANG_EXT = {
+  rust: ['rs'],
+  ts: ['ts', 'tsx'],
+  'ts-web': ['ts', 'tsx'],
+  'ts-node': ['ts', 'tsx'],
+  'ts-tauri': ['ts', 'tsx'],
+  go: ['go'],
+  python: ['py'],
+  godot: ['cs', 'tscn', 'tres', 'gd'],
+}
 function isLanguageDead(globs, profiles) {
   if (!Array.isArray(globs) || !globs.length) return false
   const locked = new Set(profiles.flatMap(p => LANG_EXT[p] || []))
@@ -167,15 +229,6 @@ function toScopedRuleText(text, prefixes) {
   if (!prefixes.length || !Array.isArray(fm.paths) || !fm.paths.length) return null
   return `---\n${dumpFm({ ...fm, paths: scopeGlobs(fm.paths, prefixes) })}\n---\n${body}`
 }
-// Claude subagent (name/description/model/color/memory) → opencode agent (description/mode).
-function toOpencodeAgentText(text) {
-  const { fm, body } = splitFm(text)
-  const out = {}
-  if (fm.description) out.description = fm.description
-  out.mode = 'subagent'
-  return `---\n${dumpFm(out)}\n---\n${body}`
-}
-
 // -------------------------------------------------------------------- staging
 // Returns { dir, isFile, name, temp } — a readable source for the entry.
 async function makeStaged(ref, entry) {
@@ -202,7 +255,7 @@ function emitSkill(s, entry, agent) {
 }
 function emitKit(s, entry, agent, ctx) {
   // One destination for every agent, so the second agent would re-copy the same
-  // bytes and print the same line twice. Same guard as the AGENTS.md accumulator.
+  // bytes and print the same line twice.
   if (ctx.kit.has(entry.from)) return null
   ctx.kit.add(entry.from)
   const dest = join(KIT_DIR, basename(entry.from))
@@ -225,101 +278,31 @@ function emitClaudeRaw(s, entry, agent, ctx) {
   }
   logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
 }
-// Cursor and Antigravity converged on the same rule format — one file per rule,
-// `description` + `globs` + `alwaysApply` in the frontmatter. Only the home and the
-// extension differ, so one transform serves both.
-const globRuleEmitter = (root, ext) => (s, entry, agent, ctx) => {
+// Cursor rule: one file per rule, `description` + `globs` + `alwaysApply`.
+function emitCursorRule(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
+  const root = '.cursor/rules'
   if (!s.isFile) resetDir(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8')
     if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
-    const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, ext)
+    const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, '.mdc')
     const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(text, prefixes))
   }
-  logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + `/*${ext}`); return null
-}
-const emitCursorRule = globRuleEmitter('.cursor/rules', '.mdc')
-const emitAntigravityRule = globRuleEmitter('.agents/rules', '.md')
-// Codex & opencode have no per-file path-scoping: cross-cutting rules are inlined
-// into AGENTS.md, path-scoped rules are copied to .dev/rules/ and referenced.
-// AGENTS.md content is identical for both, so accumulate once (guarded by ctx.seen).
-function emitAgentsRule(s, entry, agent, ctx) {
-  if (ctx.seen.has(entry.from)) return null
-  ctx.seen.add(entry.from)
-  const { prefixes, langProfiles } = ctx.scope
-  if (!s.isFile) resetDir(join(AGENTS_RULE_DIR, basename(entry.from)))
-  for (const f of mdFiles(s)) {
-    const text = readFileSync(f.abs, 'utf8'); const { fm, body } = splitFm(text)
-    if (Array.isArray(fm.paths) && fm.paths.length) {
-      if (isLanguageDead(fm.paths, langProfiles)) continue
-      const rel = s.isFile ? f.rel : join(basename(entry.from), f.rel)
-      const target = join(AGENTS_RULE_DIR, rel)
-      ensureDir(dirname(target))
-      writeFileSync(target, toScopedRuleText(text, prefixes) || text)
-      // Carry the module so the index can be grouped by it: a Codex session run
-      // from apps/api can then skip every row that is not its own.
-      ctx.refs.push({ globs: scopeGlobs(fm.paths, prefixes), path: target, title: fm.title || fm.description || rel, module: prefixes.length === 1 ? prefixes[0] : null })
-    } else {
-      ctx.inline.push(body.trim())
-    }
-  }
-  return null
-}
-function emitOpencodeAgent(s, entry) {
-  for (const f of mdFiles(s)) {
-    const t = join('.opencode/agent', basename(f.rel))
-    ensureDir(dirname(t)); writeFileSync(t, toOpencodeAgentText(readFileSync(f.abs, 'utf8')))
-  }
-  logCopy(entry.from, '.opencode/agent/*.md (transformed)'); return null
+  logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
 }
 const emitSkip = (s, entry, agent) =>
   `  • ${agent}: no file-based subagents — skipped "${entry.from}" (use ${agent}'s runtime agent feature instead).`
 
 const EMITTERS = {
-  claude:      { skill: emitSkill, kit: emitKit, rule: emitClaudeRaw,        agent: emitClaudeRaw },
-  cursor:      { skill: emitSkill, kit: emitKit, rule: emitCursorRule,       agent: emitSkip },
-  antigravity: { skill: emitSkill, kit: emitKit, rule: emitAntigravityRule,  agent: emitSkip },
-  codex:       { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,       agent: emitSkip },
-  opencode:    { skill: emitSkill, kit: emitKit, rule: emitAgentsRule,       agent: emitOpencodeAgent },
+  claude: { skill: emitSkill, kit: emitKit, rule: emitClaudeRaw,  agent: emitClaudeRaw },
+  cursor: { skill: emitSkill, kit: emitKit, rule: emitCursorRule, agent: emitSkip },
 }
 
-// AGENTS.md: rewrite a delimited, installer-owned block; never touch the user's content.
+// Leftover from Codex / OpenCode: a managed AGENTS.md block this installer used
+// to write. `update` strips it and leaves whatever the repo wrote around it.
 const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
 const AGENTS_END = '<!-- claude-rules:end -->'
-const AGENTS_INDEX_HEADING = '## Rules that are NOT loaded for you'
-function flushAgentsMd(ctx) {
-  if (!ctx.inline.length && !ctx.refs.length) return
-  const parts = [AGENTS_START, '# Project rules (managed by claude-rules)\n']
-  if (ctx.inline.length) parts.push(ctx.inline.join('\n\n'))
-  if (ctx.refs.length) {
-    // Neither Codex nor opencode loads a rule because a glob matched — the index is
-    // an instruction, not a mechanism. So say it once, imperatively, and group the
-    // rows by module: a session working in apps/api can skip everything else.
-    parts.push(`\n${AGENTS_INDEX_HEADING}\n`)
-    parts.push('Before you edit a file, open the rules below whose glob matches it, and')
-    parts.push('follow them. Nothing loads them automatically.\n')
-    const groups = new Map()
-    for (const r of ctx.refs) {
-      const key = r.module || '(repo-wide)'
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key).push(r)
-    }
-    const ordered = [...groups.entries()].sort(([a], [b]) => a === '(repo-wide)' ? 1 : b === '(repo-wide)' ? -1 : a.localeCompare(b))
-    for (const [mod, refs] of ordered) {
-      if (groups.size > 1) parts.push(`\n### ${mod}`)
-      for (const r of refs) parts.push(`- \`${r.globs.join('`, `')}\` → read \`${r.path}\` — ${r.title}`)
-    }
-  }
-  parts.push(AGENTS_END)
-  const block = parts.join('\n')
-  const file = 'AGENTS.md'
-  let content = existsSync(file) ? readFileSync(file, 'utf8') : ''
-  const re = new RegExp(`${AGENTS_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${AGENTS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
-  content = re.test(content) ? content.replace(re, block) : (content.trim() ? content.trimEnd() + '\n\n' : '') + block + '\n'
-  writeFileSync(file, content)
-  console.log(`  ✓ AGENTS.md  (managed block: ${ctx.inline.length} inline, ${ctx.refs.length} path-scoped)`)
-}
 
 // --------------------------------------------------------------------- remove
 // Inverse of add: delete the destinations each emitter produced, per locked
@@ -331,17 +314,15 @@ const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
 function destsFor(entry, agent) {
   const name = basename(entry.from)
   switch (entry.kind) {
-    case 'skill': return [join(SKILL_DIR[agent], name)]
+    case 'skill': return SKILL_DIR[agent] ? [join(SKILL_DIR[agent], name)] : []
     case 'kit':   return [join(KIT_DIR, name)]
     case 'rule':
-      if (agent === 'claude') return [entry.to]                                   // file or dir
+      if (agent === 'claude') return [entry.to]
       if (agent === 'cursor') return [isFileFrom(entry.from) ? join('.cursor/rules', name.replace(/\.md$/, '.mdc')) : join('.cursor/rules', name)]
-      if (agent === 'antigravity') return [join('.agents/rules', name)]           // its own frontmatter, its own home
-      return [join(AGENTS_RULE_DIR, name)]                                        // codex/opencode path-scoped copies
+      return []
     case 'agent':
-      if (agent === 'claude')   return [entry.to]                                 // .claude/agents
-      if (agent === 'opencode') return ['.opencode/agent']
-      return []                                                                   // cursor/antigravity/codex: skipped on add
+      if (agent === 'claude') return [entry.to]
+      return []
     default: return []
   }
 }
@@ -373,36 +354,6 @@ function purgeLegacyKit() {
   if (rest.length) console.log(`  • ${LEGACY_KIT_DIR}/ kept: ${rest.join(', ')} — not ours.`)
 }
 
-// Drop the index rows of removed profiles from the AGENTS.md managed block.
-// `remove` stages no source, so it cannot regenerate the block the way `add` does —
-// this is text surgery, and it is kept STRUCTURAL (a row is a bullet naming the rule
-// directory) rather than keyed on the row's prose, which has already changed once.
-function pruneAgentsRefs(removedRuleDirs) {
-  const file = 'AGENTS.md'
-  if (!existsSync(file) || !removedRuleDirs.length) return
-  const content = readFileSync(file, 'utf8')
-  const re = new RegExp(`${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}`)
-  const m = content.match(re); if (!m) return
-  const isRow = l => l.startsWith('- ') && l.includes(`${AGENTS_RULE_DIR}/`)
-  const lines = m[0].split('\n').filter(l => !(isRow(l) && removedRuleDirs.some(d => l.includes(`${d}/`))))
-
-  // A `### <module>` heading whose rows all went must go with them.
-  const kept = []
-  for (let i = 0; i < lines.length; i++) {
-    if (/^### /.test(lines[i])) {
-      let j = i + 1
-      while (j < lines.length && !/^#{2,3} /.test(lines[j]) && lines[j] !== AGENTS_END) j++
-      if (!lines.slice(i + 1, j).some(isRow)) { i = j - 1; continue }
-    }
-    kept.push(lines[i])
-  }
-  // Nothing left to point at: drop the whole index. It is always last in the block.
-  const head = kept.indexOf(AGENTS_INDEX_HEADING)
-  const out = head >= 0 && !kept.some(isRow) ? [...kept.slice(0, head), AGENTS_END] : kept
-  while (out.length > 1 && out[out.length - 2].trim() === '') out.splice(out.length - 2, 1)
-  writeFileSync(file, content.replace(re, out.join('\n')))
-  console.log('  ✓ AGENTS.md  (pruned index rows)')
-}
 function stripAgentsBlock() {
   const file = 'AGENTS.md'
   if (!existsSync(file)) return
@@ -410,13 +361,27 @@ function stripAgentsBlock() {
   const re = new RegExp(`\\n*${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}\\n*`)
   if (!re.test(content)) return
   writeFileSync(file, content.replace(re, '\n').trimStart())
-  console.log('  ✓ AGENTS.md  (managed block removed)')
+  console.log('  ✓ AGENTS.md  (retired managed block removed)')
+}
+
+// Codex / OpenCode / Antigravity left trees and an AGENTS.md block behind.
+// add/update purge them the way they purge the legacy kit: by name, so a file
+// the repo put next to them survives. Cursor skills stay in `.agents/skills/`.
+function purgeRetired() {
+  for (const dir of RETIRED_DIRS) {
+    if (!existsSync(dir)) continue
+    rmSync(dir, { recursive: true, force: true })
+    console.log(`  ✗ ${dir}  (retired agent target — run git status before committing)`)
+  }
+  stripAgentsBlock()
 }
 
 function remove(profilesArg) {
   const lock = readLock()
   if (!lock) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
-  const agents = lock.agents || ['claude']
+  const { kept, dropped } = agentsFromLock(lock)
+  if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
+  const agents = kept.length ? kept : ['claude']
   const full = profilesArg.length === 1 && profilesArg[0] === 'all'
   const targets = full ? lock.profiles.slice() : profilesArg
   const notInLock = targets.filter(p => !lock.profiles.includes(p))
@@ -425,25 +390,22 @@ function remove(profilesArg) {
   if (!toRemove.length) { console.error('Nothing to remove — none of those profiles are installed.'); process.exit(1) }
   const remaining = lock.profiles.filter(p => !toRemove.includes(p))
   const fullUninstall = full || remaining.length === 0
+  const levels = { ...(lock.levels || {}) }
+  for (const p of toRemove) delete levels[p]
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
   const entries = [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])]
-  const removedRuleDirs = []
   let removedKit = false
   for (const entry of entries) {
     if (entry.kind === 'kit') removedKit = true
     for (const agent of agents) {
-      if (entry.kind === 'rule' && (agent === 'codex' || agent === 'opencode')) removedRuleDirs.push(join(AGENTS_RULE_DIR, basename(entry.from)))
       for (const dest of destsFor(entry, agent)) {
         if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
       }
     }
   }
-  if (agents.includes('codex') || agents.includes('opencode')) {
-    if (fullUninstall) stripAgentsBlock()
-    else pruneAgentsRefs([...new Set(removedRuleDirs)])
-  }
   if (fullUninstall) {
+    purgeRetired()
     purgeLegacyKit()
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
@@ -453,7 +415,7 @@ function remove(profilesArg) {
     const modules = Object.fromEntries(Object.entries(lock.modules || {})
       .map(([dir, ps]) => [dir, ps.filter(p => remaining.includes(p))])
       .filter(([, ps]) => ps.length))
-    writeLock(lock.ref, remaining, agents, modules)
+    writeLock(lock.ref, remaining, agents, modules, levels)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
@@ -462,40 +424,50 @@ function remove(profilesArg) {
 
 // -------------------------------------------------------------------- install
 function readLock() { return existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, 'utf8')) : null }
-function writeLock(ref, profiles, agents, modules) {
+function writeLock(ref, profiles, agents, modules, levels) {
   const lock = { repo: registry.repo, ref, profiles, agents }
   // Absent rather than empty: a lock with no modules must stay byte-identical to
   // what earlier versions wrote, so an unscoped install never grows a field.
   if (modules && Object.keys(modules).length) lock.modules = modules
+  if (levels && Object.keys(levels).length) lock.levels = levels
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
+}
+
+function migrateLegacyLock(lock) {
+  if (!lock) return { profiles: [], levels: {}, migrated: false }
+  if (lock.levels) return { profiles: lock.profiles.slice(), levels: { ...lock.levels }, migrated: false }
+  const profiles = lock.profiles.includes('agent') ? lock.profiles.slice() : [...lock.profiles, 'agent']
+  if (!lock.profiles.includes('agent'))
+    console.log('agent is now a profile (was shared). Locked at --level gates to match the previous install; `remove agent` drops it.\n')
+  const levels = Object.fromEntries(profiles.map(p => [p, 'gates']))
+  return { profiles, levels, migrated: true }
 }
 
 const FINAL_MSG = {
   claude: 'Claude: .claude/rules/ auto-load (language rules path-scoped via `paths:`); .claude/agents/ + .claude/skills/ auto-discovered.',
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
-  antigravity: 'Antigravity: .agents/rules/*.md activate via globs/alwaysApply (same format as Cursor); skills in .agents/skills/. No file-based subagents.',
-  codex: `Codex: rules live in the AGENTS.md managed block (+ ${AGENTS_RULE_DIR}/ for path-scoped); skills in .agents/skills/. It merges AGENTS.md from the repo root down to your CWD (32 KiB cap), so run it from the module you are working in.`,
-  opencode: `opencode: rules in AGENTS.md (+ ${AGENTS_RULE_DIR}/); agents in .opencode/agent/; skills in .opencode/skills/. It takes the FIRST AGENTS.md walking up from the CWD — do not add a nested one, it would replace the root rather than extend them.`,
 }
 
-async function install(profiles, ref, agents, modules) {
+async function install(profiles, ref, agents, modules, levels) {
   const unknown = profiles.filter(p => !registry.profiles[p])
   if (unknown.length) {
-    console.error(`Unknown profile(s): ${unknown.join(', ')}. Available: ${Object.keys(registry.profiles).join(', ')}`)
+    const aliasNames = Object.keys(registry.aliases || {})
+    console.error(`Unknown profile(s): ${unknown.join(', ')}. Available: ${Object.keys(registry.profiles).join(', ')}${aliasNames.length ? ` (aliases: ${aliasNames.join(', ')})` : ''}`)
     process.exit(1)
   }
   // Carry the profile each entry came from: it is what maps an entry to the
   // module(s) that asked for it, and therefore to its glob prefixes.
   const owned = [
     ...registry.shared.map(e => ({ e, profile: null })),
-    ...profiles.flatMap(p => registry.profiles[p].map(e => ({ e, profile: p }))),
+    ...profiles.flatMap(p => entriesAt(p, levels[p] || 'rules').map(e => ({ e, profile: p }))),
   ]
   const scopes = Object.entries(modules || {}).map(([d, ps]) => `${d} → ${ps.join(', ')}`)
-  console.log(`Installing [${profiles.join(', ')}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
-  if (scopes.length) console.log(`Modules: ${scopes.join(' · ')}`)
+  const lv = profiles.map(p => `${p}@${levels[p] || 'rules'}`).join(', ')
+  console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
+  if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { inline: [], refs: [], seen: new Set(), kit: new Set(), scope: { prefixes: [], langProfiles } }
+  const ctx = { kit: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
   for (const { e: entry, profile } of owned) {
     const s = await makeStaged(ref, entry)
@@ -508,9 +480,9 @@ async function install(profiles, ref, agents, modules) {
     }
     if (s.temp) rmSync(s.dir, { recursive: true, force: true })
   }
-  flushAgentsMd(ctx)
+  purgeRetired()
   purgeLegacyKit()
-  writeLock(ref, profiles, agents, modules)
+  writeLock(ref, profiles, agents, modules, levels)
   console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
@@ -521,7 +493,15 @@ async function install(profiles, ref, agents, modules) {
 }
 
 // ----------------------------------------------------------------------- init
-const GLOB = { rust: '**/*.rs', ts: '**/*.{ts,tsx}', go: '**/*.go', python: '**/*.py' }
+const GLOB = {
+  rust: '**/*.rs',
+  ts: '**/*.{ts,tsx}',
+  'ts-web': '**/*.{ts,tsx}',
+  'ts-node': '**/*.{ts,tsx}',
+  'ts-tauri': '**/*.{ts,tsx}',
+  go: '**/*.go',
+  python: '**/*.py',
+}
 // The git floor — the only layer of the gate portable across every
 // agent. It ships with the generated lefthook.yml rather than waiting for a manual
 // merge of common/lefthook.snippet.yml, because a floor nobody wired is not a floor.
@@ -545,7 +525,15 @@ function genLefthook(techs) {
 // tech simply points at the repo root, exactly as the snippet ships it.
 const JUST_START = '# claude-rules:start (managed — derived from .claude-rules.lock)'
 const JUST_END = '# claude-rules:end'
-const DIR_VAR = { rust: 'rust_dir', ts: 'ts_dir', go: 'go_dir', python: 'python_dir' }
+const DIR_VAR = {
+  rust: 'rust_dir',
+  ts: 'ts_dir',
+  'ts-web': 'ts_web_dir',
+  'ts-node': 'ts_node_dir',
+  'ts-tauri': 'ts_tauri_dir',
+  go: 'go_dir',
+  python: 'python_dir',
+}
 function genDirsBlock(modules, only = null) {
   const notes = []
   const lines = Object.entries(DIR_VAR).filter(([p]) => !only || only.includes(p)).map(([profile, name]) => {
@@ -609,11 +597,20 @@ function kitImports() {
   const rank = p => (p.includes('/common/') ? 0 : 1)
   return found.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
-const MUTATOR = { rust: 'rust-mutate', ts: 'ts-mutate', go: 'go-cover', python: 'python-mutate' }
-function genJustfile(techs, modules) {
+const MUTATOR = {
+  rust: 'rust-mutate',
+  ts: 'ts-mutate',
+  'ts-web': 'ts-web-mutate',
+  'ts-node': 'ts-node-mutate',
+  'ts-tauri': 'ts-tauri-mutate',
+  go: 'go-cover',
+  python: 'python-mutate',
+}
+function genJustfile(techs, modules, ratchetTechs = []) {
   const imports = kitImports()
   const deps = techs.map(checkDep).join(' ')
   const mutators = techs.map(t => MUTATOR[t]).filter(Boolean)
+  const liveMutators = ratchetTechs.map(t => MUTATOR[t]).filter(Boolean)
   const out = [
     '# The gate, composed. Written once by `claude-rules init` — yours from here on.',
     '#',
@@ -650,7 +647,12 @@ function genJustfile(techs, modules) {
   ]
   // Only when there is a mutation recipe to name. A hint pointing at a recipe no import
   // provides (`rust-mutate` in a repo with no Rust) is worse than no hint at all.
-  if (mutators.length) out.push('',
+  if (liveMutators.length) out.push('',
+    '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
+    '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
+    '# This line is live because a locked tech is at --level ratchet.',
+    `mutate-diff: ${liveMutators.join(' ')}`)
+  else if (mutators.length) out.push('',
     '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
     '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
     '# Run it when a coherent block is finished, BEFORE pushing. Uncomment once the tool',
@@ -709,10 +711,9 @@ function reportCheckDrift(file, techs) {
 // part only this repo knows: what each module is, and where its documents are.
 // Claude reads CLAUDE.md and never AGENTS.md — not as a fallback, not in addition
 // (code.claude.com/docs/en/memory, "AGENTS.md"; re-verified 2026-08). So without this
-// file a Claude-first repo starts every session with no map at all. The doc offers an
-// `@AGENTS.md` import as the bridge; deliberately NOT what init writes — here AGENTS.md
-// holds Codex/opencode's copy of rules Claude already auto-loads from .claude/rules/,
-// so importing it would pay for the same conventions twice.
+// file a Claude-first repo starts every session with no map at all. Do not bridge
+// that with an `@AGENTS.md` import: Cursor already has `.cursor/rules/`, and a
+// leftover Codex block in AGENTS.md would pay for the same conventions twice.
 function genClaudeMd(lock) {
   const name = basename(process.cwd())
   const mods = Object.entries(lock.modules || {})
@@ -729,12 +730,15 @@ function genClaudeMd(lock) {
     }
   } else {
     out.push('<!-- One line per module: what it is, and what it is for. Declare them to the',
-      '     installer too (`add <profile...> --module <dir>`) so its rules stop loading',
+      '     installer too (`add <profile...> --root <dir>`) so its rules stop loading',
       '     everywhere your language happens to appear. -->')
   }
+  const autonomy = (lock.profiles || []).includes('agent')
+    ? ' (`.claude/rules/agent/autonomy.md`).'
+    : '.'
   out.push('', '## The gate', '',
     'Run `just check` and read the exit code before handing back — a green gate is',
-    'the authority, never your own say-so (`.claude/rules/agent/autonomy.md`).', '')
+    `the authority, never your own say-so${autonomy}`, '')
   const docs = ['docs/PRD.md', 'docs/ARCHITECTURE.md', 'docs/PLAN.md', 'docs/adr'].filter(existsSync)
   if (docs.length) out.push('## Documents', '', ...docs.map(d => `- \`${d}\``), '')
   return out.join('\n')
@@ -743,7 +747,9 @@ function genClaudeMd(lock) {
 function initRepo() {
   const lock = readLock()
   if (!lock) { console.error(`No ${LOCK} — run "add <profile...>" first.`); process.exit(1) }
-  const techs = lock.profiles.filter(p => GLOB[p])
+  const levels = lock.levels || Object.fromEntries((lock.profiles || []).map(p => [p, 'gates']))
+  const techs = lock.profiles.filter(p => GLOB[p] && levelRank(levels[p] || 'rules') >= levelRank('gates'))
+  const ratchetTechs = lock.profiles.filter(p => MUTATOR[p] && (levels[p] || 'rules') === 'ratchet')
   const kitBase = KIT_DIR
   const justfile = ['justfile', 'Justfile'].find(existsSync)
   if (justfile) {
@@ -751,7 +757,7 @@ function initRepo() {
     reportImportDrift(justfile)
     reportCheckDrift(justfile, techs)
   } else if (existsSync(kitBase)) {
-    writeFileSync('justfile', genJustfile(techs, lock.modules))
+    writeFileSync('justfile', genJustfile(techs, lock.modules, ratchetTechs))
     const n = kitImports().length
     console.log(`✓ created justfile — imports ${n} kit librar${n === 1 ? 'y' : 'ies'}${techs.length ? `, \`check\` runs: ${techs.map(checkDep).join(' ')}` : ''}.`)
     for (const note of genDirsBlock(lock.modules, techs).notes) console.log(`  • ${note}`)
@@ -775,7 +781,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\`/\`dup-check\` in the justfile \`check\` recipe (the locked techs are already wired) and uncomment \`mutate-diff\` once the mutation tools are installed. The gate SCRIPTS need no move any more — the recipes call them in ${KIT_DIR}/common/ directly, so an update refreshes gate and implementation together; \`just code-review\` still needs \`review_cmd\` set to this repo's agent CLI, \`.work/\` gitignored, and its pre-push trigger merged from common/lefthook.snippet.yml. Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the opencode/cursor/codex snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
+  console.log(`\nStill manual (repo-specific): move rustfmt.toml+deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\`/\`dup-check\` in the justfile \`check\` recipe (the locked techs are already wired) and uncomment \`mutate-diff\` once the mutation tools are installed. The gate SCRIPTS need no move any more — the recipes call them in ${KIT_DIR}/common/ directly, so an update refreshes gate and implementation together; \`just code-review\` still needs \`review_cmd\` set to this repo's agent CLI, \`.work/\` gitignored, and its pre-push trigger merged from common/lefthook.snippet.yml. Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the cursor snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
 }
 
 // --------------------------------------------------------------------- doctor
@@ -813,7 +819,7 @@ function globToRe(glob) {
 // `.dev/kit/portal-http/openapi-ts.config.ts` must not make a `**/*.ts`
 // rule look alive in a repo that has no TypeScript.
 const SCAN_SKIP = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'vendor', 'coverage', '.next',
-  '.claude', '.agents', '.cursor', '.opencode', '.dev'])
+  '.claude', '.agents', '.cursor', '.dev'])
 function repoFiles() {
   const git = spawnSync('git', ['ls-files', '-co', '--exclude-standard'], { encoding: 'utf8' })
   const fromGit = !git.error && git.status === 0 ? git.stdout.split('\n').filter(Boolean) : null
@@ -831,16 +837,12 @@ function repoFiles() {
   return out
 }
 
-// Emitted rules, read back from whichever tree exists — in the order that answers
-// the most. `.dev/rules/` holds ONLY the path-scoped ones (codex/opencode inline
-// the rest into AGENTS.md), so it can answer "does this glob match anything" but
-// never "what is always on"; that is what `complete` says.
+// Emitted rules, read back from whichever tree exists — Claude first (complete,
+// including always-on), then Cursor.
 function installedRules() {
   for (const [root, key, complete] of [
     ['.claude/rules', 'paths', true],
     ['.cursor/rules', 'globs', true],
-    ['.agents/rules', 'globs', true],       // Antigravity — same format as Cursor
-    [AGENTS_RULE_DIR, 'paths', false],      // codex/opencode — path-scoped only
   ]) {
     if (!existsSync(root)) continue
     const files = walk(root).filter(f => /\.mdc?$/.test(f.rel))
@@ -919,10 +921,9 @@ function gitHooksDir() {
   return m ? m[1].trim() : join('.git', 'hooks')
 }
 
-// Every string in a JSON tree, keys included — opencode expresses its rules AS keys
-// (`"* --no-verify*": "deny"`), so a values-only walk would miss the whole config.
-// `_`-prefixed keys are skipped: the shipped snippets carry their wiring notes in
-// `_comment`, and prose that NAMES a guard is not prose that WIRES one.
+// Every string in a JSON tree, keys included. `_`-prefixed keys are skipped: the
+// shipped snippets carry their wiring notes in `_comment`, and prose that NAMES
+// a guard is not prose that WIRES one.
 const jsonStrings = v => typeof v === 'string' ? [v]
   : Array.isArray(v) ? v.flatMap(jsonStrings)
   : v && typeof v === 'object'
@@ -930,16 +931,11 @@ const jsonStrings = v => typeof v === 'string' ? [v]
     : []
 
 // Per host: where its config lives, how to tell the guards are wired, and which
-// snippet to name when they are not. Codex has no hooks (a sandbox is a different
-// promise) and Antigravity has no mechanism at all — both are reported, not audited.
-// `runs` separates the two mechanisms: Claude Code and Cursor EXECUTE a guard, so a
-// path that is not there is a fact worth failing on. opencode only DECLARES patterns
-// — the paths in its `edit` map are files to protect, never scripts to run, and
-// checking them for existence would fail an install that is perfectly correct.
+// snippet to name when they are not. Both remaining targets EXECUTE a guard, so a
+// path that is not there is a fact worth failing on.
 const HARNESS = {
-  claude:   { files: ['.claude/settings.json', '.claude/settings.local.json'], snippet: 'settings.snippet.json',     wired: s => /-guard\.mjs/.test(s), runs: true },
-  cursor:   { files: ['.cursor/hooks.json'],                                   snippet: 'cursor-hooks.snippet.json', wired: s => /-guard\.mjs/.test(s), runs: true },
-  opencode: { files: ['opencode.json', 'opencode.jsonc'],                      snippet: 'opencode.snippet.json',     wired: s => /--no-verify/.test(s), runs: false },
+  claude: { files: ['.claude/settings.json', '.claude/settings.local.json'], snippet: 'settings.snippet.json',     wired: s => /-guard\.mjs/.test(s), runs: true },
+  cursor: { files: ['.cursor/hooks.json'],                                   snippet: 'cursor-hooks.snippet.json', wired: s => /-guard\.mjs/.test(s), runs: true },
 }
 
 // A justfile that redefines what the library already provides is the drift the import
@@ -983,16 +979,12 @@ function auditGateLayer(agents, bad, warn) {
   }
 
   // --- the harness layer. One kit dir for every agent, but the WIRING is per host:
-  // the same guards are referenced from .claude/settings.json, opencode.json or
-  // .cursor/hooks.json, and each has to be checked where that host reads it.
+  // the same guards are referenced from .claude/settings.json or .cursor/hooks.json,
+  // and each has to be checked where that host reads it.
   for (const agent of agents) {
     const shipped = existsSync(join(KIT_DIR, 'common', 'hooks'))
     const host = HARNESS[agent]
-    if (!host) {
-      if (agent === 'codex') console.log('  • codex has no hooks — .codex/config.toml (sandbox_mode + approval_policy) is the nearest thing, and it loads for TRUSTED projects only.')
-      if (agent === 'antigravity') console.log('  • antigravity has no hook mechanism — it runs on the git floor alone.')
-      continue
-    }
+    if (!host) continue
     const present = host.files.filter(existsSync)
     const texts = []
     for (const f of present) {
@@ -1027,17 +1019,17 @@ function auditGateLayer(agents, bad, warn) {
 function doctor() {
   const lock = readLock()
   if (!lock) { console.error(`No ${LOCK} — nothing to audit. Run "add <profile...>" first.`); process.exit(1) }
-  const agents = lock.agents || ['claude']
+  const { kept, dropped } = agentsFromLock(lock)
+  const agents = kept.length ? kept : ['claude']
   const bad = [], warn = []
   console.log(`claude-rules doctor — ${process.cwd()}\n`)
 
   // ---- 1. the lock itself
   console.log('Install')
   const unknownP = lock.profiles.filter(p => !registry.profiles[p])
-  const unknownA = agents.filter(a => !KNOWN_AGENTS.includes(a))
   for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
-  for (const a of unknownA) bad.push(`lock references unknown agent "${a}"`)
-  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${agents.join(', ')}] @ ${lock.ref}`)
+  for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
+  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}`)
   // A module path that does not exist anchors every one of its globs to nothing —
   // the rules are emitted, look installed, and can never match a file.
   for (const [dir, ps] of Object.entries(lock.modules || {})) {
@@ -1047,18 +1039,19 @@ function doctor() {
   }
 
   // ---- 2. what the lock promises vs what is on disk
-  // Asymmetry, on purpose: for codex/opencode a rule destination is created only
-  // when the profile HAS a path-scoped rule (rules/agent/ has none), and doctor
-  // stages nothing, so it cannot tell a legitimate absence from a broken one.
-  // It proves presence-that-should-not-be, never absence-that-should-be.
   const expected = new Map()
-  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, registry.profiles[p] || []])]
+  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
-      for (const d of destsFor(e, a)) expected.set(d, { profile, agent: a, inferable: !(e.kind === 'rule' && (a === 'codex' || a === 'opencode')) })
+      for (const d of destsFor(e, a)) expected.set(d, { profile, agent: a })
 
   for (const [dest, meta] of expected)
-    if (meta.inferable && !existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
+    if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
+
+  for (const dir of RETIRED_DIRS)
+    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (Codex / OpenCode / Antigravity). Run \`update\` to purge it.`)
+  if (existsSync('AGENTS.md') && new RegExp(reEsc(AGENTS_START)).test(readFileSync('AGENTS.md', 'utf8')))
+    bad.push('AGENTS.md still has a claude-rules managed block (Codex / OpenCode leftover). Run `update` to strip it.')
 
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
@@ -1101,19 +1094,7 @@ function doctor() {
       console.log(`  skills      ${String(skills.length).padStart(3)} found  ${kb(total).padStart(9)}  (${tok(total)}, descriptions only)`)
     }
     if (!existsSync('CLAUDE.md') && !existsSync(join('.claude', 'CLAUDE.md')))
-      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md (no fallback), so it starts every session with no project map. Run `init` for a skeleton; do not bridge it with an `@AGENTS.md` import — that block is the Codex/opencode copy of rules .claude/rules/ already auto-loads.')
-  }
-  if (agents.includes('codex') || agents.includes('opencode')) {
-    const block = existsSync('AGENTS.md')
-      ? (readFileSync('AGENTS.md', 'utf8').match(new RegExp(`${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}`)) || [''])[0]
-      : ''
-    if (!block) bad.push('codex/opencode are locked but AGENTS.md has no managed block (run `update`)')
-    else {
-      const CODEX_CAP = 32 * 1024                                        // Codex `project_doc_max_bytes`
-      const pct = Math.round(block.length / CODEX_CAP * 100)
-      console.log(`  AGENTS.md   block      ${kb(block.length).padStart(9)}  (${tok(block.length)}, ${pct}% of Codex's 32 KiB cap)`)
-      if (pct >= 40) warn.push(`the AGENTS.md managed block eats ${pct}% of Codex's 32 KiB instruction cap before any repo content`)
-    }
+      warn.push('claude is locked but the repo has no CLAUDE.md — Claude reads CLAUDE.md, never AGENTS.md (no fallback), so it starts every session with no project map. Run `init` for a skeleton.')
   }
 
   // ---- 5. the gate layer: wired, or wired to nothing?
@@ -1138,38 +1119,53 @@ function doctor() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor,antigravity,codex,opencode] [--module <dir>] [--ref <ref>]'); process.exit(1) }
+      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
       // `add` EXTENDS the install; it never redefines it. Writing only the new
       // profiles would leave the previous ones on disk but out of the lock —
       // invisible to `update`, and orphaned by `remove all`, which then deletes
       // the lock and leaves no way to find them.
+      const requested = unpackNames(positional)
+      const wantLevel = parseLevel()
       const lock = readLock()
-      const profiles = [...new Set([...(lock ? lock.profiles : []), ...positional])]
+      const migrated = migrateLegacyLock(lock)
+      const profiles = [...new Set([...migrated.profiles, ...requested])]
       // Same rule for agents: no --agent on an existing install keeps its set
-      // (never silently widen to all four); an explicit --agent adds a target.
-      const locked = lock && lock.agents ? lock.agents : []
+      // (never silently widen to both); an explicit --agent adds a target.
+      // Retired names in an old lock are dropped, not re-emitted.
+      const { kept: locked, dropped } = agentsFromLock(lock)
+      if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
       const agents = [...new Set([...locked, ...parseAgents(locked.join(','))])]
-      // --module anchors the profiles named in THIS invocation to a directory.
-      // Like the rest of `add` it extends: a profile keeps the modules it already
+      const levels = { ...migrated.levels }
+      for (const p of profiles) {
+        if (requested.includes(p) && wantLevel) levels[p] = maxLevel(levels[p] || 'rules', wantLevel)
+        else if (!levels[p]) levels[p] = 'rules'
+      }
+      // --root (alias --module) anchors the profiles named in THIS invocation.
+      // Like the rest of `add` it extends: a profile keeps the roots it already
       // had, and re-running with a second path adds it rather than moving it.
       const modules = { ...(lock && lock.modules ? lock.modules : {}) }
-      if (moduleFlag) {
-        const dir = moduleFlag.replace(/\/+$/, '')
-        modules[dir] = [...new Set([...(modules[dir] || []), ...positional])]
+      if (scopeFlag) {
+        const dir = scopeFlag.replace(/\/+$/, '')
+        modules[dir] = [...new Set([...(modules[dir] || []), ...requested])]
       }
+      const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.values(modules).some(ps => ps.includes(p)))
+      if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
       if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-      await install(profiles, refFlag || registry.defaultRef, agents, modules)
+      await install(profiles, refFlag || registry.defaultRef, agents, modules, levels)
       break
     }
     case 'update': {
       const lock = readLock()
       if (!lock) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
-      await install(lock.profiles, refFlag || registry.defaultRef, parseAgents((lock.agents && lock.agents.join(',')) || 'claude'), lock.modules)
+      const { kept, dropped } = agentsFromLock(lock)
+      if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
+      const migrated = migrateLegacyLock(lock)
+      await install(migrated.profiles, refFlag || registry.defaultRef, parseAgents(kept.join(',') || 'claude'), lock.modules, migrated.levels)
       break
     }
     case 'remove': {
       if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
-      remove(positional)
+      remove(positional[0] === 'all' ? positional : unpackNames(positional))
       break
     }
     case 'init': initRepo(); break
@@ -1179,15 +1175,21 @@ async function main() {
       const lock = readLock()
       console.log('Available profiles:')
       for (const [name, entries] of Object.entries(registry.profiles)) console.log(`  ${name}  (${entries.map(e => e.from).join(', ')})`)
-      console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (default: all; narrow with --agent)`)
-      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}` : '\nInstalled: none')
+      if (registry.aliases) {
+        console.log('\nAliases (unpack on add/remove):')
+        for (const [name, ps] of Object.entries(registry.aliases)) console.log(`  ${name}  → ${ps.join(' ')}`)
+      }
+      console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (default: both; narrow with --agent)`)
+      console.log(`Levels: ${LEVELS.join(' | ')} (default on add: rules; never ratchet)`)
+      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
       break
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,cursor,antigravity,codex,opencode] [--module <dir>] [--ref <ref>]\n'
-        + '                                   install/pin profiles (default: all agents, repo-wide)\n'
-        + '                                   --module anchors those profiles\' globs to a directory (monorepo)\n'
+        + '  add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
+        + '                                   install/pin profiles (default: both agents, --level rules)\n'
+        + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
+        + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'

@@ -1,10 +1,16 @@
 name: CI
 
-# The factory's own gate. Two suites, both dependency-free (node:test only, no
-# install step — giget is imported lazily and the tests run the installer with
-# --local):
-#   test/registry.test.mjs  — static consistency of the asset tree
-#   test/cli.test.mjs       — black-box install/remove/update, per target agent
+# The factory's own gate. One command per job:
+#   test          — installer + asset-tree (node:test, no language toolchain)
+#   rust-gates    — rust jalon: just rust-lint / rust-check (test/fixtures/rust-gate)
+#   python-gates  — python jalon: just python-lint / python-check (test/fixtures/python-gate)
+#   go-gates      — go jalon: just go-lint / go-check (test/fixtures/go-gate)
+#   ts-gates      — ts jalon + derivatives (test/fixtures/ts-gate)
+#   godot-gates   — godot jalon: just godot-lint / godot-check (test/fixtures/godot-gate)
+#
+# Language jobs are separate so a red toolchain names itself. Local `npm test`
+# skips those files when the toolchain is missing; each job sets RUST_GATES=1,
+# PYTHON_GATES=1, GO_GATES=1, TS_GATES=1 or GODOT_GATES=1 so a missing tool is a failure, never a skip-as-pass.
 #
 # The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
 # CLI and spends real tokens. It is a model-bump check, run on demand — see the
@@ -26,6 +32,22 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: '1.42.4'
+  CARGO_DENY_VERSION: '0.20.2'
+  CARGO_DENY_SHA256: '9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f'
+  CARGO_MACHETE_VERSION: '0.9.2'
+  CARGO_MACHETE_SHA256: '48200087f54c55aabcd4db4af1e25742b49846c02a1b1bfa134711945b35b2e9'
+  GOLANGCI_LINT_VERSION: '2.13.1'
+  GOLANGCI_LINT_SHA256: 'b17bfbc9d4aaa48be7f4f1ce3240bc3d8200c870c072bacf15c26219e2cfb9cc'
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -40,11 +62,160 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm test
 
+  rust-gates:
+    runs-on: ubuntu-latest
+    env:
+      RUST_GATES: '1'
+      CARGO_TERM_COLOR: always
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      # The factory is not a Cargo workspace. Cache the witness crate, or
+      # rust-cache runs `cargo metadata` at the repo root and exits 101.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: test/fixtures/rust-gate
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install cargo-deny and cargo-machete
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          deny_tar="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$deny_tar" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${deny_tar}"
+          echo "${CARGO_DENY_SHA256}  ${deny_tar}" | sha256sum --check --strict
+          tar -xzf "$deny_tar" --strip-components=1 -C "$HOME/.local/bin" \
+            "cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl/cargo-deny"
+          machete_tar="cargo-machete-v${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$machete_tar" \
+            "https://github.com/bnjbvr/cargo-machete/releases/download/v${CARGO_MACHETE_VERSION}/${machete_tar}"
+          echo "${CARGO_MACHETE_SHA256}  ${machete_tar}" | sha256sum --check --strict
+          tar -xzf "$machete_tar" --strip-components=1 -C "$HOME/.local/bin" \
+            "cargo-machete-v${CARGO_MACHETE_VERSION}-x86_64-unknown-linux-musl/cargo-machete"
+          chmod +x "$HOME/.local/bin/cargo-deny" "$HOME/.local/bin/cargo-machete"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # kit/rust has deny.toml but no Cargo.toml; fetch against the witness.
+      - name: Fetch the advisory database
+        working-directory: test/fixtures/rust-gate
+        run: cargo deny --config ../../../kit/rust/deny.toml fetch
+      - name: just rust-lint / rust-check (witness crate)
+        run: node --test test/rust-gates.test.mjs
+
+  python-gates:
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.9.26'
+          python-version: '3.12'
+          # Tests copy the witness into /tmp and set UV_CACHE_DIR there. A
+          # GHA cache of the repo root has nothing to save (no uv.lock here)
+          # and the action fails when the cache path is missing.
+          enable-cache: false
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: just python-lint / python-check (witness package)
+        run: node --test test/python-gates.test.mjs
+
+  go-gates:
+    runs-on: ubuntu-latest
+    env:
+      GO_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: test/fixtures/go-gate/go.mod
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install golangci-lint and govulncheck
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          tar="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tar" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${tar}"
+          echo "${GOLANGCI_LINT_SHA256}  ${tar}" | sha256sum --check --strict
+          tar -xzf "$tar" --strip-components=1 -C "$HOME/.local/bin" \
+            "golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64/golangci-lint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: just go-lint / go-check (witness module)
+        run: node --test test/go-gates.test.mjs
+
+  ts-gates:
+    runs-on: ubuntu-latest
+    env:
+      TS_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: test/fixtures/ts-gate/package-lock.json
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install the witness lock
+        working-directory: test/fixtures/ts-gate
+        run: npm ci --ignore-scripts
+      - name: just ts-check / ts-web-check / ts-node-check / ts-tauri-check
+        run: node --test test/ts-gates.test.mjs
+
+  godot-gates:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: just godot-lint / godot-check (witness project)
+        run: node --test test/godot-gates.test.mjs
+
   # The single required check (rules/cicd/pipeline.md): protecting the matrix job
   # directly means a renamed or skipped leg silently counts as green.
   ci-ok:
     if: always()
-    needs: [test]
+    needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates]
     runs-on: ubuntu-latest
     steps:
       - name: Every gate must have actually succeeded

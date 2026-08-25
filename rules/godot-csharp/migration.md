@@ -5,26 +5,19 @@ paths:
 title: "GDScript → C# Migration"
 ---
 
-This project is C#. Existing `.gd` files are **legacy pre-migration** — tolerated
-but frozen.
+`check-no-new-gd.sh` (`just godot-lint`) fails a tracked `.gd` that is
+not on `.godot-gd-allowlist`. The allowlist only ever shrinks. Existing
+`.gd` files are legacy pre-migration — tolerated but frozen. New code
+is C#.
 
-## The rule: no new `.gd`
+The allowlist is also the map of where strict gates are suspended:
+GODOT001 / GODOT002 apply to C# only. Inside legacy `.gd` they do not —
+do not retrofit code that is on its way out.
 
-- Never create a `.gd` file. New code is C#.
-- Existing `.gd` files live on a shrinking allowlist (`.godot-gd-allowlist`). The
-  allowlist only ever loses entries.
-- The allowlist is also the map of where strict gates are suspended: "no hardcoded
-  values" and "typed signals" apply to C# only. Inside legacy `.gd` they do not —
-  do not retrofit code that is on its way out.
+What the script cannot see:
 
-## Migrate producer and consumers together
-
-The event bus is the first migration target — it is the seam where typing pays off
-most. When you convert an event, convert its consumers in the same change (see
-`event-bus.md`). Half-migrated, a typed signal is still dynamic on the `.gd` side,
-so you gain nothing until the last consumer is C#.
-
-## C# ↔ GDScript interop during transition
-
-The boundary is untyped by nature. Keep it thin, keep it one-directional where you
+The event bus is the first migration target. When you convert an event,
+convert its consumers in the same change (`event-bus.md`). Half-migrated,
+a typed signal is still dynamic on the `.gd` side. The C# ↔ GDScript
+boundary is untyped by nature — keep it thin, one-directional where you
 can, and shrink it every time you touch adjacent code.

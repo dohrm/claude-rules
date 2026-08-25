@@ -7,6 +7,10 @@ title: "Tauri App Architecture"
 
 Applicable to Tauri v2 apps using Preact/React + TypeScript.
 
+`just ts-tauri-check` is the React overlay (hooks + jsx-a11y + DOM). It
+does not see `invoke` / `listen` wrappers or Zustand stores. The Rust
+host is `just rust-check`.
+
 The layers come from `portal-flat/principle.md`; this rule is its **transport**, the
 desktop counterpart of `portal-http/react.md`. Install `portal-flat` and `tauri`,
 never `portal-http` — the two transports contradict each other by design.
@@ -135,19 +139,9 @@ onAssistantStream(({ content, phase }) => {
 })
 ```
 
-## Dependency Flow
-
-```
-pages/ → features/ → ui/
-pages/ → layouts/
-features/ → core/tauri/   (commands + events)
-features/ → core/config/
-ui/ → (nothing)
-core/ → (nothing — no feature imports)
-```
-
-Features consume `core/tauri/commands` for request/response and subscribe to events
-via `core/tauri/events`. Features never import `@tauri-apps/api` directly.
+Dependency arrows match `portal-flat/principle.md`; features reach the backend
+through `core/tauri/` (commands + events), not `core/http/`. Features never
+import `@tauri-apps/api` directly.
 
 ## Store Hygiene
 

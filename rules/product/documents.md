@@ -24,17 +24,25 @@ The split is a mechanical migration when the threshold arrives, not a decision t
 agonise over.
 
 The numbers here are **defaults, not law**. A repo whose document legitimately needs
-a different budget declares it once in `.docs-budgets.json` at its root — see
-[The gate](#the-gate). Read that file before writing: where it exists, it wins over
-this table.
+a different budget declares it once in `.docs-budgets.json` at its root. Read that
+file before writing: where it exists, it wins over this table.
+
+```bash
+just docs-check     # index ↔ units (fail); budgets warn unless --strict
+```
+
+`docs/adr/` is `just adr-check`. Wiring: `.dev/kit/common/README.md`. The installer
+never writes `.docs-budgets.json`. The gate does not see a fact living in two
+documents, a shipped unit rewritten to match the code, or an index that answers
+the wrong three questions.
 
 ## The unit
 
 - **One unit, one thing** — one decision, one phase, one capability. If it needs
   the word "and" in its title, it is two.
 - **Budgeted.** A phase or a capability is ~400–500 words; an ADR is ~400 (600
-  ceiling — `agent/decisions.md`). Over budget means it is two units, or it holds a
-  description that belongs elsewhere (below).
+  ceiling — `agent/decision-records.md`). Over budget means it is two units, or it
+  holds a description that belongs elsewhere (below).
 - **Carries its own status** on the first lines: `Planned` / `In progress` /
   `Shipped <date>` for a phase, the ADR statuses for a decision.
 - **Frozen once shipped.** A shipped phase is a record of what was promised, not a
@@ -47,7 +55,8 @@ this table.
 The index is the **compaction**, not a table of contents. It must be readable on
 its own and answer exactly three questions: **where are we, what is next, what is
 out**. One line per unit, and a hard budget of one screen — `indexCeiling`, which a
-repo may set per document when its index genuinely needs more (see [The gate](#the-gate)).
+repo may set per document when its index genuinely needs more
+(`.docs-budgets.json`).
 
 - It carries only what is needed to navigate and to know status. **Never a fact
   that would have to be updated when a unit changes** — that fact has one home, and
@@ -84,43 +93,3 @@ one that goes stale.
   later one. Say which unit supersedes it.
 - **The reader decides the size, not the writer.** A document nobody finishes is a
   document nobody acted on, and unread scope is the same as unwritten scope.
-
-## The gate
-
-`kit/common/docs-check.mjs`, wired as `just docs-check`, **fails** when an index and
-its units disagree — a link to a unit that does not exist, or a unit no index links
-to (invisible: nobody will read it). Those are facts. It **warns** on the budgets —
-an index past one screen, a unit past its ceiling, a single-file PRD/PLAN past the
-split threshold, a `(continued)` heading — because "too long" is a judgment a human
-makes, and a gate that fakes one is worse than no gate. `--strict` turns the
-warnings into failures. `docs/adr/` is checked by `adr-check` instead, which knows
-the same budgets plus the status guard.
-
-**The budgets are per-repo.** A number that is right for most projects is wrong for
-some — a PRD index carrying fourteen capabilities does not compact into one screen,
-however well it is written. Both gates read `.docs-budgets.json` at the repo root,
-where a document may raise any of `indexCeiling`, `unitCeiling`, `splitLines`,
-`splitAt` (and `adr.unitCeiling`), or set one to `null` for no ceiling at all:
-
-```json
-{
-  "$why": "14 capabilities — the spine plus the table does not fit 500 words",
-  "prd": { "indexCeiling": 1500 }
-}
-```
-
-That file is **yours**: the installer never writes it, so `claude-rules update`
-cannot reset a threshold this repo argued for — unlike editing the gate script,
-which the next update overwrites. Say *why* in the file (`$why`), because a moved
-budget is a claim about this project, and the gate prints the override on every run
-so it never becomes an invisible default. Numbers only: the shape — units plus a
-compacted index — is not a setting.
-
-## Checklist
-
-- [ ] Every unit is one thing, within budget, with a status line
-- [ ] Shipped/accepted units are frozen, not rewritten
-- [ ] The index fits one screen and answers where-are-we / what-next / what-is-out
-- [ ] Nothing in the index would need editing when a unit changes
-- [ ] No fact lives in two documents
-- [ ] Growth arrived as a new file, not as a longer section

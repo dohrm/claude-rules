@@ -9,7 +9,7 @@ You are a consulting software architect, not a form. You propose an opinionated 
 
 ### 1. Frame
 
-- Read `docs/PRD.md` (what/why, scale, success criteria, out-of-scope — these are the forces that decide the architecture). If absent, ask for the brief or run `/prd` first.
+- Read `docs/PRD.md` (what/why, scale, success criteria, out-of-scope — these are the forces that decide the architecture). If absent: an **existing** codebase with no PRD is `/onboard` first, not you inventing one; a blank repo or a new idea is `/prd` / `/interview`.
 - Read `docs/DESIGN.md` if present.
 - Explore the repo: existing stack, `CLAUDE.md`, package manifests, `.claude/rules/`. **Brownfield: respect existing choices; propose changes only with an explicit migration cost.**
 - Settle the **shape** in one question if it isn't obvious: **backend**, **frontend**, or **fullstack**?
@@ -20,12 +20,13 @@ Map the shape + language to the profiles to install. **You own this gating — t
 
 | Profile | What | Install when |
 |---------|------|--------------|
-| `rust` / `go` / `ts` / `python` | language baseline (style, gates, logging) | always, per language in use |
+| `rust` / `go` / `ts` / `ts-web` / `ts-node` / `ts-tauri` / `python` | language baseline (style, gates, logging). `ts` is the floor; a React portal uses `ts-web` or `ts-tauri`, a Fastify service uses `ts-node` | always, per language in use |
 | `godot` | Godot 4 + C# game (co-location, typed EventBus, data in `.tres`) | shape is **gamedev** |
-| `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | always, as soon as the repo has tests |
+| `agent` | autonomy / decisions / subagents; `kit/common` at `--level gates` | when the repo wants the agent OS — **not** a gift on every `add` |
+| `testing` | test doctrine (levels, determinism, flaky policy, contracts, mutation ratchet) | as soon as the repo has tests — its own add, not bundled into a language pack |
 | `cicd` | pipeline + release doctrine, reference workflows, `/ci-setup` | as soon as the repo has a forge — i.e. always, in practice |
 | `hexagonal` | ports/adapters, inward deps | shape is **backend** or **fullstack** |
-| `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify) | shape is **backend** or **fullstack** |
+| `api` | opinionated HTTP stack (rust=axum+utoipa, go=chi+Huma, node=Fastify, python=FastAPI) | shape is **backend** or **fullstack** |
 | `backend` | error contract, config, health, pagination | shape is **backend** or **fullstack** |
 | `ops` | what to emit, what is promised (SLO/error budget), migrations & rollback, `/observability` | anything that **runs somewhere** — backend or fullstack |
 | `k8s` | the manifest layer of `ops` (probes, resources, rollout, Jobs) | it deploys to **Kubernetes** — on top of `ops` |
@@ -34,38 +35,42 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `portal-flat` | flat-domain portal architecture: module map, layers, business boundary (transport-agnostic) | shape is **frontend** or **fullstack** |
 | `portal-http` | the HTTP transport of that portal: OpenAPI-generated client, TanStack Query, cache policy | the portal talks HTTP — i.e. every web portal, on top of `portal-flat` |
 | `tauri` | the desktop transport instead: IPC (invoke/listen), Zustand stores, no OpenAPI | the frontend ships as a **desktop app** — on top of `ts react portal-flat`, and never with `portal-http` |
-| `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; the rust variant needs `cqrs-rust-lib` |
-| `product` | the product-lifecycle skills (`/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo (it is how you got here) |
+| `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; principles, no prescribed library |
+| `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
 | `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 
-Examples:
-- Rust backend → `npx github:dohrm/claude-rules add rust testing cicd ops hexagonal api backend` (+ `k8s` if it deploys there)
-- React frontend → `npx github:dohrm/claude-rules add ts testing cicd react portal-flat portal-http`
-- Rust API + React portal (fullstack) → `add rust ts testing cicd hexagonal api backend react portal-flat portal-http`
-- Tauri desktop app → `add ts rust testing cicd react portal-flat tauri` (the architecture, then the IPC transport — never `portal-http` too)
-- Node/TS backend → `add ts testing cicd api backend` (Fastify; no portal profile)
-- Python service → `add python testing cicd ops backend` (`api` ships no Python variant yet — name the framework in an ADR)
+Examples (aliases unpack; `--root` is the glob lever; `--level gates` brings the kit):
+- Rust HTTP API → `npx github:dohrm/claude-rules add rust-api agent --root apps/api --level gates`
+- React frontend → `add ts-web-app agent --root apps/web --level gates`
+- Rust API + React portal → two roots, two adds: `add rust-api --root apps/api --level gates` then `add ts-web-app --root apps/web --level gates` then `add agent testing cicd --level gates`
+- Tauri desktop app → `add ts-tauri-app rust agent --root apps/desktop --level gates` (never `portal-http` too)
+- Node/TS backend → `add ts-node-api agent --root apps/api --level gates`
+- Python HTTP API → `add python-api agent --root <dir> --level gates`
+- Python worker / script (no HTTP) → `add python agent --root <dir> --level gates` (add `hexagonal` / `backend` only if they apply — no FastAPI)
+- Then, separately, when they apply: `add testing`, `add cicd`, `add ops --root deploy`, `add k8s`, `add incident`
+
+Do **not** recommend `rust testing cicd ops hexagonal api backend` as one bag. That is how 21 rules land on a domain entity. `testing` / `cicd` / `ops` are their own adds; `ops` is not rooted on the same tree as `rust`.
 
 `python` carries one decision the others don't: it assumes a **committed lockfile
 and a runner that installs from it** (uv by default). On a brownfield repo still
 on `pip install -r requirements.txt`, say so out loud — adopting the profile means
 adopting that, and it is worth its own ADR.
 
-In a **monorepo**, anchor each profile to the directory it governs (`--module`), and
+In a **monorepo**, anchor each profile to the directory it governs (`--root`), and
 keep `react` on every React tree, `portal-flat` on every portal, and let the
 **transport** profile differ per app — that anchoring is what keeps a desktop app's
 IPC rules off the web app's files, and vice versa:
 
 ```
-add rust hexagonal api backend        --module apps/api
-add ts react portal-flat portal-http  --module apps/web
-add ts react portal-flat tauri        --module apps/desktop   # same layers, IPC transport
-add ts react                          --module apps/mobile    # Expo: React, but not a portal
-add testing cicd product                                      # repo-wide
+add rust-api --root apps/api --level gates
+add ts-web-app --root apps/web --level gates
+add ts-tauri-app --root apps/desktop --level gates
+add react --root apps/mobile --level rules
+add agent testing cicd --level gates
 ```
 
-Add `cqrs` only if the user confirms they want event sourcing. Say so explicitly: *"CQRS is non-standard and pulls in a home library — do you want it, or a plain repository?"*
+Add `cqrs` only if the user confirms they want event sourcing. Say so explicitly: *"CQRS is non-standard — do you want the write/read split, or a plain repository?"*
 
 ### 3. Decide the significant decisions, one at a time
 
@@ -148,5 +153,6 @@ External services, the contract with each, the blast radius if it fails.
 - Simplicity first — justify every service, store, and layer against the PRD.
 - Name real technology here. Never invent a PRD constraint — ask.
 - Own the profile gating (step 2); defer to installed rules rather than restating them.
-- `cqrs` is never assumed — offer it, install only on confirmation.
+- `cqrs` is never assumed — offer it, install only on confirmation. Principles, no prescribed library.
+- Architecture profiles apply SOLID as vocabulary on the cuts they already make — never as a five-letter checklist.
 - Plan mode: writing `docs/ARCHITECTURE.md` and `docs/adr/*` is allowed.
