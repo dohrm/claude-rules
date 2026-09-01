@@ -20,6 +20,8 @@ That workflow is implicit in the assets, so it is spelled out first.
 flowchart LR
   I["/interview"] --> P["/prd"]
   P --> A["/architect"]
+  DM["/domain-modeling"] -.-> I
+  DM -.-> A
   A --> PM["/pre-mortem"]
   PM -.-> P
   A --> PL["/plan"]
@@ -42,13 +44,18 @@ flowchart LR
 | **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per decision | agent writes `Proposed`, **human accepts** |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
-| **Slice** | `/plan` | `docs/PLAN.md` (+ `docs/plan/` once it grows) | human validates the granularity |
-| **Cut one phase** | `/tasks` | `.work/phase-NN-*.md` — anchors + tasks sized to the green boundary (gitignored, dies with the branch) | human validates the cut |
+| **Slice one capability** | `/plan` | `.work/<slug>/PLAN.md` — sprints for that capability (committed, dies once it ships) | human validates the granularity |
+| **Cut one sprint** | `/tasks` | `.work/<slug>/tasks/NN-*.md` — anchors + tasks sized to the green boundary (committed, dies with the capability) | human validates the cut |
 | **Build** | (no command — rules auto-load) | code + tests, `just check` green | **the gate**, not an opinion |
 | **Gate** | `/ci-setup` | the pipeline, calling the same `just` recipes | human sets branch protection |
 | **Ship** | — | a tag | **human pushes the tag** |
 | **Run** | `/observability` | `docs/OBSERVABILITY.md`, SLOs as ADRs, the alert table | human agrees the error budget policy |
 | **Survive** | `/runbook`, `/postmortem` | `docs/runbook/*`, `docs/postmortem/*` | human owns each action item |
+
+`/domain-modeling` is not a phase in this table — it runs alongside `/interview`,
+`/architect`, and `/onboard`, keeping `CONTEXT.md` (the ubiquitous language) and
+`docs/adr/` honest while those talk to the human. Reading `CONTEXT.md` is a habit
+every skill already has (`product/vocabulary.md`); this is the one that changes it.
 
 Nothing forces you through all of it. A library repo installs `rust testing cicd`
 and never runs a product skill; a greenfield product starts at `/interview`.
@@ -70,25 +77,29 @@ the lock and justfile) — not `/onboard`.
 
 ### Documents grow as units, not as longer files
 
-A PRD and a plan are meant to grow; the *file* is not. Past a threshold each becomes
-a directory of append-only units plus a one-screen index — the shape `docs/adr/`
+A PRD is meant to grow; the *file* is not. Past a threshold it becomes a
+directory of append-only units plus a one-screen index — the shape `docs/adr/`
 already has (`rules/product/documents.md`, enforced advisorily by `docs-check`). The
 thresholds are defaults: a repo moves them in `.docs-budgets.json` at its root, a file
 the installer never writes — so an update cannot reset a budget you argued for.
 
 ```
+CONTEXT.md               # ubiquitous language, grows in place — domain-modeling
+
 docs/
 ├── PRD.md              # the stable spine + the capability table   (index)
-│   └── prd/            # one capability per file                   (units)
+│   └── prd/            # one capability per file, with its status  (units)
 ├── ARCHITECTURE.md     # stack + boundaries + the decision log     (index)
 │   └── adr/            # one decision per file, ~400 words         (units)
-├── PLAN.md             # where we are + the phase table            (index)
-│   └── plan/           # one phase per file, frozen once shipped   (units)
 ├── DESIGN.md           EXPERIENCE.md          # visual / behavioral systems
 ├── OBSERVABILITY.md    # SLIs, SLOs, gaps, alert table             (index)
 ├── runbook/            # one per failure mode, one screen
 ├── postmortem/         # one per incident, blameless
 └── premortem/          # one register per (target, horizon)
+
+.work/<capability-slug>/  # committed, ephemeral — dies once the capability ships
+├── PLAN.md              # this capability's sprints — /plan
+└── tasks/NN-*.md        # one sprint cut at the green boundary — /tasks
 ```
 
 ---
@@ -103,7 +114,7 @@ npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
 npx github:dohrm/claude-rules add agent testing cicd --level gates   # repo-wide; not on the language tree
 npx github:dohrm/claude-rules add ops --root deploy --level gates    # + k8s incident when they apply
-npx github:dohrm/claude-rules add product                            # /interview, /onboard, /migrate, /prd, /architect, …
+npx github:dohrm/claude-rules add product                            # /interview, /domain-modeling, /onboard, /migrate, /prd, /architect, …
 
 npx github:dohrm/claude-rules list                     # available, installed, and aliases
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
@@ -323,7 +334,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/onboard` `/migrate` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 

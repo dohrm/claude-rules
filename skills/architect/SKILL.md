@@ -5,6 +5,13 @@ description: "Pick the app shape, recommend claude-rules profiles, decide stack 
 
 You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + one ADR per significant decision under `docs/adr/`.
 
+**Two levels of usage, same process.** Right after `/prd`, this runs once at
+**product level**: shape, stack, cross-cutting guidelines. Later, `/plan` may
+call you again at **capability level**, when opening one capability surfaces a
+decision scoped to it alone (a new port, a framing choice `/architect`'s
+product-level pass never had reason to make). Same steps 1–4 either way — only
+the scope of "the decision" narrows.
+
 ## Process
 
 ### 1. Frame
@@ -87,9 +94,22 @@ Create `docs/` and `docs/adr/` if absent.
 Confirm *"✓ written to `docs/ARCHITECTURE.md` and docs/adr/"*, list the ADRs created, and state
 plainly that they are **proposed and awaiting acceptance**.
 
+Then ask, per ADR: *"Do you accept ADR-NNNN as written?"* On an explicit yes,
+show the exact one-line edit that accepts it —
+
+```
+- **Status**: Proposed          →      - **Status**: Accepted
+```
+
+— and let the human make and commit it. **Never write `Accepted` into the file
+yourself, even on a yes in this same turn**: the rule this follows
+(`agent/decisions.md`) exists precisely because a conversation, however
+thorough, isn't the commit — the human's own edit is the only signal that
+survives once the transcript is gone.
+
 ### 5. Hand off to /plan
 
-The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what `docs/PLAN.md`'s "Architectural Decisions" header should reference — `/plan` reads this file rather than re-deriving them.
+The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what a capability's `.work/<slug>/PLAN.md` "Durable decisions" header should reference — `/plan` reads `docs/ARCHITECTURE.md` rather than re-deriving them.
 
 <adr-template>
 <!-- Shape and budgets: agent/decision-records.md. Status always Proposed. -->

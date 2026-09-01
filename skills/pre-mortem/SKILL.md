@@ -11,7 +11,7 @@ Output: `docs/premortem/<target>-<horizon>.md`. One file per **(target, horizon)
 
 ### 1. Frame
 
-- Identify the **target**: `docs/PRD.md`, `docs/ARCHITECTURE.md` + `docs/adr/*`, `docs/PLAN.md`, or the repo itself. Read what exists. If there is nothing concrete to attack, say so and point at `/prd` or `/architect` first — a pre-mortem needs a design to kill.
+- Identify the **target**: `docs/PRD.md`, `docs/ARCHITECTURE.md` + `docs/adr/*`, a capability's `.work/<slug>/PLAN.md` (only while one is open — it's ephemeral), or the repo itself. Read what exists. If there is nothing concrete to attack, say so and point at `/prd` or `/architect` first — a pre-mortem needs a design to kill.
 - Read `CLAUDE.md`, adjacent code, and the project's vocabulary. Reuse it verbatim.
 - Settle the **horizon** in one question if the user hasn't given one: *"Assume it's dead — how far out? (launch, 6 months, 2 years?)"*. The horizon decides the failure classes: near-term = launch/adoption failure; long-term = maintenance rot, scaling, team turnover, cost drift.
 - Propose an **adversarial persona panel** (2–4) deduced from the target — each sees a different death. Typical: the on-call engineer at 6 months, the security/compliance auditor, the new hire at 12 months, the person paying the bill, a hostile user. The user adds, removes, or renames. Each persona is an attack angle, not a stakeholder to please.
@@ -62,7 +62,7 @@ You own `docs/premortem/`. When a mitigation changes the design, emit a **precis
 
 - PRD change → *"Delta for `docs/PRD.md`: add to Out of Scope — `<text>`. Run `/prd` to apply?"*
 - Architecture change → *"Delta: supersede ADR-0003 with a new ADR — `<decision>`. Run `/architect` to apply?"*
-- Plan change → *"Delta: insert a hardening phase before Phase 2 — `<slice>`. Run `/plan` to apply?"*
+- Plan change → *"Delta: insert a hardening sprint before Sprint 2 — `<slice>`. Run `/plan` to apply?"*
 - Code/config change → *"Delta: wire `ts-check` into the `check` target; create `deny.toml`. Want me to apply these now, or leave them as tickets?"* — a bundle of code changes lands only on an explicit go-ahead, never as a silent side effect of the analysis.
 
 Track every pending delta in the register so nothing is silently lost.

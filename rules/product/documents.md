@@ -4,20 +4,28 @@ paths:
 title: "Living Documents — Units and Index"
 ---
 
-A PRD and a PLAN are **meant to grow** — that is the point of writing them down.
-What must not grow is any single file a human has to read to know where the project
-stands.
+A PRD is **meant to grow** — that is the point of writing it down. What must not
+grow is any single file a human has to read to know where the project stands.
 
 So: a document that grows is a **directory of append-only units plus a compacted
 index**. Growth adds a unit. It never inflates existing prose. This is the shape
 `docs/adr/` already has, and it is the reason a 24-decision log stays usable while
-a 900-line plan does not.
+a 900-line PRD does not.
 
 | Document | One unit is | The index is | Split into units at |
 |---|---|---|---|
 | Decisions | one decision — `docs/adr/NNNN-<slug>.md` | the decision log in `docs/ARCHITECTURE.md` | from the first one |
-| Plan | one phase — `docs/plan/NN-<slug>.md` | `docs/PLAN.md` — the phase table | more than ~6 phases, or 400 lines |
-| PRD | one capability — `docs/prd/NN-<slug>.md` | `docs/PRD.md` — the spine + the capability table | more than ~8 capabilities, or 400 lines |
+| PRD | one capability — `docs/prd/NN-<slug>.md` | `docs/PRD.md` — the spine + the capability table (with status) | more than ~8 capabilities, or 400 lines |
+
+**The plan is not on this table.** `/plan` and `/tasks` write under
+`.work/<capability-slug>/` — committed (so a PR shows the sprint breakdown and
+the task cut it landed on), but **ephemeral**: it exists for as long as the
+capability is being worked, and is deleted once every sprint under it ships. The
+PRD's capability table is what still says "done" afterward — the plan doesn't
+need to, because nothing durable reads it once the code and the git log are the
+record. One file per capability (`.work/<slug>/PLAN.md`) is enough at this scale;
+the unit/index split above exists for documents that must stay readable for the
+life of the project, which this one no longer is.
 
 Below the threshold, one file is right — a directory for three phases is ceremony.
 The split is a mechanical migration when the threshold arrives, not a decision to
@@ -74,10 +82,12 @@ document:
 |---|---|
 | What are we building, and why does anyone care? | the PRD |
 | Why *this* choice, and what did it cost? | an ADR |
-| In what order, and what proves a slice is done? | the plan |
+| In what order, and what proves a slice is done, **while it's being built**? | the plan (`.work/<slug>/`, ephemeral) |
+| Is this capability done, full stop? | the PRD's capability table (status column) |
 | What does the system look like — boundaries, stack? | `ARCHITECTURE.md` |
 | What are the fields, types, schemas? | `DATA-MODEL.md` |
 | What does the screen do — states, wording, a11y? | `EXPERIENCE.md` |
+| What does the project call this, and what should nobody call it instead? | `CONTEXT.md` (`product/vocabulary.md`) |
 
 A PRD that names a library, a plan that restates an ADR's reasoning, or an ADR that
 lists fields are all the same mistake: two homes for one fact, and the copy is the

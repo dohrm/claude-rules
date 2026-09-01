@@ -1,27 +1,28 @@
 ---
 name: tasks
-description: "Cut ONE phase of `docs/PLAN.md` into tasks sized to the green boundary, with anchors in the existing code. Writes `.work/phase-NN-<slug>.md` (gitignored, dies with the branch). Use on /tasks, \"break this phase into tasks\", \"prepare phase N for the loop\". Downstream of /plan, upstream of /loop-setup."
+description: "Cut ONE sprint of `.work/<capability-slug>/PLAN.md` into tasks sized to the green boundary, with anchors in the existing code. Writes `.work/<capability-slug>/tasks/NN-<sprint-slug>.md` (committed, dies with the capability). Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Downstream of /plan, upstream of /loop-setup."
 ---
 
-`/plan` deliberately withholds file names, symbols and layers — a phase is a promise,
+`/plan` deliberately withholds file names, symbols and layers — a sprint is a promise,
 and promises must survive the code moving under them. Someone still has to answer
 *"this plugs in where?"* before an agent can implement it. **You answer it once, and
 write the answer down**, so N implementation turns don't each re-derive it from a cold
 context. That amortized exploration is the point of this skill; the task list is only
 its shape.
 
-What you produce is **working memory, not truth.** The phase's promise lives in
-`docs/plan/NN-*.md` and is frozen once shipped; what actually happened lives in the
+What you produce is **working memory, not truth.** The sprint's promise lives in
+`.work/<slug>/PLAN.md` and is frozen once shipped; what actually happened lives in the
 `git log`. The worklist is the intention of the moment, rewritable at any turn, and
-it is deleted when the branch merges.
+it is deleted once the capability it belongs to ships (`product/documents.md`) —
+committed until then, so a PR can point at it, not gitignored scratch.
 
 ## Process
 
-### 1. Get the phase — and refuse it if it isn't ready
+### 1. Get the sprint — and refuse it if it isn't ready
 
-Read `docs/PLAN.md` (and `docs/plan/NN-*.md` if split). Take the phase named as an
-argument, else the first one not `Shipped`. Read `docs/ARCHITECTURE.md` and the ADRs
-it points at — those are constraints on the cut, not suggestions.
+Read `.work/<slug>/PLAN.md`. Take the sprint named as an argument, else the first
+one not `Shipped`. Read `docs/ARCHITECTURE.md` and the ADRs it points at — those
+are constraints on the cut, not suggestions.
 
 Stop and hand back, rather than cutting, when:
 
@@ -44,12 +45,12 @@ traverses (schema, domain, transport, UI, tests). For each, record:
   and should be imitated. *This is the single most useful line you can hand a fresh
   implementer*: the conventions of the repo are in that file, not in your prose.
 
-If a layer has no neighbour, say so — it means the phase introduces a pattern, which
+If a layer has no neighbour, say so — it means the sprint introduces a pattern, which
 is a design decision and may belong in an ADR before any code.
 
 ### 3. Freeze the contract — as code, not prose
 
-Everything the tasks of this phase share goes into **one first task, T0**: types,
+Everything the tasks of this sprint share goes into **one first task, T0**: types,
 migration, OpenAPI/proto spec, trait or interface signatures, error variants, event
 shapes. It is committed, it compiles, the gate is green.
 
@@ -60,7 +61,7 @@ the gated artifact). The worklist points at the contract; it never restates it.
 
 T0 is allowed to land stubs and `unimplemented`/`TODO` bodies where a signature
 needs one. This is a declared bypass, not a silent one (`agent/autonomy.md`): the
-worklist *is* the declaration, and **T0 is never the last commit of the phase**. Say
+worklist *is* the declaration, and **T0 is never the last commit of the sprint**. Say
 out loud which stubs it leaves and which task kills each one.
 
 ### 4. Cut at the green boundary
@@ -73,7 +74,7 @@ one-commit-per-task true, the branch bisectable, and any task revertable alone.
 Apply it mechanically:
 
 - **A task that cannot be green alone is not a task** — merge it into the next one.
-  Repeated merging that swallows the whole phase means the phase was cut wrong; back
+  Repeated merging that swallows the whole sprint means the sprint was cut wrong; back
   to `/plan`.
 - **A task that is green but makes nothing new true is not a task either** — it is
   part of another one.
@@ -87,24 +88,27 @@ ask whether the granularity holds before writing anything.
 
 ### 5. Write the worklist
 
-Write `.work/phase-NN-<slug>.md` from `<worklist-template>`, one `<task-unit>` per
-task. Add `.work/` to `.gitignore` if it isn't there, and say that you did.
+Write `.work/<slug>/tasks/NN-<sprint-slug>.md` from `<worklist-template>`, one
+`<task-unit>` per task — `NN` is the sprint's number in `.work/<slug>/PLAN.md`.
+Commit it: this is working memory, but it is **committed** working memory, so a
+PR can point at the cut it landed on, and `.work/<slug>/` disappears in one piece
+once the whole capability ships, not file by file as each sprint lands.
 
-It goes in `.work/` and never in `docs/`, for the same reason a phase is frozen once
-shipped: one home per fact (`product/documents.md`). The promise is a document, the
-execution is the git history, and this file is neither — it is scaffolding.
+It never goes in `docs/`, for the same reason a sprint is frozen once shipped:
+one home per fact (`product/documents.md`). The promise is `.work/<slug>/PLAN.md`,
+the execution is the git history, and this file is neither — it is scaffolding.
 
-`/loop-setup` writes the same skeleton at `.work/loop.md` when there is no phase to
-cut. Run against a worklist, it adds its `## Guardrails` section to *this* file and
-writes nothing else — one loop, one state file.
+`/loop-setup` writes the same skeleton at `.work/<slug>/loop.md` when there is no
+sprint to cut. Run against a worklist, it adds its `## Guardrails` section to
+*this* file and writes nothing else — one loop, one state file.
 
 ### 6. Branch, then hand off
 
-Create `phase/NN-<slug>` off the trunk. One commit per completed task, the task's
-title as the subject — the `git log` becomes the phase's real account.
+Create `sprint/<slug>-NN` off the trunk. One commit per completed task, the task's
+title as the subject — the `git log` becomes the sprint's real account.
 
 If another session is already working in this checkout, the branch gets **its own
-worktree** (`git worktree add ../<repo>-NN-<slug> -b phase/NN-<slug>`): one tree, one
+worktree** (`git worktree add ../<repo>-<slug>-NN -b sprint/<slug>-NN`): one tree, one
 writer. The worklist below and the review verdict both live in `.work/`, which is
 per-tree — two sessions sharing a checkout share one verdict (`agent/autonomy.md`).
 
@@ -117,21 +121,24 @@ Then hand off, and stop:
   reviewer judges design; **the gate judges correctness** and is the only authority
   on it (`agent/autonomy.md`).
 
-You do not run the loop, and you never flip a phase to `Shipped` — that is the
-human's act, on the phase's acceptance criteria, not on ticked boxes.
+You do not run the loop, and you never flip a sprint to `Shipped` — that is the
+human's act, on the sprint's acceptance criteria, not on ticked boxes. When the
+merge that ships the sprint lands, delete its `tasks/NN-*.md` in the same commit;
+once every sprint under the capability is gone, delete `.work/<slug>/` entirely
+and re-run `/prd` (`product/documents.md`).
 
 <worklist-template>
-<!-- `.work/phase-NN-<slug>.md`. Working memory: rewritable every turn, deleted at
-     merge. Never under docs/. -->
-# Phase NN: <title> — worklist
+<!-- `.work/<slug>/tasks/NN-<sprint-slug>.md`. Working memory: rewritable every
+     turn, deleted at merge. Committed until then. Never under docs/. -->
+# Sprint NN: <title> — worklist
 
-- **Phase**: `docs/plan/NN-<slug>.md` · **Branch**: `phase/NN-<slug>`
+- **Sprint**: `.work/<slug>/PLAN.md` § Sprint NN · **Branch**: `sprint/<slug>-NN`
 - **Gate**: `<the command that must be green — e.g. just check>`
 - **Out of scope**: <what this branch must not touch — the drift bound>
 
-## Acceptance criteria (from the phase — the real definition of done)
+## Acceptance criteria (from the sprint — the real definition of done)
 
-- [ ] <criterion, verbatim from the phase> → verified by `<command or observation>`
+- [ ] <criterion, verbatim from the sprint> → verified by `<command or observation>`
 
 ## Anchors
 
@@ -179,5 +186,6 @@ neighbour for the how.>
 ## Rules
 
 - **Re-split freely; never widen.** A too-big task splits mid-loop. A *new acceptance criterion* is not a re-split: stop, back to `/plan`.
+- **`.work/<slug>/` is committed, not gitignored** — a PR shows the cut, not just the diff. It is still ephemeral: deleted once the capability ships, never a durable document.
 - **Roles, not models.** Planner / implementer / reviewer are roles; never bake a model name into the worklist.
 - Plan mode: writing `.work/*` is allowed.

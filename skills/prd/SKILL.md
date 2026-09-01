@@ -41,11 +41,18 @@ Profile + usage context, precise enough to picture a real person.
 
 ## Capabilities
 
-One line per capability — the actor, the job it does for them, and where its detail lives. This table IS the compaction: it must be enough to see the whole product.
+One line per capability — the actor, the job it does for them, its status, and
+where its detail lives. This table IS the compaction: it must be enough to see
+the whole product, and, once work starts, where the project actually stands.
 
-| # | Capability | For whom, and the job it does | Stories |
-|---|-----------|-------------------------------|---------|
-| [01](./prd/01-<slug>.md) | <name> | <one line> | US-1…4 |
+| # | Capability | For whom, and the job it does | Status | Stories |
+|---|-----------|-------------------------------|--------|---------|
+| [01](./prd/01-<slug>.md) | <name> | <one line> | Not started | US-1…4 |
+
+**Status**: `Not started` / `In progress` / `Shipped <date>`. Set by re-running
+`/prd`, which reconciles it against `.work/<slug>/` and the git log rather than
+asking — the plan and the code already know. This is the one place that keeps
+saying "done" after `.work/<slug>/` is gone (`product/documents.md`).
 
 ## Success Criteria
 
@@ -70,7 +77,14 @@ Risks, external dependencies, assumptions. Keep it short; *"Nothing to report."*
 
 ## User Stories
 
-*"As a `<actor>`, I want `<capability>`, so that `<benefit>`"* — numbered **US-n, unique across the whole PRD** (the plan references these numbers). Cover the main interactions, empty states, errors, alternative paths, edge cases.
+*"As a `<actor>`, I want `<capability>`, so that `<benefit>`"* — numbered **US-n, unique across the whole PRD**.
+
+At `/prd` time this section may stay a **stub**: the one or two stories obvious
+enough to cadre the capability, no more. Writing the full, edge-case-covering set
+this early is speculative — the capability may not be worked for months, and
+`/plan` will elaborate it against the real code right before it is. Full
+coverage (main interactions, empty states, errors, alternative paths, edge
+cases) is `/plan`'s job when it opens this capability, not `/prd`'s upfront.
 
 ## Behavior decisions
 
@@ -89,4 +103,4 @@ What this capability deliberately does not do, one line each — distinct from t
 - No named technology, no gaps, no file path, no code snippet in the PRD.
 - User Stories must be numbered: US-1, US-2 … and the numbering is **global**, never restarted per capability.
 - The spine stays one screen, and stays stable. Growth is a new capability unit — never a longer section, never a `(continued)` heading.
-- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, when-it-ships is the plan. The PRD carries what and why-anyone-cares, and links to the rest.
+- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, the sprint-by-sprint order is the (ephemeral) plan. The PRD carries what, why-anyone-cares, and whether it has shipped — and links to the rest.

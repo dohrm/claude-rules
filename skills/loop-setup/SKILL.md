@@ -1,6 +1,6 @@
 ---
 name: loop-setup
-description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/loop.md` (or Guardrails on a /tasks worklist) + the loop prompt. Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start the loop. Not for one-off tasks."
+description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist) + the loop prompt. Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start the loop. Not for one-off tasks."
 ---
 
 You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state file, then hand the exact command to run.
@@ -40,17 +40,19 @@ Every loop carries all four:
 
 ### 4. Write the state file
 
-The loop's state is **one file under `.work/`** — working memory, gitignored, deleted when the work lands. Not a document, and never under `docs/`.
+The loop's state is **one file under `.work/<capability-slug>/`** — working
+memory, committed (so a PR shows the cut it's running against), deleted once
+the capability ships. Not a document, and never under `docs/`.
 
 **First, look for a file that already exists:**
 
-- **`.work/phase-NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3. Everything else is `/tasks`' and stays untouched.
-- **Nothing there** — write `.work/loop.md` from `<loop-file-template>`.
+- **`.work/<slug>/tasks/NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3. Everything else is `/tasks`' and stays untouched.
+- **Nothing there** — write `.work/<slug>/loop.md` from `<loop-file-template>`.
 - **A file exists from an earlier run** — read it and fill only the deltas; don't clobber validated content.
 
-Then add `.work/` to `.gitignore` if it isn't there, and build the **loop prompt** from `<loop-prompt-template>`, pointing at whichever file you settled on.
+Build the **loop prompt** from `<loop-prompt-template>`, pointing at whichever file you settled on.
 
-Confirm *"✓ `.work/<file>` written (guardrails added); loop prompt ready"*.
+Confirm *"✓ `.work/<slug>/<file>` written (guardrails added); loop prompt ready"*.
 
 ### 5. Hand off — per host
 
@@ -65,10 +67,10 @@ Emit the invocation for the user's host (ask which if unclear). Same cadre, diff
 Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail).
 
 <loop-file-template>
-<!-- `.work/loop.md`. Working memory: rewritten every turn, deleted when the work
-     lands. Never under docs/. A phase worklist from /tasks has this same skeleton,
-     plus its anchors — in that case add the Guardrails section there instead of
-     creating this file. -->
+<!-- `.work/<slug>/loop.md`. Working memory: rewritten every turn, committed,
+     deleted when the capability ships. Never under docs/. A sprint worklist from
+     /tasks has this same skeleton, plus its anchors — in that case add the
+     Guardrails section there instead of creating this file. -->
 # Loop — <objective in one line>
 
 - **Objective (bounded)**: <finite, checkable end state>
@@ -105,7 +107,7 @@ Then state **how to interrupt** the loop and where to watch progress (the state 
 You are running one turn of a bounded loop toward a fixed objective. Work only from the state file below; it is the source of truth, not your memory of prior turns.
 
 **Objective:** <bounded objective>
-**State file:** `<.work/loop.md or .work/phase-NN-slug.md>` — remaining work, guardrails, and what already failed.
+**State file:** `<.work/<slug>/loop.md or .work/<slug>/tasks/NN-slug.md>` — remaining work, guardrails, and what already failed.
 
 This turn:
 1. Read the state file. Pick the **first unchecked item**. If none remain, go to Done-check.
@@ -126,5 +128,5 @@ On any of these: stop, write the reason and current state under `## Blocked on t
 ## Rules
 
 - Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point.
-- One state file under `.work/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
+- One state file under `.work/<slug>/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
 - Plan mode: writing `.work/*` is allowed.

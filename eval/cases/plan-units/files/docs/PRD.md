@@ -17,10 +17,10 @@ has a tracking number and no account.
 
 ## Capabilities
 
-| # | Capability | For whom, and the job it does |
-|---|---|---|
-| 01 | Ingest scan events | drivers' handhelds push scans, often hours late from a truck with no signal |
-| 02 | Parcel state | a dispatcher sees where a parcel is and what happened to it |
+| # | Capability | For whom, and the job it does | Status |
+|---|---|---|---|
+| 01 | Ingest scan events | drivers' handhelds push scans, often hours late from a truck with no signal | Not started |
+| [02](./prd/02-parcel-state.md) | Parcel state | a dispatcher sees where a parcel is and what happened to it | Not started |
 | 03 | Public tracking | a recipient with a tracking number sees a simplified status |
 | 04 | Depot dashboard | a dispatcher sees the parcels stuck at their depot |
 | 05 | Exception handling | a dispatcher records a failed delivery and its reason |

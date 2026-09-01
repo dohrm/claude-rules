@@ -71,7 +71,7 @@ things is true, and the fix is never to compress the prose:
 | Field lists, schemas, types, table shapes | `docs/DATA-MODEL.md` |
 | Screen behavior, states, wording, display rules | `docs/EXPERIENCE.md` |
 | Component boundaries, stack overview, the decision index | `docs/ARCHITECTURE.md` |
-| Sequencing, phases, what ships when | `docs/PLAN.md` |
+| Sequencing, sprints, what ships when | `.work/<slug>/PLAN.md` (ephemeral, while a capability is open) |
 | The argument for the decision, and its cost | **the ADR** |
 
 **No section outside the canonical set** — Context, Decision, Consequences,

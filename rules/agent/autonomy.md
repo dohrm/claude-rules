@@ -63,5 +63,5 @@ make bypass expensive and loud, not impossible. Wiring:
 
 **Declare every bypass.** No silent TODO, skipped test, placeholder, or stub.
 
-**Escalate in that tree's `.work/phase-NN-*.md` → `## Blocked on the human`** —
+**Escalate in that tree's `.work/<slug>/tasks/NN-*.md` → `## Blocked on the human`** —
 what `just status` surfaces. Never in the review report.

@@ -83,7 +83,7 @@ test('no absolute local path leaked into a shipped asset', () => {
 // the living-documents rule, which is what docs-check enforces in the consuming repo.
 test('document-producing skills name a path under docs/', () => {
   const OWNERS = {
-    prd: 'docs/PRD.md', plan: 'docs/PLAN.md', architect: 'docs/ARCHITECTURE.md',
+    prd: 'docs/PRD.md', architect: 'docs/ARCHITECTURE.md',
     'design-system': 'docs/DESIGN.md', experience: 'docs/EXPERIENCE.md',
     observability: 'docs/OBSERVABILITY.md', runbook: 'docs/runbook/',
     postmortem: 'docs/postmortem/', 'pre-mortem': 'docs/premortem/',
@@ -95,12 +95,14 @@ test('document-producing skills name a path under docs/', () => {
   }
 })
 
-// The mirror of the map above. These two skills produce scaffolding, not documents:
-// it lives in .work/, it is gitignored, it dies with the branch. A root-level PLAN.md
-// would collide head-on with the durable docs/PLAN.md that /plan owns — the two have
-// opposite lifetimes, and one name for both is how they get confused.
+// The mirror of the map above. These skills produce scaffolding, not documents:
+// it lives in .work/, committed but ephemeral, deleted once the capability it
+// belongs to ships. A bare `PLAN.md` (no path prefix) would read as the durable,
+// project-wide document this repo used to have — /plan now writes one per
+// capability, under .work/<slug>/, and a bare name for it invites that confusion
+// back.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['tasks', 'loop-setup', 'onboard', 'migrate']) {
+  for (const name of ['tasks', 'loop-setup', 'onboard', 'migrate', 'plan']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,
