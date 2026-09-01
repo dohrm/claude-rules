@@ -40,9 +40,9 @@ A green gate never settles a **decision** — that line is `agent/decisions.md`.
 
 ## One tree, one writer
 
-`.work/` (review report, phase file) is per-tree. Two sessions in one checkout
+`.work/` (review report, worklist) is per-tree. Two sessions in one checkout
 share one verdict: A's `CLEAN` authorises B's push. **One tree, one writer, one
-branch, one phase file.** Parallel work gets a parallel tree:
+branch, one worklist.** Parallel work gets a parallel tree:
 `git worktree add ../<repo>-<slug> -b <branch>`. `just status` reports every
 tree; it never gates.
 

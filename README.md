@@ -360,7 +360,7 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just mutate-diff` | 3 — mutation / coverage ratchet, on the merge-base diff | per coherent block, before the push; minutes; never a hook |
 | `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | same cadence as `mutate-diff`; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
-| `just status` | — reports, never gates: every worktree at a glance (branch, dirty, phase, verdict, blockers) | opt-in, when sessions run in parallel trees |
+| `just status` | — reports, never gates: every worktree at a glance (branch, dirty, worklist, verdict, blockers) | opt-in, when sessions run in parallel trees |
 
 Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
 a laptop that the PR job computes on a runner, so the agent runs it before pushing

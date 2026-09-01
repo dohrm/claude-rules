@@ -4,12 +4,12 @@
 //
 // The loop's proof is local to the tree: `.work/review-report.md` is ONE file per
 // worktree, `review-guard` reads the one in the tree it runs in, and
-// `.work/phase-NN-*.md` is one work unit. That is why parallel sessions get parallel
-// trees (rules/agent/autonomy.md, "One tree, one writer") — and why, once they do,
-// nothing shows you all of them at once. This does.
+// `.work/<capability-slug>/` is one work unit. That is why parallel sessions get
+// parallel trees (rules/agent/autonomy.md, "One tree, one writer") — and why, once
+// they do, nothing shows you all of them at once. This does.
 //
-// One line per worktree: branch · commits ahead of base · dirty files · phase file ·
-// review verdict + staleness. Then, indented under it, whatever that phase file's
+// One line per worktree: branch · commits ahead of base · dirty files · worklist ·
+// review verdict + staleness. Then, indented under it, whatever that worklist's
 // `## Blocked on the human` section holds — the escalation channel `/tasks` already
 // defines, which is worth nothing if nobody walks the trees to read it.
 //
@@ -73,7 +73,7 @@ function reviewState(tree) {
   return `${verdict} (stale${since ? `, +${since}` : ''})`
 }
 
-/** The lines of a phase file's `## Blocked on the human` section that are really there:
+/** The lines of a worklist's `## Blocked on the human` section that are really there:
  *  no HTML comments, no `- <placeholder>` left over from the template. */
 function blockedIn(file) {
   let text
@@ -92,18 +92,36 @@ function blockedIn(file) {
     .filter((l) => l && !/^[-*]?\s*<[^>]*>$/.test(l))
 }
 
-/** The newest phase worklist in a tree, plus what it says is blocked. */
-function phaseState(tree) {
-  let names = []
+/** Every state file an agent escalates in, under `.work/<capability-slug>/`: the
+ *  sprint worklists `/tasks` cuts, and the `loop.md` `/loop-setup` writes when
+ *  there is no sprint to cut. Sorted so the newest sorts last. */
+function worklists(root) {
+  const found = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const slug = entry.name
+    const add = (rel) =>
+      found.push({ label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
+    if (existsSync(join(root, slug, 'loop.md'))) add('loop.md')
+    try {
+      for (const n of readdirSync(join(root, slug, 'tasks'))) if (/\.md$/.test(n)) add(`tasks/${n}`)
+    } catch { /* no tasks/ yet: the capability is planned, not cut */ }
+  }
+  return found.sort((a, b) => a.label.localeCompare(b.label))
+}
+
+/** The newest worklist in a tree, plus what it says is blocked. */
+function worklistState(tree) {
+  let found = []
   try {
-    names = readdirSync(join(tree.path, '.work')).filter((n) => /^phase-.*\.md$/.test(n)).sort()
+    found = worklists(join(tree.path, '.work'))
   } catch {
     return { label: '—', blocked: [] }
   }
-  if (!names.length) return { label: '—', blocked: [] }
-  const newest = names[names.length - 1]
-  const label = newest.replace(/\.md$/, '') + (names.length > 1 ? ` (+${names.length - 1})` : '')
-  return { label, blocked: blockedIn(join(tree.path, '.work', newest)) }
+  if (!found.length) return { label: '—', blocked: [] }
+  const newest = found[found.length - 1]
+  const label = newest.label + (found.length > 1 ? ` (+${found.length - 1})` : '')
+  return { label, blocked: blockedIn(newest.path) }
 }
 
 const listed = git(process.cwd(), 'worktree', 'list', '--porcelain')
@@ -136,22 +154,22 @@ const rows = trees.map((tree) => {
   const ahead = git(tree.path, 'rev-list', '--count', `${base}..HEAD`)
   const porcelain = git(tree.path, 'status', '--porcelain')
   const dirty = porcelain === null ? null : porcelain.split('\n').filter((l) => l.trim()).length
-  const phase = phaseState(tree)
+  const worklist = worklistState(tree)
   return {
     mine: here !== null && resolve(tree.path) === resolve(here),
     path: (relative(process.cwd(), tree.path) || '.') + (tree.prunable ? ' (prunable)' : tree.locked ? ' (locked)' : ''),
     branch: tree.branch ?? `(detached ${(tree.head ?? '').slice(0, 7)})`,
     ahead: ahead === null ? '—' : `+${ahead}`,
     dirty: dirty === null ? '?' : dirty === 0 ? 'clean' : `${dirty} dirty`,
-    phase: phase.label,
+    worklist: worklist.label,
     review: reviewState(tree),
-    blocked: phase.blocked,
+    blocked: worklist.blocked,
   }
 })
 
 const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length))
 const width = (key) => Math.max(...rows.map((r) => r[key].length))
-const [wPath, wBranch, wAhead, wDirty, wPhase] = ['path', 'branch', 'ahead', 'dirty', 'phase'].map(width)
+const [wPath, wBranch, wAhead, wDirty, wWorklist] = ['path', 'branch', 'ahead', 'dirty', 'worklist'].map(width)
 
 console.log(
   `${rows.length} worktree${rows.length === 1 ? '' : 's'} · base ${base} · ` +
@@ -160,7 +178,7 @@ console.log(
 for (const r of rows) {
   console.log(
     `${r.mine ? '*' : ' '} ${pad(r.path, wPath)}  ${pad(r.branch, wBranch)}  ` +
-    `${pad(r.ahead, wAhead)}  ${pad(r.dirty, wDirty)}  ${pad(r.phase, wPhase)}  ${r.review}`,
+    `${pad(r.ahead, wAhead)}  ${pad(r.dirty, wDirty)}  ${pad(r.worklist, wWorklist)}  ${r.review}`,
   )
   for (const line of r.blocked) console.log(`    BLOCKED: ${line.replace(/^[-*]\s*/, '')}`)
 }

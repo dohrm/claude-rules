@@ -448,9 +448,10 @@ test('review-guard: with no commit yet there is nothing to compare against', () 
 // a dashboard with an exit code is a second gate nobody asked for.
 const WT_STATUS = join(REPO, 'kit', 'common', 'worktree-status.mjs')
 
-/** A phase worklist, with the `## Blocked on the human` section /tasks writes. */
+/** A sprint worklist / loop.md, with the `## Blocked on the human` section
+ *  /tasks and /loop-setup both write. */
 const worklist = (blockers) =>
-  '# Phase 02: split — worklist\n\n## Tasks\n\n- [ ] T1\n\n## Blocked on the human\n\n'
+  '# Sprint 02: split — worklist\n\n## Tasks\n\n- [ ] T1\n\n## Blocked on the human\n\n'
   + '<!-- What the loop cannot decide or access. -->\n'
   + (blockers.length ? blockers.map((b) => `- ${b}\n`).join('') : '- <blocker>\n')
 
@@ -493,20 +494,51 @@ test('worktree-status: a CRITICAL in a SIBLING tree is visible from here', () =>
   })
 })
 
-test('worktree-status: the phase file and its blockers surface, placeholders do not', () => {
+test('worktree-status: a sprint worklist and its blockers surface, placeholders do not', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/phase-02-split.md', worklist([]))
+    write(dir, '.work/split/tasks/02-split.md', worklist([]))
     const quiet = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(quiet.out, /phase-02-split/)
+    assert.match(quiet.out, /split\/tasks\/02-split/)
     assert.doesNotMatch(quiet.out, /BLOCKED/, 'an untouched template is not an escalation')
     assert.doesNotMatch(quiet.out, /waiting on you/)
 
-    write(dir, '.work/phase-02-split.md', worklist(['the PRD says X, the schema says Y — which wins?']))
+    write(dir, '.work/split/tasks/02-split.md', worklist(['the PRD says X, the schema says Y — which wins?']))
     const loud = run(WT_STATUS, ['HEAD'], dir)
     assert.equal(loud.status, 0)
     assert.match(loud.out, /BLOCKED: the PRD says X, the schema says Y/)
     assert.match(loud.out, /1 tree\(s\) waiting on you/)
+  })
+})
+
+test('worktree-status: loop.md escalates the same way a sprint worklist does', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/onboarding/loop.md', worklist(['waiting on the API key']))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /onboarding\/loop/)
+    assert.match(r.out, /BLOCKED: waiting on the API key/)
+  })
+})
+
+test('worktree-status: a sprint worklist outranks a loop.md in the same capability', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/split/loop.md', worklist(['stale — /tasks already cut this sprint']))
+    write(dir, '.work/split/tasks/02-split.md', worklist([]))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /split\/tasks\/02-split \(\+1\)/, 'the sprint worklist sorts last and wins, the loop.md is only counted')
+    assert.doesNotMatch(r.out, /BLOCKED/, 'it reads the winning file, not the stale loop.md')
+  })
+})
+
+test('worktree-status: a capability with no tasks/ yet and no loop.md reports —', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/planned/PLAN.md', '# Plan\n')
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /  —  /)
+    assert.doesNotMatch(r.out, /BLOCKED/)
   })
 })
 
