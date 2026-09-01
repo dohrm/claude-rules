@@ -276,6 +276,15 @@ test('unknown profile and unknown agent fail loudly', () => {
   })
 })
 
+test('bare add with no TTY still errors instead of waiting on the interactive prompt', () => {
+  withTmpRepo(dir => {
+    const r = runCli(['add'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /Usage: add <profile\.\.\.>/)
+    assert.ok(!has(dir, '.claude-rules.lock'))
+  })
+})
+
 test('remove without a lock exits 1', () => {
   withTmpRepo(dir => {
     const r = runCliBare(['remove', 'rust'], dir)
@@ -584,6 +593,31 @@ test('--module extends the map instead of replacing it', () => {
     assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'], 'apps/web': ['ts'] })
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/, 'the first module must survive')
     assert.match(read(dir, '.claude/rules/ts/code-style.md'), /- "apps\/web\/\*\*\/\*\.ts"/)
+  })
+})
+
+test('--root never anchors agent or product: their docs are one shared repo-root tree', () => {
+  withTmpRepo(dir => {
+    const r = ok(runCli(['add', 'rust', 'agent', 'product', '--level', 'gates', '--agent', 'claude', '--root', 'apps/portal'], dir))
+
+    assert.match(r.stdout, /agent, product stay repo-wide/)
+    assert.deepEqual(lockOf(dir).modules, { 'apps/portal': ['rust'] })
+    assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/portal\/\*\*\/\*\.rs"/)
+    assert.match(read(dir, '.claude/rules/agent/decision-records.md'), /- "\*\*\/docs\/adr\/\*\*\/\*\.md"/, 'agent must stay unscoped')
+    assert.match(read(dir, '.claude/rules/product/documents.md'), /- "docs\/\*\*\/\*\.md"/, 'product must stay unscoped')
+  })
+})
+
+test('doctor fails when a lock has agent or product wrongly anchored to a module', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'agent', '--level', 'gates', '--agent', 'claude', '--module', 'apps/portal'], dir))
+    const lock = lockOf(dir)
+    lock.modules['apps/portal'].push('agent')          // simulate the pre-fix bug directly in the lock
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2))
+
+    const r = runCliBare(['doctor'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /module "apps\/portal" claims "agent", whose rules anchor to one shared repo-root docs tree/)
   })
 })
 

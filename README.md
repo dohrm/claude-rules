@@ -107,7 +107,11 @@ docs/
 ## Install
 
 ```bash
-# in your repo, from its root — aliases unpack; --root is the glob lever:
+# in your repo, from its root — bare `add`, no args, prompts interactively
+# (pick profiles, agents, root, level); anything scriptable below skips the prompt.
+npx github:dohrm/claude-rules add
+
+# aliases unpack; --root is the glob lever:
 npx github:dohrm/claude-rules add rust-api --root apps/api --level gates
 npx github:dohrm/claude-rules add python-api --root apps/api --level gates
 npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
@@ -183,9 +187,13 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
   kit. `--level ratchet` is never the default; `init` then writes `mutate-diff`
   live. `--root <dir>` (alias `--module`) is the glob lever: without it,
   language-glob profiles load repo-wide — that is how 21 rules land on a domain
-  entity. A bare `add` on an existing install keeps its agent set rather than
-  widening to both; pass `--agent` to add a target. Narrowing is `remove`'s job,
-  never a side effect of `add`.
+  entity. `agent` and `product` are never anchored, even when they ride along
+  with other profiles in the same `add --root` call — their rules are one
+  shared repo-root docs tree (`docs/adr/`, `docs/**`), not one per module, so
+  `--root` is silently dropped for them (`doctor` fails if a lock is hand-edited
+  into anchoring them anyway). A bare `add` on an existing install keeps its
+  agent set rather than widening to both; pass `--agent` to add a target.
+  Narrowing is `remove`'s job, never a side effect of `add`.
 - `remove` is the exact inverse: it deletes what each profile emitted and updates
   the lock. It never touches your `justfile`/`lefthook` wiring — delete those
   recipes yourself. Review with `git status` before committing.

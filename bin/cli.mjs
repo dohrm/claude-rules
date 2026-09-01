@@ -56,6 +56,15 @@ const entriesAt = (profile, level) => (registry.profiles[profile] || []).filter(
 // Language-globbing profiles: without --root they load on every matching file in
 // the repo. That is how ops/slo lands on a domain entity. Hint, never block.
 const ROOT_HINT = new Set(['rust', 'ts', 'ts-web', 'ts-node', 'ts-tauri', 'go', 'python', 'godot', 'hexagonal', 'cqrs', 'api', 'backend', 'ops', 'testing', 'react', 'portal-flat', 'portal-http', 'tauri'])
+// The opposite case: every scopable rule in the registry leads its globs with
+// `**/` on purpose, so prefixing them with a module dir still matches anywhere
+// under it (`apps/portal/**/*.rs`). `agent` (docs/adr/) and `product`
+// (docs/**/*.md) are the two exceptions — one shared doc tree for the whole
+// repo, never one per module — so their globs deliberately do NOT lead with
+// `**/`. Scoping them under --root would silently stop matching the repo-root
+// docs/ they actually live in, so --root is never applied to them, no matter
+// what else was requested in the same `add` call.
+const ROOT_FORBID = new Set(['agent', 'product'])
 
 function unpackNames(names) {
   const aliases = registry.aliases || {}
@@ -1036,6 +1045,7 @@ function doctor() {
     if (!existsSync(dir)) bad.push(`module "${dir}" does not exist — [${ps.join(', ')}] are anchored to a path that is not there`)
     else console.log(`  ✓ module ${dir}: ${ps.join(', ')}`)
     for (const p of ps.filter(p => !lock.profiles.includes(p))) bad.push(`module "${dir}" claims "${p}", which is not in the lock's profiles`)
+    for (const p of ps.filter(p => ROOT_FORBID.has(p))) bad.push(`module "${dir}" claims "${p}", whose rules anchor to one shared repo-root docs tree — remove it from that module's list in ${LOCK} (run \`update\` after); ${p} stays repo-wide regardless of --root`)
   }
 
   // ---- 2. what the lock promises vs what is on disk
@@ -1115,43 +1125,107 @@ function doctor() {
   if (fail) process.exit(1)
 }
 
+// `add` EXTENDS the install; it never redefines it. Writing only the new
+// profiles would leave the previous ones on disk but out of the lock —
+// invisible to `update`, and orphaned by `remove all`, which then deletes
+// the lock and leaves no way to find them.
+// `agentsRaw`/`levelName`/`rootDirRaw` are null for "use the flag/lock default";
+// the interactive prompt below passes explicit answers instead of CLI flags.
+async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
+  const requested = unpackNames(requestedRaw)
+  const lock = readLock()
+  const migrated = migrateLegacyLock(lock)
+  const profiles = [...new Set([...migrated.profiles, ...requested])]
+  // Same rule for agents: no explicit choice on an existing install keeps its
+  // set (never silently widen to both); an explicit choice adds a target.
+  // Retired names in an old lock are dropped, not re-emitted.
+  const { kept: locked, dropped } = agentsFromLock(lock)
+  if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
+  const agents = [...new Set([...locked, ...parseAgents(agentsRaw ?? locked.join(','))])]
+  const levels = { ...migrated.levels }
+  for (const p of profiles) {
+    if (requested.includes(p) && levelName) levels[p] = maxLevel(levels[p] || 'rules', levelName)
+    else if (!levels[p]) levels[p] = 'rules'
+  }
+  // --root (alias --module) anchors the profiles named in THIS invocation.
+  // Like the rest of `add` it extends: a profile keeps the roots it already
+  // had, and re-running with a second path adds it rather than moving it.
+  const modules = { ...(lock && lock.modules ? lock.modules : {}) }
+  if (rootDirRaw) {
+    const dir = rootDirRaw.replace(/\/+$/, '')
+    const forbidden = requested.filter(p => ROOT_FORBID.has(p))
+    if (forbidden.length) console.log(`  ! ${forbidden.join(', ')} stay repo-wide — their rules anchor to one shared docs tree, not a module. --root ${dir} was not applied to them.\n`)
+    const scopable = requested.filter(p => !ROOT_FORBID.has(p))
+    modules[dir] = [...new Set([...(modules[dir] || []), ...scopable])]
+    if (!modules[dir].length) delete modules[dir]
+  }
+  const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.values(modules).some(ps => ps.includes(p)))
+  if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
+  if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
+  await install(profiles, ref, agents, modules, levels)
+}
+
+// -------------------------------------------------------------- interactive add
+// A bare `add` in a real terminal, with no flag at all — the "I don't know the
+// flags yet" path. Any flag alongside a missing profile list is a mistake, not
+// an invitation to prompt, so that case still falls through to the usage error.
+// Built on node:readline/promises — no new dependency, matching "the CLI stays
+// dumb": one line of validated input at a time, not an arrow-key menu.
+async function promptAdd() {
+  const { createInterface } = await import('node:readline/promises')
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const names = Object.keys(registry.profiles)
+    console.log('Available profiles:')
+    for (const [i, n] of names.entries()) {
+      const entries = registry.profiles[n]
+      const hint = entries.find(e => e._note)?._note || entries.map(e => e.from).join(', ')
+      console.log(`  ${String(i + 1).padStart(2)}. ${n.padEnd(14)} ${hint}`.slice(0, 140))
+    }
+    if (registry.aliases && Object.keys(registry.aliases).length) {
+      console.log('\nAliases (unpack into several profiles):')
+      for (const [n, ps] of Object.entries(registry.aliases)) console.log(`      ${n.padEnd(14)} → ${ps.join(' ')}`)
+    }
+
+    let requested = []
+    while (!requested.length) {
+      const raw = (await rl.question('\nProfiles to add — comma-separated numbers or names: ')).trim()
+      if (!raw) continue
+      const tokens = raw.split(',').map(s => s.trim()).filter(Boolean)
+      const resolved = tokens.map(t => (/^\d+$/.test(t) ? names[Number(t) - 1] : t))
+      const valid = resolved.map(n => n && (registry.profiles[n] || (registry.aliases || {})[n]) ? n : null)
+      const bad = tokens.filter((_, i) => !valid[i])
+      if (bad.length) { console.log(`  Unknown: ${bad.join(', ')} — try again.`); continue }
+      requested = valid
+    }
+
+    const agentAns = (await rl.question('Agents — claude, cursor, or both [both]: ')).trim().toLowerCase()
+    const agentsRaw = !agentAns || agentAns === 'both' ? KNOWN_AGENTS.join(',') : agentAns
+
+    const rootDirRaw = (await rl.question('Root directory to scope these profiles to (blank = repo-wide): ')).trim() || null
+
+    const levelAns = (await rl.question(`Level — ${LEVELS.join('/')} [rules]: `)).trim().toLowerCase()
+    const levelName = LEVELS.includes(levelAns) ? levelAns : null
+    if (levelAns && !levelName) console.log(`  Unknown level "${levelAns}" — defaulting to rules.`)
+
+    return { requestedRaw: requested, agentsRaw, rootDirRaw, levelName }
+  } finally {
+    rl.close()
+  }
+}
+
 // ----------------------------------------------------------------------- main
 async function main() {
   switch (cmd) {
     case 'add': {
+      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlag
+      if (!positional.length && bare && process.stdin.isTTY) {
+        const answers = await promptAdd()
+        await runAdd({ ...answers, ref: registry.defaultRef })
+        break
+      }
       if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
-      // `add` EXTENDS the install; it never redefines it. Writing only the new
-      // profiles would leave the previous ones on disk but out of the lock —
-      // invisible to `update`, and orphaned by `remove all`, which then deletes
-      // the lock and leaves no way to find them.
-      const requested = unpackNames(positional)
-      const wantLevel = parseLevel()
-      const lock = readLock()
-      const migrated = migrateLegacyLock(lock)
-      const profiles = [...new Set([...migrated.profiles, ...requested])]
-      // Same rule for agents: no --agent on an existing install keeps its set
-      // (never silently widen to both); an explicit --agent adds a target.
-      // Retired names in an old lock are dropped, not re-emitted.
-      const { kept: locked, dropped } = agentsFromLock(lock)
-      if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
-      const agents = [...new Set([...locked, ...parseAgents(locked.join(','))])]
-      const levels = { ...migrated.levels }
-      for (const p of profiles) {
-        if (requested.includes(p) && wantLevel) levels[p] = maxLevel(levels[p] || 'rules', wantLevel)
-        else if (!levels[p]) levels[p] = 'rules'
-      }
-      // --root (alias --module) anchors the profiles named in THIS invocation.
-      // Like the rest of `add` it extends: a profile keeps the roots it already
-      // had, and re-running with a second path adds it rather than moving it.
-      const modules = { ...(lock && lock.modules ? lock.modules : {}) }
-      if (scopeFlag) {
-        const dir = scopeFlag.replace(/\/+$/, '')
-        modules[dir] = [...new Set([...(modules[dir] || []), ...requested])]
-      }
-      const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.values(modules).some(ps => ps.includes(p)))
-      if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
-      if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-      await install(profiles, refFlag || registry.defaultRef, agents, modules, levels)
+      await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag, ref: refFlag || registry.defaultRef })
       break
     }
     case 'update': {
@@ -1190,6 +1264,7 @@ async function main() {
         + '                                   install/pin profiles (default: both agents, --level rules)\n'
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
+        + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
