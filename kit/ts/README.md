@@ -32,6 +32,16 @@ Every recipe line is `npm exec --no-install`. The gate is only worth its
 exit code if it ran the binaries from the committed lock (`npm ci` on
 the runner, then these recipes). Do not wrap them in `npm run lint`.
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| Node.js >= 18 + npm | `brew install node` | your distro's package manager, or [nvm](https://github.com/nvm-sh/nvm) | `winget install OpenJS.NodeJS.LTS` (or `scoop install nodejs`) |
+
+Everything else (`eslint`, `typescript`, `vitest`, `stryker`) is an npm
+devDependency — see below, not a separate system install. `ts-web` /
+`ts-node` / `ts-tauri` need nothing more than this.
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by | Adapt |

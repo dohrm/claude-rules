@@ -26,6 +26,15 @@ There is no Tier 3. Godot has no production-grade mutation tool.
 `check-no-new-gd.sh` stays a script: it is a question about which files
 *exist*, not about code. Everything about *code* is an analyzer.
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| .NET SDK | `brew install dotnet-sdk` | your distro's package, or the [dotnet-install script](https://dotnet.microsoft.com/download) | `winget install Microsoft.DotNet.SDK.8` |
+| Godot 4, **.NET build** | download from [godotengine.org/download](https://godotengine.org/download) — package managers rarely carry the .NET build | same | same |
+| Export templates | inside the editor: `Editor > Manage Export Templates`, matching the editor's version | same | same |
+| A `dotnet test` runner (e.g. GDUnit4) | add the NuGet package to the game `.csproj` | same | same |
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by | Adapt |

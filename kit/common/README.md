@@ -29,6 +29,19 @@ installed. An import can be updated. So:
 Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings in
 1.27).
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| `just` >= 1.27 | `brew install just` | official script: `curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \| bash -s -- --to ~/.local/bin` (a distro package may be older than 1.27 — check) | `winget install --id Casey.Just.Just` (or `scoop install just`) |
+| `lefthook` | `brew install lefthook` | `brew install lefthook` (Linuxbrew), or `npm install -g lefthook` | `scoop install lefthook`, or `npm install -g lefthook` |
+| Node.js >= 18 | `brew install node` | your distro's package manager, or [nvm](https://github.com/nvm-sh/nvm) | `winget install OpenJS.NodeJS.LTS` (or `scoop install nodejs`) |
+
+Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
+`docs-check.mjs`, `review-guard.mjs` and `worktree-status.mjs` all run on
+it (that's the reason they're Node rather than bash — see the parent
+`kit/README.md`), and `dup-check` / `rules-check` shell out to `npx`.
+
 ## What is where
 
 | File | Holds |

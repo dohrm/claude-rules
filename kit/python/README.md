@@ -30,6 +30,15 @@ runner and keep the rest.
 ruff pass. Tests stay free of `S101` (assert) via
 `[tool.ruff.lint.per-file-ignores]`.
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| `uv` | `brew install uv` | official script: `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `winget install astral-sh.uv` (or `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"`) |
+
+Everything else (`ruff`, `mypy`, `pytest`, `pip-audit`, `deptry`, `mutmut`)
+is a `uv`-managed dependency group — see below, not a separate system install.
+
 ## Configs — merge once, then they are yours
 
 | File | Destination | Read by | Adapt |

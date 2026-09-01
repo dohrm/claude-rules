@@ -17,6 +17,10 @@ derives `ts_web_dir` from the lock. Pair with profiles `react` and
 | `just ts-web-check` | 2 | pre-push, `just check` | ts-web-lint · `tsc --noEmit` · `vitest run` |
 | `just ts-web-mutate` | 3 | coherent block, never a hook | `stryker run --incremental` |
 
+## Requirements
+
+Same as `kit/ts` (Node.js >= 18 + npm) — see its Requirements section.
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by |

@@ -21,6 +21,11 @@ The Rust host is `just rust-check`. This recipe does not run
 | `just ts-tauri-check` | 2 | pre-push, `just check` | ts-tauri-lint · `tsc --noEmit` · `vitest run` |
 | `just ts-tauri-mutate` | 3 | coherent block, never a hook | `stryker run --incremental` |
 
+## Requirements
+
+Same as `kit/ts` (Node.js >= 18 + npm) — see its Requirements section. The
+Rust host's requirements are `kit/rust/README.md`'s.
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by |

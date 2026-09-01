@@ -17,6 +17,10 @@ derives `ts_node_dir` from the lock. Pair with profiles `api` +
 | `just ts-node-check` | 2 | pre-push, `just check` | ts-node-lint · `tsc --noEmit` · `vitest run` |
 | `just ts-node-mutate` | 3 | coherent block, never a hook | `stryker run --incremental` |
 
+## Requirements
+
+Same as `kit/ts` (Node.js >= 18 + npm) — see its Requirements section.
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by |

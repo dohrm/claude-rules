@@ -10,6 +10,17 @@ The doctrine (why these gates, the tiers) lives in `../rules/*/quality-gates.md`
 This directory is its executable counterpart — reference implementations you
 copy and adapt.
 
+## Requirements
+
+Each toolchain module's README carries its own **Requirements** section: the
+binaries to install (rustup, go, uv, node, just, lefthook, cargo-deny,
+golangci-lint, govulncheck, the .NET SDK, Godot's own download…) with the
+install command for macOS / Linux / Windows. Check there before wiring
+anything — `common/README.md` first (just, lefthook, Node: needed whatever
+profile you install), then the tech(s) in play: `rust/README.md`,
+`go/README.md`, `python/README.md`, `ts/README.md` (`ts-web` / `ts-node` /
+`ts-tauri` point back to it), `godot/README.md`.
+
 **Cross-platform (Windows/mac/linux):** every default command is a cross-platform
 binary — `just`, `lefthook`, `cargo`/`clippy`/`deny`/`machete`, `npm`, `go`, `uv`. A
 repo handed to a Windows client runs `just check` unchanged. The **one** exception

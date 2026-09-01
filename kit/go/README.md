@@ -28,6 +28,19 @@ need a second lint pass.
 Needs on the machine and the runner: `go`, `golangci-lint` **v2**,
 `govulncheck`.
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| `go` | `brew install go` | your distro's package, or the [official tarball](https://go.dev/dl/) | `winget install GoLang.Go` |
+
+Once `go` is on the `PATH`, the rest is one command everywhere:
+
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by | Adapt |

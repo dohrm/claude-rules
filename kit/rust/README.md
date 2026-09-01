@@ -24,6 +24,20 @@ compile. `unwrap` / `expect` are denied on lib and bins only — tests stay
 free. That is why the second clippy pass is `--lib --bins`, not
 `--all-targets`.
 
+## Requirements
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| Rust toolchain | `brew install rustup-init && rustup-init` | official script: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install Rustlang.Rustup` |
+
+Once `rustup`/`cargo` are on the `PATH`, the rest is one command everywhere:
+
+```bash
+rustup component add rustfmt clippy
+cargo install cargo-deny cargo-machete
+cargo install cargo-mutants   # Tier 3 only
+```
+
 ## Configs — copy once, then they are yours
 
 | File | Destination | Read by | Adapt |
