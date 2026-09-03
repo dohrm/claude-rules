@@ -141,14 +141,22 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    dirty, phase worklist, verdict, `## Blocked on the human`). It reports and never
    gates, so it belongs in neither `check` nor a hook.
    Doctrine: `../rules/agent/autonomy.md` ("One tree, one writer").
-7. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
+7. **Run summaries** (only if you use `/loop-setup`): nothing to move — the script
+   ships with the library like the rest of `common/`. `just publish-summary
+   slug=<slug> status=<COMPLETED|BLOCKED|BUDGET_EXHAUSTED>` is the loop's own last
+   step (see `../skills/loop-setup/SKILL.md`) and is best-effort there — a host
+   without this kit wired just skips it, the loop still stops and escalates from
+   `loop.md` alone. Writes `.work/<slug>/SUMMARY.md` next to the state file it
+   read. Reports and never gates, so — like `status` — it belongs in neither
+   `check` nor a hook.
+8. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
    into `.claude/settings.json` — or the cursor snippet beside it.
    This is the **harness layer**, and the split matters: `lefthook` is the git floor (portable,
    every agent), the hooks catch what git never gets to see — the `--no-verify`, the
    `lefthook uninstall`, the `rm` on the review report. Both guards fail open and
    neither makes drift impossible; they make it expensive and loud. Read
    `common/hooks/README.md` for what it does *not* guarantee before relying on it.
-8. **Generated code** (only if present): a Rust generated *member* crate — swap
+9. **Generated code** (only if present): a Rust generated *member* crate — swap
    the fmt command in `rust-check` for `rust-fmt.sh` + add `#![allow(clippy::all)]`
    to that crate (clippy lints path-dep members; `--exclude` won't silence them).
    TS: `globalIgnores([... 'src/api/generated', '**/*.gen.ts'])`.
@@ -166,6 +174,7 @@ kit/
 │   ├── review-prompt.md        # the headless reviewer's prompt (`just code-review`, any CLI)
 │   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
 │   ├── worktree-status.mjs     # OPT-IN report, never a gate: every worktree at a glance — `just status`
+│   ├── publish-summary.mjs     # OPT-IN report, never a gate: one loop's terminal state → SUMMARY.md
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
 │       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest

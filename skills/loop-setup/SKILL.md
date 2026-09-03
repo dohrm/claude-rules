@@ -64,7 +64,7 @@ Emit the invocation for the user's host (ask which if unclear). Same cadre, diff
 | **Codex CLI** (≥ 0.128) | `/goal <objective + done-command + budget>` | Codex plans/tests internally — feed it the bounded objective and the done-command; the budget/cap is what you add |
 | **Cursor** | a stop-hook loop (`loop_limit`) or an Automation | heavier: emit the hook config alongside the prompt; `loop_limit` = your iteration cap |
 
-Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail).
+Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail — plus `.work/<slug>/SUMMARY.md` once it stops, if `just publish-summary` is wired).
 
 <loop-file-template>
 <!-- `.work/<slug>/loop.md`. Working memory: rewritten every turn, committed,
@@ -123,10 +123,13 @@ This turn:
 - an item needs a decision, an access, or a scope change you don't have.
 
 On any of these: stop, write the reason and current state under `## Blocked on the human`, and surface it.
+
+If `just publish-summary` is available (this repo may not have `kit/common` wired), run it now — `status=COMPLETED` on the Done-check path above, `status=BLOCKED` or `status=BUDGET_EXHAUSTED` on the stop-and-escalate path — best-effort: if the recipe or `just` itself is missing, skip it silently and stop as above regardless.
 </loop-prompt-template>
 
 ## Rules
 
 - Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point.
 - One state file under `.work/<slug>/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
+- `.work/<slug>/SUMMARY.md` (if `just publish-summary` is wired) is a terminal snapshot, not a second state file — the loop stops and escalates from `loop.md`/the worklist alone, with or without it.
 - Plan mode: writing `.work/*` is allowed.

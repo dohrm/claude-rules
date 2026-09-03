@@ -564,3 +564,183 @@ test('worktree-status: an unknown base is a missing column, not a crash', () => 
     assert.match(r.out, /—/, 'the ahead count is unknown, and says so')
   })
 })
+
+// ── publish-summary ──────────────────────────────────────────────────────────
+// The per-loop counterpart of worktree-status: one worktree, once, at the moment a
+// loop stops. What gets pinned here: it resolves the same loop.md-then-newest-worklist
+// file worktree-status already sorts by, it reports mechanically (nothing it prints is
+// LLM-authored), a bad run never corrupts a prior SUMMARY.md, and status is enforced
+// even when called directly (the recipe's `case` guard is bypassed here on purpose).
+const PUBLISH_SUMMARY = join(REPO, 'kit', 'common', 'publish-summary.mjs')
+
+/** A `.work/<slug>/loop.md`, matching skills/loop-setup's `<loop-file-template>`. */
+const loopMd = ({
+  objective = 'ship the thing',
+  cap = '20 turns',
+  budget = '200k tokens',
+  items = ['- [x] step one', '- [ ] step two'],
+  log = ['- turn 1: wired the client'],
+  blocked = [],
+} = {}) =>
+  `# Loop — ${objective}\n\n`
+  + `- **Objective (bounded)**: ${objective}\n`
+  + '- **Done-command**: `npm test`\n'
+  + '- **Type**: closed\n\n'
+  + '## Guardrails\n\n'
+  + `- **Iteration cap**: ${cap}\n`
+  + `- **Token budget**: ${budget}\n`
+  + '- **Escalate when**: cap/budget hit\n'
+  + '- **Out of scope**: nothing else\n\n'
+  + '## Remaining work\n\n'
+  + `${items.join('\n')}\n\n`
+  + '## Log\n\n'
+  + `${(log.length ? log : ['- <turn>: <win or dead end>']).join('\n')}\n\n`
+  + '## Blocked on the human\n\n'
+  + `${(blocked.length ? blocked.map((b) => `- ${b}`) : ['- <blocker>']).join('\n')}\n`
+
+test('publish-summary: a missing slug is a usage error', () => {
+  withTmpRepo((dir) => {
+    const r = run(PUBLISH_SUMMARY, [], dir)
+    assert.equal(r.status, 2)
+    assert.match(r.out, /missing slug/)
+  })
+})
+
+test('publish-summary: an unknown status is rejected, by name', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/loop.md', loopMd())
+    const r = run(PUBLISH_SUMMARY, ['demo', 'DONE'], dir)
+    assert.equal(r.status, 2)
+    assert.match(r.out, /unknown status: DONE/)
+  })
+})
+
+test('publish-summary: no .work/<slug>/ directory is a usage error', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    const r = run(PUBLISH_SUMMARY, ['ghost', 'COMPLETED'], dir)
+    assert.equal(r.status, 2)
+    assert.match(r.out, /no \.work\/ghost\//)
+  })
+})
+
+test('publish-summary: a slug dir with no loop.md and no tasks/ is a usage error', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/empty/PLAN.md', '# Plan\n')
+    const r = run(PUBLISH_SUMMARY, ['empty', 'COMPLETED'], dir)
+    assert.equal(r.status, 2)
+    assert.match(r.out, /no loop\.md or tasks/)
+  })
+})
+
+test('publish-summary: loop.md happy path — status, objective, guardrails, checklist, blocked all land', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/loop.md', loopMd({
+      items: ['- [x] step one', '- [ ] step two'],
+      log: ['- turn 1: wired the client', '- turn 2: fixed the flaky test'],
+      blocked: ['the API key is missing'],
+    }))
+    const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /\*\*Status\*\*: COMPLETED/)
+    assert.match(summary, /\*\*Objective\*\*: ship the thing/)
+    assert.match(summary, /\*\*Iteration cap\*\*: 20 turns/)
+    assert.match(summary, /\*\*Token budget\*\*: 200k tokens/)
+    assert.match(summary, /## Remaining work \(1\/2 done\)/)
+    assert.match(summary, /- \[x\] step one/)
+    assert.match(summary, /- \[ \] step two/)
+    assert.match(summary, /- the API key is missing/)
+    assert.match(summary, /\*\*Turns logged\*\*: 2/)
+  })
+})
+
+test('publish-summary: tasks/NN-*.md is used when there is no loop.md, and the newest NN wins', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/split/tasks/01-first.md', worklist([]))
+    write(dir, '.work/split/tasks/02-split.md', worklist(['need a decision on X']))
+    const r = run(PUBLISH_SUMMARY, ['split', 'BLOCKED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/split/SUMMARY.md'), 'utf8')
+    assert.match(summary, /- need a decision on X/)
+  })
+})
+
+test('publish-summary: an untouched Blocked-on-the-human placeholder prints as none', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/quiet/loop.md', loopMd({ blocked: [] }))
+    const r = run(PUBLISH_SUMMARY, ['quiet', 'COMPLETED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/quiet/SUMMARY.md'), 'utf8')
+    assert.match(summary, /## Blocked on the human\n\n— none —/)
+  })
+})
+
+test('publish-summary: a real diff renders a diffstat line, an unresolvable base renders —', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 2)
+    write(dir, '.work/demo/loop.md', loopMd())
+
+    const withDiff = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED', first], dir)
+    assert.equal(withDiff.status, 0, withDiff.out)
+    let summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /\*\*Diff\*\*: 1 file changed/)
+
+    const noBase = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED', 'origin/does-not-exist'], dir)
+    assert.equal(noBase.status, 0, noBase.out)
+    summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /\*\*Diff\*\*: —/)
+    assert.match(summary, /Ahead of origin\/does-not-exist\*\*: —/)
+  })
+})
+
+test('publish-summary: all three statuses are accepted', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/loop.md', loopMd())
+    for (const status of ['COMPLETED', 'BLOCKED', 'BUDGET_EXHAUSTED']) {
+      const r = run(PUBLISH_SUMMARY, ['demo', status], dir)
+      assert.equal(r.status, 0, `${status}: ${r.out}`)
+      const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+      assert.match(summary, new RegExp(`\\*\\*Status\\*\\*: ${status}`))
+    }
+  })
+})
+
+test('publish-summary: a sprint worklist with no Objective bullet falls back to its title', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/split/tasks/02-split.md', worklist([]))
+    const r = run(PUBLISH_SUMMARY, ['split', 'BLOCKED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/split/SUMMARY.md'), 'utf8')
+    assert.match(summary, /\*\*Objective\*\*: Sprint 02: split — worklist/)
+  })
+})
+
+test('publish-summary: a rejected run never touches a previous SUMMARY.md', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/loop.md', loopMd())
+    write(dir, '.work/demo/SUMMARY.md', 'SENTINEL — do not overwrite\n')
+    const r = run(PUBLISH_SUMMARY, ['demo', 'NOPE'], dir)
+    assert.equal(r.status, 2)
+    assert.equal(readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8'), 'SENTINEL — do not overwrite\n')
+  })
+})
+
+test('publish-summary: an untouched Log placeholder counts as zero turns', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/loop.md', loopMd({ log: [] }))
+    const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /\*\*Turns logged\*\*: 0/)
+  })
+})

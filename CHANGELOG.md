@@ -35,6 +35,25 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`just publish-summary`** (shared `kit/common`) — a per-loop catch-up file
+  for someone running several `/loop-setup` sessions in parallel. Run as the
+  last step of the loop prompt, it reads whichever state file the loop was
+  using (`.work/<slug>/loop.md`, or the newest `.work/<slug>/tasks/NN-*.md`),
+  adds what only git knows — branch, commits ahead of `base`, a one-line
+  diffstat — and writes `.work/<slug>/SUMMARY.md`: objective, guardrails, the
+  remaining-work checklist, and `## Blocked on the human`. Report, not a gate:
+  always exits 0 once there is something to summarize, and `status`
+  (`COMPLETED`/`BLOCKED`/`BUDGET_EXHAUSTED` — the same three-way outcome the
+  loop prompt already ends on) is validated both in the recipe and in the
+  script, since a test calls the script directly.
+
+  **Wiring**: opt-in, like `status` — nothing to move, the script ships with
+  the library. `skills/loop-setup/SKILL.md`'s loop prompt calls it best-effort
+  on either terminal path; a repo without `kit/common` wired just skips that
+  line. `.work/<slug>/` is already committed working memory
+  (`rules/product/documents.md`), and `SUMMARY.md` is now part of it — nothing
+  new to gitignore.
+
 - **Python HTTP API matches the other languages.** `rules/api/python.md` is
   FastAPI + Pydantic v2 (types generate OpenAPI); `rules/hexagonal/python.md`
   is the import graph (`domain/` must not import FastAPI/SQLAlchemy/httpx).

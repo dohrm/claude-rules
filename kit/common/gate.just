@@ -207,6 +207,22 @@ review-guard:
 status:
     node {{kit}}/worktree-status.mjs {{base}}
 
+# ── Run summaries (opt-in) ──────────────────────────────────────────────────
+# The per-loop counterpart to `just status`: that one is read-only across every
+# worktree at a glance, this one is one worktree, once, at the moment a
+# `/loop-setup` run stops — objective met, blocked, or cap/budget exhausted
+# (skills/loop-setup/SKILL.md's `<loop-prompt-template>` three-way outcome,
+# mapped straight onto the three statuses below). Reads `.work/<slug>/loop.md`
+# (or the newest `tasks/NN-*.md`) plus what only git knows — branch, commits
+# ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
+# catching up on a parallel loop means one short file, not the whole state file
+# and its `## Log`. Report, not a gate: always exits 0 once there is something
+# to summarize — `status` is validated here AND inside the script, because a
+# test calls the script directly, past this guard.
+publish-summary slug status base=base:
+    case '{{status}}' in COMPLETED|BLOCKED|BUDGET_EXHAUSTED) ;; *) echo "unknown status: {{status}}" >&2; exit 2 ;; esac
+    node {{kit}}/publish-summary.mjs {{slug}} {{status}} {{base}}
+
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop
 # indicator" from rules/agent/guardrails.md a machine can measure. jscpd is

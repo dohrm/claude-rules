@@ -38,21 +38,22 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 | Node.js >= 18 | `brew install node` | your distro's package manager, or [nvm](https://github.com/nvm-sh/nvm) | `winget install OpenJS.NodeJS.LTS` (or `scoop install nodejs`) |
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
-`docs-check.mjs`, `review-guard.mjs` and `worktree-status.mjs` all run on
-it (that's the reason they're Node rather than bash — see the parent
-`kit/README.md`), and `dup-check` / `rules-check` shell out to `npx`.
+`docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs` and
+`publish-summary.mjs` all run on it (that's the reason they're Node rather
+than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
+shell out to `npx`.
 
 ## What is where
 
 | File | Holds |
 |---|---|
-| `common/gate.just` | `code-review`, `review-guard`, `status`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base` |
+| `common/gate.just` | `code-review`, `review-guard`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base` |
 | `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-3 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
-`worktree-status.mjs`, `review-prompt.md`) ship **in this directory** and are called
+`worktree-status.mjs`, `publish-summary.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
 
