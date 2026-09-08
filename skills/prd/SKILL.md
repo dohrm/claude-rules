@@ -9,7 +9,7 @@ You question the user to produce or extend `docs/PRD.md` using the template belo
 
 1. Explore the repo if needed to understand existing context (`CLAUDE.md`, ADRs, domain glossary, adjacent code). Reuse the project's vocabulary in the PRD and respect architectural decisions already made. If the answer to a question is in the repo, explore instead of asking.
 
-2. If `docs/PRD.md` (or `docs/prd/`) exists, read the spine and the capabilities the brief touches. Cross-check against the incoming brief and only question the deltas. Confront contradictions: *"You'd settled on X, the brief suggests Y — which do we keep?"*. No PRD and no brief → your first question is *"What do you want to frame?"*.
+2. **The brief is `.work/<slug>/intent.md`** when `/interview` left one — read it first, and treat its `## Open questions` as your agenda: those are the questions an interview could not settle, so they are yours to close or to declare out of scope. A brief may also just be what the user typed. If `docs/PRD.md` (or `docs/prd/`) exists, read the spine and the capabilities the brief touches. Cross-check against the incoming brief and only question the deltas. Confront contradictions: *"You'd settled on X, the brief suggests Y — which do we keep?"*. No PRD and no brief → your first question is *"What do you want to frame?"*.
 
    **The PRD is meant to grow — the file is not.** Spine stays stable and one screen; growth is a capability unit (`product/documents.md` — read it for split thresholds and budgets). If the file is past the split, propose the migration before adding:
 
@@ -22,6 +22,12 @@ You question the user to produce or extend `docs/PRD.md` using the template belo
 5. The user validates or corrects section by section. On a correction, re-post only the affected section. Once everything is validated, write it (create `docs/` if needed) and confirm what was written.
 
    **Two shapes** (`product/documents.md`): below the split, everything in `docs/PRD.md`; beyond it, spine + capability table in the index, one file per capability in `docs/prd/NN-<slug>.md`.
+
+6. **Then settle the intent, if there was one.** The capability is now the home of the problem, the outcome and the success criteria, so they leave `.work/<slug>/intent.md`: every question you closed becomes one `## Settled` line pointing at the PRD section or the ADR that now answers it, and the `## Capability` line at the top gets its number. What stays is what is still open.
+
+   If the capability came out under a different name, `git mv` the directory to the capability's slug — `/plan` and `/tasks` will write beside it and there is one `.work/<slug>/` per capability. Nothing else references it yet, so the rename is free now and expensive later.
+
+   An intent whose open list is empty has done its job; it is not deleted here — the whole directory dies when the capability ships (`product/documents.md`).
 
 <prd-template>
 <!-- The SPINE. ~1000 words, each section ~200 max. It is the stable part: new scope

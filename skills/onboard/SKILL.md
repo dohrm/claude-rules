@@ -8,8 +8,10 @@ code. There is not yet a product chain (`docs/PRD.md`, `docs/adr/`, the living
 index). Your job is to see what is there, write that down, and hand off. You are
 not inventing a product and you are not choosing a stack.
 
-`/interview` is the greenfield twin (an idea, little or no code). If this repo
-is empty or the user is starting from a sentence, stop and send them there.
+`/interview` is the framing skill, not the twin of a repo state: send them there
+when the repo is empty, when the user is starting from a sentence, **and when the
+repo already ships and the job is framing one new feature**. This skill installs;
+it frames nothing.
 If `.claude-rules.lock` already exists and the job is upgrading the harness
 (old snippet kit, no `modules` / imported just library), stop and send them
 to `/migrate`.

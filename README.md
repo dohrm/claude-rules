@@ -40,7 +40,7 @@ flowchart LR
 
 | Phase | Command | Produces | Who decides |
 |---|---|---|---|
-| **Frame** | `/interview` → `/prd` | `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
+| **Frame** | `/interview` → `/prd` | `.work/<slug>/intent.md` (what is still open), then `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
 | **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per decision | agent writes `Proposed`, **human accepts** |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
@@ -58,9 +58,10 @@ flowchart LR
 every skill already has (`product/vocabulary.md`); this is the one that changes it.
 
 Nothing forces you through all of it. A library repo installs `rust testing cicd`
-and never runs a product skill; a greenfield product starts at `/interview`.
-An existing install of an older harness is `/migrate` (gap table, then compose
-the lock and justfile) — not `/onboard`.
+and never runs a product skill; a greenfield product starts at `/interview`, and so
+does one new feature on a repo that already ships — `/onboard` wires an existing
+repo onto the workflow, it frames nothing. An existing install of an older harness
+is `/migrate` (gap table, then compose the lock and justfile) — not `/onboard`.
 
 ### Two boundaries the whole library is built around
 
