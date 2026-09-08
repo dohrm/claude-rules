@@ -1,5 +1,6 @@
 ---
 paths:
+  - "docs/adr/**/*.md"
   - "**/docs/adr/**/*.md"
 title: "Writing a Decision Record"
 ---

@@ -20,6 +20,15 @@ base := "origin/main"
 kit           := ".dev/kit/common"
 review_prompt := kit / "review-prompt.md"
 
+# `code-review` (the gate) and `review-with` (ad hoc) drive the SAME `review-<agent>`
+# recipes, so their scratch paths are variables the caller sets rather than literals
+# inside those recipes. They both used to write `.work/prompt.md` and `.work/review.tmp`:
+# an interrupted ad-hoc review left a `review.tmp` that the next `code-review`'s `mv`
+# could promote to a verdict. "One tree, one writer" covered that by convention; two
+# filenames cover it by construction. Internal — there is no reason to override them.
+review_in  := ".work/prompt.md"
+review_out := ".work/review.tmp"
+
 # Folder trust is a gate SEPARATE from the permission flags below, and neither claude
 # nor codex has a CLI flag to skip or pre-seed it inline — it is persisted state, keyed
 # by path, in a file this repo does not own: ~/.claude.json
@@ -65,7 +74,7 @@ reviewer := "claude"
 #   echo 'List every tool available to you, one per line.' | claude -p ...
 review_deny := "Bash,Write,Edit,NotebookEdit,Task,Agent,Artifact,WebFetch,WebSearch,Monitor,Workflow,Skill,ToolSearch,CronCreate,CronDelete,CronList,EnterWorktree,ExitWorktree,LSP,PushNotification,RemoteTrigger,SendMessage,ScheduleWakeup,TaskOutput,TaskStop,ListAgents,ListMcpResourcesTool,ReadMcpResourceTool,WaitForMcpServers,mcp__*"
 review-claude:
-    claude -p --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < .work/prompt.md > .work/review.tmp
+    claude -p --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < {{review_in}} > {{review_out}}
 
 # ── codex ── `codex exec` sandboxes to read-only BY DEFAULT (no writes, no network
 # unless enabled) — passed explicitly anyway so a future default change cannot silently
@@ -74,7 +83,7 @@ review-claude:
 # and "this is context for a prompt I forgot to pass". UNVERIFIED against a live run —
 # smoke-test before relying on it as a gate.
 review-codex:
-    codex exec --sandbox read-only - < .work/prompt.md > .work/review.tmp
+    codex exec --sandbox read-only - < {{review_in}} > {{review_out}}
 
 # ── cursor ── VERIFIED (2026-09-03): `--mode=ask` alone enforces read-only headless,
 # no config file needed at all. `--trust` answers the one-time "do you trust this
@@ -93,7 +102,7 @@ review-codex:
 # unrequested `"allow": ["Shell(ls)"]`), so even fixing the auth split, a repo-shipped
 # copy could not stay a stable, reviewable template.
 review-cursor:
-    cursor-agent -p --mode=ask --trust < .work/prompt.md > .work/review.tmp
+    cursor-agent -p --mode=ask --trust < {{review_in}} > {{review_out}}
 
 # ── agy (Antigravity) ── NOT WIRED. Tested directly (agy 1.0.2, 2026-09-03), not just
 # read from docs: `agy -p --add-dir .` run from THIS repo still operated in a fixed
@@ -153,37 +162,50 @@ review-cursor:
 # recipe name (`just review-{{reviewer}}`) — so it must be validated against the actual
 # set of `review-*` recipes below BEFORE dispatch. Unvalidated, `reviewer=guard` would
 # run `review-guard` (the deterministic checker, not an agent) instead of failing: no
-# fresh `.work/review.tmp` gets written, so the `mv` below promotes whatever stale temp
-# file was already there as if it were a new verdict — a fail-OPEN path in a gate whose
-# entire job is failing closed. Caught by `just review-codex` reviewing this file
-# in anger, not designed in up front.
+# fresh temp gets written, so the `mv` below promotes whatever stale temp file was
+# already there as if it were a new verdict — a fail-OPEN path in a gate whose entire
+# job is failing closed. Caught by `just review-codex` reviewing this file in anger,
+# not designed in up front. Closed twice now: the allowlist rejects the value, and
+# `rm -f {{review_out}}` runs before dispatch, so `mv` either moves a file this run
+# produced or fails and takes the recipe with it. Deleting the TEMP is safe in a way
+# deleting the report is not — a dead CLI still leaves the previous report standing.
 code-review reviewer=reviewer:
-    case '{{reviewer}}' in claude|codex|cursor) ;; *) echo "unknown reviewer: {{reviewer}}" >&2; exit 2 ;; esac
+    case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
-    sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/prompt.md
-    printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/prompt.md
-    git diff {{base}}...HEAD >> .work/prompt.md
+    rm -f {{review_out}}
+    sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
+    printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
+    git diff {{base}}...HEAD >> {{review_in}}
     just review-{{reviewer}}
-    mv .work/review.tmp .work/review-report.md
+    mv {{review_out}} .work/review-report.md
     node {{kit}}/review-guard.mjs
 
 # ── Ad hoc review (opt-in, conversational) ──────────────────────────────────
 # Same prompt, same per-agent recipes, but on demand and non-blocking: no guard, no
 # `review-report.md` — the point is a fresh set of eyes (optionally a DIFFERENT agent
 # than the one that wrote the diff, to shake out same-agent bias) on a specific
-# question, not a push gate. Prints straight to stdout; `.work/prompt.md` and
-# `.work/review.tmp` are still scratch files on disk same as `code-review` (gitignored
-# with the rest of `.work/`) — only `review-report.md`, the one the guard reads, never
-# gets written here.
+# question, not a push gate. Prints straight to stdout, and it writes its OWN scratch
+# pair (`.work/adhoc-*`, gitignored with the rest of `.work/`) rather than the gate's:
+# sharing `.work/review.tmp` meant an ad-hoc run interrupted mid-review left a temp
+# file the next `code-review`'s `mv` could promote to a verdict. Only
+# `review-report.md`, the one the guard reads, is never written here at all.
+#
+# `topic` reaches `printf` as an ARGUMENT (`%s` + `{{quote(topic)}}`), never as the
+# format string and never unquoted. Interpolated raw it was two bugs at once: a `%`
+# or a `\n` in the topic was interpreted instead of emitted, and a `'`, `;` or backtick
+# closed the quote and handed the rest of the topic to the shell. Same reason
+# `{{reviewer}}` goes through `quote()` in the validation line below — it is checked
+# against an allowlist, but the check itself has to survive the value first.
 review-with reviewer=reviewer topic="":
-    case '{{reviewer}}' in claude|codex|cursor) ;; *) echo "unknown reviewer: {{reviewer}}" >&2; exit 2 ;; esac
+    case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
-    sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/prompt.md
-    printf '\n\n=== FOCUS ===\n\n{{topic}}\n' >> .work/prompt.md
-    printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/prompt.md
-    git diff {{base}}...HEAD >> .work/prompt.md
-    just review-{{reviewer}}
-    cat .work/review.tmp
+    rm -f .work/adhoc-review.tmp
+    sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/adhoc-prompt.md
+    printf '\n\n=== FOCUS ===\n\n%s\n' {{quote(topic)}} >> .work/adhoc-prompt.md
+    printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md
+    git diff {{base}}...HEAD >> .work/adhoc-prompt.md
+    just review_in='.work/adhoc-prompt.md' review_out='.work/adhoc-review.tmp' review-{{reviewer}}
+    cat .work/adhoc-review.tmp
 
 # The deterministic half of the review — pure Node, no LLM, milliseconds. THAT is
 # why it can be a hook (pre-push; never pre-commit, the cadence is per push). It

@@ -2,7 +2,7 @@
 // build a throwaway docs/ tree, run the script, assert exit code + message.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
@@ -87,6 +87,82 @@ test('the whole kit library parses, and the root justfile overrides it', { skip:
     assert.match(vars.stdout, /base\s+:= "origin\/trunk"/)
     // The gate scripts are called where they ship — nothing to move into scripts/.
     assert.match(vars.stdout, /review_prompt\s+:= "\.dev\/kit\/common\/review-prompt\.md"/)
+  })
+})
+
+// ------------------------------------------------- the review recipes, no LLM
+// `code-review` and `review-with` share the three `review-<agent>` recipes, so their
+// shell handling is testable without any agent CLI: assemble the library, override
+// `review-claude` in the root justfile with a stub, and assert what lands on disk.
+// These are regressions from a consuming repo, not hypotheticals.
+function withReviewRepo(stub, fn) {
+  withTmpRepo(dir => {
+    const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+    git('init', '-q', '.')
+    git('config', 'user.email', 't@t.t'); git('config', 'user.name', 'T')
+    writeFileSync(join(dir, 'a.txt'), 'x\n')
+    git('add', '-A'); git('commit', '-q', '-m', 'init')
+
+    mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
+    for (const f of ['gate.just', 'review-prompt.md'])
+      writeFileSync(join(dir, '.dev/kit/common', f), readFileSync(join(REPO, 'kit/common', f), 'utf8'))
+    // `base := "HEAD"` keeps `git diff {{base}}...HEAD` valid with one commit and no remote.
+    writeFileSync(join(dir, 'justfile'),
+      'set allow-duplicate-recipes := true\nset allow-duplicate-variables := true\n'
+      + "import '.dev/kit/common/gate.just'\nbase := \"HEAD\"\n" + stub)
+    fn(dir, (...args) => spawnSync('just', args, { cwd: dir, encoding: 'utf8' }))
+  })
+}
+const COPY_STUB = 'review-claude:\n    cp {{review_in}} {{review_out}}\n'
+
+test('review-with: the topic reaches printf as data, never as a format string or shell words',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(COPY_STUB, (dir, just) => {
+    // Two bugs in one line, both reproduced against the pre-fix recipe: `%s`/`%n` were
+    // eaten by printf's FORMAT argument, and a topic that balances its quotes closes
+    // the shell quote and runs what follows — `touch PWNED` did execute.
+    const topic = "50%s%n of it x'; touch PWNED; echo '"
+    const r = just('review-with', 'claude', topic)
+    assert.equal(r.status, 0, r.stderr)
+
+    const prompt = readFileSync(join(dir, '.work/adhoc-prompt.md'), 'utf8')
+    assert.match(prompt, /=== FOCUS ===/)
+    assert.ok(prompt.includes(topic), `the topic must be emitted verbatim, got:\n${prompt.slice(-400)}`)
+    assert.ok(!existsSync(join(dir, 'PWNED')), 'a topic must never reach the shell')
+  })
+})
+
+test('review-with keeps its own scratch pair: an ad-hoc run cannot leave the gate a temp file',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(COPY_STUB, (dir, just) => {
+    assert.equal(just('review-with', 'claude', 'anything').status, 0)
+    assert.ok(existsSync(join(dir, '.work/adhoc-review.tmp')), 'the ad-hoc output is its own file')
+    assert.ok(!existsSync(join(dir, '.work/review.tmp')),
+      "an ad-hoc review must not write the gate's temp — that is what code-review's mv promotes")
+  })
+})
+
+test('code-review clears its temp before dispatch, so mv can never promote a stale verdict',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  // A reviewer recipe that exits 0 without writing: the pre-fix `mv` promoted whatever
+  // temp file was already on disk as if this run had produced it.
+  withReviewRepo('review-claude:\n    @true\n', (dir, just) => {
+    mkdirSync(join(dir, '.work'), { recursive: true })
+    writeFileSync(join(dir, '.work/review.tmp'), 'REVIEWED: deadbeef\nVERDICT: CLEAN\n')
+
+    const r = just('code-review', 'claude')
+    assert.notEqual(r.status, 0, 'a review that produced nothing must fail, not pass a stale file')
+    assert.ok(!existsSync(join(dir, '.work/review-report.md')), 'no verdict may be promoted')
+  })
+})
+
+test('code-review validates the reviewer through quote(), so the check survives the value',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(COPY_STUB, (dir, just) => {
+    const r = just('code-review', "x'; touch PWNED2; #")
+    assert.equal(r.status, 2, r.stderr)
+    assert.match(r.stdout + r.stderr, /unknown reviewer/)
+    assert.ok(!existsSync(join(dir, 'PWNED2')), 'the validation line must not evaluate its own input')
   })
 })
 

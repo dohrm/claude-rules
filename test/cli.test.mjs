@@ -603,7 +603,11 @@ test('--root never anchors agent or product: their docs are one shared repo-root
     assert.match(r.stdout, /agent, product stay repo-wide/)
     assert.deepEqual(lockOf(dir).modules, { 'apps/portal': ['rust'] })
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/portal\/\*\*\/\*\.rs"/)
-    assert.match(read(dir, '.claude/rules/agent/decision-records.md'), /- "\*\*\/docs\/adr\/\*\*\/\*\.md"/, 'agent must stay unscoped')
+    // Both spellings survive: the unprefixed one is what guarantees a repo-root
+    // docs/adr/ matches on a loader that does not treat `**/` as zero segments.
+    const adr = read(dir, '.claude/rules/agent/decision-records.md')
+    assert.match(adr, /- "docs\/adr\/\*\*\/\*\.md"/, 'the unprefixed path must survive')
+    assert.match(adr, /- "\*\*\/docs\/adr\/\*\*\/\*\.md"/, 'agent must stay unscoped')
     assert.match(read(dir, '.claude/rules/product/documents.md'), /- "docs\/\*\*\/\*\.md"/, 'product must stay unscoped')
   })
 })

@@ -24,8 +24,24 @@ const missing = (cmd, args) => {
   return Boolean(r.error) || r.status !== 0
 }
 
+// `dotnet --version` reports the SDK; `dotnet test` needs the RUNTIME the witness
+// targets to launch its testhost. A machine with only a newer runtime (SDK 10, no 8)
+// turned a local run red with "You must install or update .NET" — neither a defect in
+// the kit nor an honest skip. The major comes from the fixture so this follows it, and
+// the GODOT_GATES=1 throw below still makes it a red CI job (the godot job pins
+// dotnet-version 8.0.x).
+const witnessMajor = (readFileSync(join(FIXTURE, 'GateProbe.csproj'), 'utf8')
+  .match(/<TargetFramework>net(\d+)\./) || [])[1]
+const missingRuntime = () => {
+  const r = spawnSync('dotnet', ['--list-runtimes'], { encoding: 'utf8' })
+  if (r.error || r.status !== 0) return true
+  return !new RegExp(String.raw`^Microsoft\.NETCore\.App ${witnessMajor}\.`, 'm').test(r.stdout)
+}
+
 const whyMissing = missing('just', ['--version']) ? 'just not installed'
   : missing('dotnet', ['--version']) ? 'dotnet not installed'
+  : !witnessMajor ? 'cannot read the witness TargetFramework'
+  : missingRuntime() ? `the .NET ${witnessMajor} runtime the witness targets is not installed`
   : false
 
 if (process.env.GODOT_GATES === '1' && whyMissing) {
