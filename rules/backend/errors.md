@@ -9,6 +9,10 @@ title: "Backend — API Error Contract (problem+json)"
 
 Every HTTP error crossing the wire uses **RFC 9457 `application/problem+json`**. One shape, everywhere — the frontend and any consumer parse errors once.
 
+This rule stays on every backend language glob **on purpose**, not by omission: a
+typed domain error is defined in domain code, so the boundary it maps to is
+relevant there and not only in the HTTP adapter.
+
 ## The shape
 
 ```json
@@ -36,11 +40,3 @@ Every HTTP error crossing the wire uses **RFC 9457 `application/problem+json`**.
 - A `500` carries a generic `title`/`detail` + the correlation id — the cause lives in the logs, not the response.
 - Domain errors are typed at the boundary (see `hexagonal` — ports use typed errors); the mapping to HTTP happens once, in the adapter layer.
 - Set the `Content-Type: application/problem+json` header.
-
-## Checklist
-
-- [ ] A single error-mapping layer produces every error response
-- [ ] Errors are categorized to the right status, not defaulted to 400/500
-- [ ] No stack trace / SQL / secret ever reaches `detail`
-- [ ] 5xx responses carry a correlation id also present in the logs
-- [ ] `Content-Type` is `application/problem+json`

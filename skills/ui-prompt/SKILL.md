@@ -30,7 +30,7 @@ Build the prompt per `<prompt-template>`, then adapt it to the target (see Targe
 - **Extract, don't dump.** Pull only the tokens and states that touch THIS screen. A checkout doesn't need the marketing typography scale.
 - **Concrete values.** Real hex, real font names, real px — copied from `DESIGN.md`, not "the primary color".
 - **Design the unhappy paths.** Carry this screen's empty/loading/error/success from `EXPERIENCE.md` into the prompt; a generator left alone builds only the happy path.
-- **Carry the guardrails.** Fold in the relevant anti-slop from both docs as explicit "do NOT" lines — generators regress to defaults (purple gradients, centered-everything, system-ui) unless told not to.
+- **Carry the guardrails.** Copy `docs/DESIGN.md` § *Anti-slop* verbatim as explicit "do NOT" lines, plus the state and interaction rules EXPERIENCE.md names for this screen — generators regress to defaults unless told not to, and they obey a named hex, not "avoid gradients".
 - **Match the target's tech.** v0 → React + Tailwind + shadcn; Artifacts → self-contained HTML/React, no external CDN; etc. Never ask a target for something it can't do.
 
 ### 4. Deliver
@@ -48,7 +48,6 @@ Output the finished prompt in ONE fenced block, ready to copy — this is the de
 ## Anti-slop (fold the relevant lines into every prompt as explicit constraints)
 
 - **No happy-path-only.** The prompt must name empty/loading/error states or the generator skips them.
-- **No default-generator look.** Explicitly forbid: purple/violet gradient, centered-everything, `system-ui`/`-apple-system` as display font, bubble radius everywhere, gradient CTA, 3-col colored-circle-icons — restate the concrete tokens instead.
 - **No token drift.** Pin exact hex/fonts/spacing so the generator can't "improve" the palette.
 - **No whole-doc paste.** If the prompt is longer than the screen needs, it's wrong — cut to what this screen uses.
 - **No cross-target asks.** Don't request server logic from a static-mockup target, or external fonts from Artifacts.

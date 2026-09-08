@@ -4,7 +4,6 @@ paths:
   - "**/*.go"
   - "**/*.py"
   - "**/*.ts"
-  - "**/*.tsx"
 title: "Testing — Contracts Between Services"
 ---
 
@@ -64,12 +63,3 @@ The same rule applies anywhere two deployables agree on a shape:
 - **Node** — `fastify.swagger()` in a test, diffed against the committed spec.
 - **Frontend** — regenerate with `generate:api:file` in CI and fail on a non-empty
   `git diff` under `src/api/generated`.
-
-## Checklist
-
-- [ ] The emitted OpenAPI spec is committed and a gate fails on an undeclared diff
-- [ ] The consumer's client is generated, never hand-written
-- [ ] CI regenerates the client against the producer's fresh spec
-- [ ] Breaking shape changes carry a deprecation window or a recorded decision
-- [ ] Event consumers tolerate unknown fields
-- [ ] Migrations are tested against both the old and the new code

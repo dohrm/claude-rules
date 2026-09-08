@@ -75,13 +75,3 @@ and the retry must be logged and counted — never silent.
 - **TS** — Vitest/Jest with React Testing Library: query by role and accessible
   name, never by class or test-id-of-convenience. `userEvent` over `fireEvent`;
   fake timers over sleeps; MSW at the network boundary rather than mocking `fetch`.
-
-## Checklist
-
-- [ ] The failure this test catches is one a user would notice
-- [ ] It could not have been caught one level lower
-- [ ] Name states the behavior; one behavior per test
-- [ ] No sleep, no real clock, no cross-test shared state
-- [ ] Asserts the outcome, not the calls
-- [ ] Error paths covered, not just the happy path
-- [ ] Any flake is quarantined with an issue and a deletion date

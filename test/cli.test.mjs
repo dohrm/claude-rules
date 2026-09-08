@@ -608,6 +608,28 @@ test('--root never anchors agent or product: their docs are one shared repo-root
   })
 })
 
+// The same rule at glob granularity, for a profile ROOT_FORBID cannot cover: `ops`
+// legitimately anchors ops/delivery.md to a module, but ops/slo.md also names the
+// shared docs/ tree — anchoring THAT glob makes the rule match nothing.
+test('--root leaves a shared docs/ glob unanchored while anchoring its siblings', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'ops', '--agent', 'claude,cursor', '--root', 'apps/api'], dir))
+
+    const slo = read(dir, '.claude/rules/ops/slo.md')
+    assert.match(slo, /- "\*\*\/docs\/\*\*\/\*\.md"/, 'the docs/ glob must stay repo-wide')
+    assert.match(slo, /- "apps\/api\/\*\*\/\*slo\*"/, 'its non-docs siblings must still anchor')
+    assert.doesNotMatch(slo, /apps\/api\/\*\*\/docs/, 'no anchored docs/ glob')
+
+    // and the same through the Cursor transform, which renames the key
+    const mdc = read(dir, '.cursor/rules/ops/slo.mdc')
+    assert.match(mdc, /- "\*\*\/docs\/\*\*\/\*\.md"/)
+    assert.match(mdc, /- "apps\/api\/\*\*\/\*alert\*"/)
+
+    // a profile with no docs/ glob is unaffected
+    assert.match(read(dir, '.claude/rules/ops/delivery.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
+  })
+})
+
 test('doctor fails when a lock has agent or product wrongly anchored to a module', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'agent', '--level', 'gates', '--agent', 'claude', '--module', 'apps/portal'], dir))

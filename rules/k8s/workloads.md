@@ -59,7 +59,7 @@ The graceful path in `backend/health.md` only works if the manifest cooperates:
   a user waits on, and a `PodDisruptionBudget` so a node drain cannot take them all.
 - **Topology spread across nodes** (and zones, where they exist) — three replicas on one
   node is one replica with extra cost.
-- **Migrations are their own step, before the rollout** (`ops/delivery.md`): a `Job` (or
+- **Migrations are their own step, before the rollout** (`ops/migrations.md`): a `Job` (or
   a Helm pre-upgrade hook), never an init container on every pod and never at app boot.
 - HPA scales on the signal that actually saturates — usually a queue depth or a
   concurrency metric, rarely CPU. And **HPA on CPU with a CPU limit** is a feedback
@@ -85,15 +85,3 @@ The graceful path in `backend/health.md` only works if the manifest cooperates:
   a slow run overlap itself.
 - A CronJob that fails silently is the failure mode: expose the **last-success**
   timestamp (`ops/observability.md`) and alert on staleness, not on the pod.
-
-## Checklist
-
-- [ ] Image pinned (digest preferred); no `:latest`
-- [ ] Requests set on every container; memory limit = request; CPU limit justified or absent
-- [ ] Readiness/liveness point at the right endpoints; liveness independent of dependencies
-- [ ] `terminationGracePeriodSeconds` exceeds the drain timeout; `preStop` sleep present
-- [ ] `maxUnavailable: 0`, ≥ 2 replicas, PDB, topology spread
-- [ ] Migrations run as a Job before the rollout, not at boot
-- [ ] Config/secrets external, validated at startup, pod template checksummed
-- [ ] One namespace per environment, with quotas
-- [ ] Jobs bounded (backoff, deadline, history) and monitored on last success

@@ -27,13 +27,12 @@ record. One file per capability (`.work/<slug>/PLAN.md`) is enough at this scale
 the unit/index split above exists for documents that must stay readable for the
 life of the project, which this one no longer is.
 
-Below the threshold, one file is right — a directory for three phases is ceremony.
-The split is a mechanical migration when the threshold arrives, not a decision to
-agonise over.
+Below the threshold, one file is right — a directory for three phases is ceremony,
+and the split is a mechanical migration, not a decision to agonise over.
 
-The numbers here are **defaults, not law**. A repo whose document legitimately needs
-a different budget declares it once in `.docs-budgets.json` at its root. Read that
-file before writing: where it exists, it wins over this table.
+The numbers are **defaults, not law**: a repo declares its own once in
+`.docs-budgets.json` at the root, and where that file exists it wins over this
+table. Read it before writing.
 
 ```bash
 just docs-check     # index ↔ units (fail); budgets warn unless --strict

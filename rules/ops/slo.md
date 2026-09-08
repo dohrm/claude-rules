@@ -1,10 +1,9 @@
 ---
 paths:
-  - "**/*.rs"
-  - "**/*.go"
-  - "**/*.py"
-  - "**/*.ts"
-  - "**/*.tsx"
+  - "**/docs/**/*.md"
+  - "**/*slo*"
+  - "**/*alert*"
+  - "**/*.rules.{yml,yaml}"
 title: "Ops — SLOs, Error Budgets & Alerting"
 ---
 
@@ -64,7 +63,7 @@ explicitly bought.
   single time it fires.
 - **Page only for user-visible and actionable-now.** Everything else is a ticket. A
   page at 3 a.m. that resolves itself is a bug in the alert.
-- **An alert nobody acted on in six months is deleted.** Alert fatigue is not a
+- **An alert nobody acted on in six months is deleted** — deleted, not muted. Alert fatigue is not a
   personal failing — it is the predictable result of a queue of things that cry wolf,
   and it costs the credibility of the alerts that work.
 
@@ -80,14 +79,3 @@ explicitly bought.
   synchronously is a promise made with someone else's money.
 - **Review the numbers on a schedule.** An SLO nobody has looked at in a year
   describes a system that no longer exists.
-
-## Checklist
-
-- [ ] 1–3 SLIs per service, good/valid ratios, measured where the user is
-- [ ] Each SLO's target is justified against the product and recorded in an ADR
-- [ ] An error budget policy exists, agreed by a human, with a consequence
-- [ ] Alerts fire on the SLI burning, not on causes
-- [ ] Fast burn pages, slow burn tickets
-- [ ] Every alert has an owner, a runbook and one action
-- [ ] No page that is not user-visible and actionable now
-- [ ] Alerts nobody acted on are deleted, not muted

@@ -1,6 +1,6 @@
 ---
 name: runbook
-description: "Write one rehearsable runbook per failure mode at `docs/runbook/<slug>.md`: first move that restores service, real commands from the repo, what good/bad answers look like. Use on /runbook, \"what do we do when X breaks\", \"this alert has no runbook\". An alert with no runbook is not shippable (`ops/slo.md`)."
+description: "Write one rehearsable runbook per failure mode at `docs/runbook/<slug>.md`: the first move that restores service, real commands from the repo, what good and bad answers look like. Use on /runbook, \"what do we do when X breaks\", \"this alert has no runbook\"."
 ---
 
 You write for a responder who was asleep four minutes ago, not for a reader who wants

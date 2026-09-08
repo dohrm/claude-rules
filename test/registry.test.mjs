@@ -50,7 +50,8 @@ test('rules: every markdown rule has a title, and paths entries are globs', () =
     assert.ok(fm, `${rel}: no frontmatter`)
     assert.ok(fm.title, `${rel}: missing "title" (used as the Cursor rule description)`)
     if ('paths' in fm) {
-      assert.ok(Array.isArray(fm.paths) && fm.paths.length, `${rel}: "paths" present but empty`)
+      assert.ok(Array.isArray(fm.paths) && fm.paths.length,
+        `${rel}: "paths" must be a non-empty block list, not an inline YAML list — the shipped parser reads \`paths: ["a", "b"]\` as a string, and every consumer then fails open (no language filter, no --root anchoring, and Cursor emits alwaysApply: true)`)
       for (const p of fm.paths) assert.match(p, /\*/, `${rel}: path "${p}" is not a glob`)
     }
   }

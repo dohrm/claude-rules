@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: "Cut ONE sprint of `.work/<capability-slug>/PLAN.md` into tasks sized to the green boundary, with anchors in the existing code. Writes `.work/<capability-slug>/tasks/NN-<sprint-slug>.md` (committed, dies with the capability). Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Downstream of /plan, upstream of /loop-setup."
+description: "Cut ONE sprint of a capability's PLAN.md into tasks sized to the green boundary, anchored in the existing code. Writes `.work/<capability-slug>/tasks/NN-<sprint-slug>.md`. Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Between /plan and /loop-setup."
 ---
 
 `/plan` deliberately withholds file names, symbols and layers — a sprint is a promise,
@@ -90,13 +90,11 @@ ask whether the granularity holds before writing anything.
 
 Write `.work/<slug>/tasks/NN-<sprint-slug>.md` from `<worklist-template>`, one
 `<task-unit>` per task — `NN` is the sprint's number in `.work/<slug>/PLAN.md`.
-Commit it: this is working memory, but it is **committed** working memory, so a
-PR can point at the cut it landed on, and `.work/<slug>/` disappears in one piece
-once the whole capability ships, not file by file as each sprint lands.
-
-It never goes in `docs/`, for the same reason a sprint is frozen once shipped:
-one home per fact (`product/documents.md`). The promise is `.work/<slug>/PLAN.md`,
-the execution is the git history, and this file is neither — it is scaffolding.
+Commit it, and never put it under `docs/`: **`.work/<slug>/` is committed working
+memory — one home per fact, deleted in one piece once the whole capability ships,
+not file by file as each sprint lands** (budgets and freeze-on-ship:
+`product/documents.md`). The promise is `.work/<slug>/PLAN.md`, the execution is the
+git history, and this file is neither — it is scaffolding.
 
 `/loop-setup` writes the same skeleton at `.work/<slug>/loop.md` when there is no
 sprint to cut. Run against a worklist, it adds its `## Guardrails` section to
@@ -108,9 +106,8 @@ Create `sprint/<slug>-NN` off the trunk. One commit per completed task, the task
 title as the subject — the `git log` becomes the sprint's real account.
 
 If another session is already working in this checkout, the branch gets **its own
-worktree** (`git worktree add ../<repo>-<slug>-NN -b sprint/<slug>-NN`): one tree, one
-writer. The worklist below and the review verdict both live in `.work/`, which is
-per-tree — two sessions sharing a checkout share one verdict (`agent/autonomy.md`).
+worktree** (`git worktree add ../<repo>-<slug>-NN -b sprint/<slug>-NN`) — one tree,
+one writer, one `.work/` (`agent/autonomy.md`).
 
 Then hand off, and stop:
 

@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: "Upgrade an existing claude-rules install (old snippet kit, no modules/levels) to the current harness: gap table, then lock --root, imported just library, lefthook/CI callers. Use on /migrate, \"update claude-rules\", \"migrate the harness\", \"justfile imports\". Not /onboard (first wire) and not /ci-setup (pipeline only)."
+description: "Upgrade an existing claude-rules install to the current harness: gap table, then lock --root, imported just library, lefthook/CI callers. Use on /migrate, \"update claude-rules\", \"migrate the harness\", \"justfile imports\". Not /onboard (first wire), not /ci-setup (pipeline only)."
 ---
 
 Upgrade **this repo's claude-rules install**. There is already a lock. You

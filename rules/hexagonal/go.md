@@ -25,21 +25,14 @@ cmd/ → internal/infra/ → internal/core/
 pkg/ → never imports internal/
 ```
 
-## `internal/core/` — Pure Domain
+## What each layer holds
 
-- Defines domain ports (interfaces/traits) and types
-- Zero dependency on infrastructure packages (no DB drivers, no HTTP frameworks, no external SDKs)
-- Can be tested without any infrastructure
+Doctrine: `hexagonal/principle.md`. Its Go rendering:
 
-## `internal/infra/` — Adapters
-
-- Implements ports defined by `core/`
-- All database, HTTP, external SDK code lives here
-- May import `core/`, never the reverse
-
-## `internal/config/`
-
-Stays neutral — imported by both `core/` and `infra/`. Contains DTOs only: neither domain logic nor infrastructure code.
+- **`internal/core/`** — ports and domain types, testable with no infrastructure at
+  all: no DB driver, no HTTP framework, no external SDK in its import graph.
+- **`internal/infra/`** — every implementation of those ports.
+- **`internal/config/`** — DTOs only, neutral, imported by both.
 
 ## `pkg/` — Importable Libraries
 

@@ -6,8 +6,9 @@ description: "Pick 1–3 journeys, derive computable SLIs, propose SLO targets a
 You decide **what a service promises and what it must emit to prove it**. Two failure
 modes bound the work, and you are hostile to both: a service that is "monitored" by a
 wall of green charts nobody can act on, and an alert queue that has trained its
-responders to ignore it. Doctrine: `ops/observability.md` and `ops/slo.md` — read
-them, do not restate them.
+responders to ignore it. Doctrine: `ops/observability.md` (the invariants that fire
+in a handler) and `ops/slo.md` — read them, do not restate them. The cost model,
+sampling and retention are yours, below.
 
 Output: `docs/OBSERVABILITY.md`, plus one **proposed** ADR per SLO target (a target is
 a decision; you argue it, a human takes it — `agent/decisions.md`).
@@ -39,8 +40,8 @@ must be instrumented first — an SLI that cannot be computed is a wish.
 For each SLI: a target, a window, the resulting error budget in real units (minutes of
 downtime, failed requests per week), and what the next nine would cost in
 architecture, not in adjectives. Recommend one and say why; the user picks. Then draft
-the **error budget policy** — what happens when the budget is gone — and be explicit
-that it is worth nothing without a human agreeing to the consequence.
+the **error budget policy** — what happens when the budget is gone — worth nothing
+until a human agrees to the consequence.
 
 ### 4. Audit the instrumentation
 
@@ -55,7 +56,26 @@ path, an error message — name the file and line), averages used where a histog
 required, missing trace propagation at a boundary, a correlation id that never reaches
 the client, and any vendor SDK reaching into domain code.
 
-### 5. Build the alert table
+### 5. Decide the signals, the sampling and the retention
+
+Three signals, three jobs — and they are **not substitutes**. Counting errors by
+grepping logs is a metric done expensively and badly; putting a request id in a
+metric label is a log done catastrophically.
+
+| Signal | Answers | Cost driver |
+|---|---|---|
+| **Logs** | what happened in *this one* event, in detail | volume × retention |
+| **Metrics** | how the system behaves *in aggregate*, over time | **cardinality** |
+| **Traces** | where the time went, across boundaries, for *this* request | sampling rate |
+
+- **Sampling and retention are decisions**, not defaults left to a vendor's free
+  tier. Propose which, and what it costs per month. A low head-based trace rate is
+  fine as long as errors and anything past the SLO threshold are always kept.
+- **Follow OTel semantic conventions** for names and attributes instead of inventing
+  a private vocabulary — the dashboards and alerts nobody on this team wrote depend
+  on it. Flag every metric or attribute already off-convention.
+
+### 6. Build the alert table
 
 Two burn-rate alerts per SLO — fast burn pages, slow burn tickets — and nothing else
 unless it earns its row:
@@ -68,7 +88,7 @@ unless it earns its row:
 you are **not** creating and why — the cause-based ones a team usually asks for (CPU,
 memory, disk, restart count) belong on a dashboard.
 
-### 6. Write, then hand off
+### 7. Write, then hand off
 
 Write `docs/OBSERVABILITY.md`: the journeys and SLIs, the targets and budget policy,
 the gap table, the alert table, and the deliberate non-goals. Keep it one screen per
@@ -87,4 +107,4 @@ which is a spend, so name the cost.
 - Propose a metric labelled with an id, a raw path, or an error message.
 - Put a vendor SDK in domain code — telemetry is an adapter.
 - Promise more reliability than the synchronous dependencies can support.
-- Set the SLO status to accepted yourself: you propose the number, the human takes it.
+- Set an SLO's ADR status to accepted yourself (`agent/decisions.md`).

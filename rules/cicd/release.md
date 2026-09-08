@@ -71,12 +71,3 @@ authority, and a green pipeline is permission for the code, never for the releas
 - **Rolling back is releasing**, not un-releasing: pin consumers to the previous
   version, then fix forward. Never delete the bad artifact from the registry
   (someone has it in a lockfile) — yank/deprecate it instead.
-
-## Checklist
-
-- [ ] Version in exactly one manifest; tag and manifest verified to match in CI
-- [ ] Increment follows the contract's actual change, not the effort
-- [ ] Changelog written for consumers, breaking changes and migration first
-- [ ] Tags immutable; artifacts built and published from the tag by CI only
-- [ ] Artifacts checksummed/signed, toolchain version recorded
-- [ ] The tag itself is pushed by a human

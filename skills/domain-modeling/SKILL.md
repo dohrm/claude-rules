@@ -1,6 +1,6 @@
 ---
 name: domain-modeling
-description: "Build and sharpen the project's ubiquitous language as a living `CONTEXT.md`, propose a `Proposed` ADR when a decision earns one, and consolidate/audit the glossary against code and docs on request. Use on /domain-modeling, \"what do we call this\", \"define the glossary\", \"is this worth an ADR\", \"consolidate the context\", \"audit CONTEXT.md\", \"get this ready to share with the business\". Reading CONTEXT.md for vocabulary is everyone's habit (product/vocabulary.md); this skill is for when the model itself is changing."
+description: "Build and sharpen the project's ubiquitous language in a living `CONTEXT.md`, and propose an ADR when a decision earns one. Use on /domain-modeling, \"what do we call this\", \"define the glossary\", \"audit CONTEXT.md\". For when the model changes — reading CONTEXT.md is everyone's habit."
 ---
 
 Actively build and sharpen the project's domain model as you design: challenge
@@ -62,20 +62,13 @@ Offer one only when **all three** hold — skip it if any is missing:
 3. **A real trade-off** — genuine alternatives existed and one was picked for
    specific reasons.
 
-If it qualifies, this is a normal decision record, not a lighter format born of
-the conversation having already happened: **write it `Proposed`, same skeleton
-as `/architect`'s `<adr-template>` (`agent/decision-records.md`), and hand back
-for the human to accept in a commit.** A live, thorough grilling is still a
-conversation, not a commit — nothing in the repo would otherwise distinguish
-"discussed at length" from "decided" (`agent/decisions.md`). Create `docs/` and
-`docs/adr/` if absent; if `docs/ARCHITECTURE.md` doesn't exist yet, create a
-minimal one from `/architect`'s `<architecture-template>` and add this ADR to
-its decision index — otherwise append to the existing index.
-
-Say so in the hand-back: what is proposed, and what changes if the answer is no.
-On an explicit yes, show the exact edit that accepts it — never write `Accepted`
-into the file yourself (`agent/decisions.md`, and see `/architect`'s hand-off for
-the same rule spelled out in full).
+If it qualifies it is a normal decision record, not a lighter format born of the
+conversation having already happened: **write it `Proposed`**, same skeleton as
+`/architect`'s `<adr-template>` (`agent/decision-records.md`), and hand back what
+you propose and what changes if the answer is no (`agent/decisions.md`). Create
+`docs/` and `docs/adr/` if absent; if `docs/ARCHITECTURE.md` doesn't exist yet,
+create a minimal one from `/architect`'s `<architecture-template>` and add this ADR
+to its decision index — otherwise append to the existing index.
 
 ## Consolidation pass
 
@@ -126,7 +119,6 @@ _Avoid_: <synonym>, <synonym>
 
 - `CONTEXT.md` is never implementation detail — that goes in `ARCHITECTURE.md`,
   `DATA-MODEL.md`, or the code itself (`product/documents.md`).
-- An ADR born here follows the exact same status discipline as one born in
-  `/architect` — `Proposed` from the agent, `Accepted`/`Rejected`/`Superseded`/
-  `Deprecated` only from a human, in a commit (`agent/decisions.md`). No format
-  gets to skip the gate because the conversation felt conclusive.
+- An ADR born here follows the same status discipline as one born in `/architect`
+  (`agent/decisions.md`). No format skips the gate because the conversation felt
+  conclusive.

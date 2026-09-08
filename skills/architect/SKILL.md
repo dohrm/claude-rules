@@ -47,15 +47,16 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 
-Examples (aliases unpack; `--root` is the glob lever; `--level gates` brings the kit):
-- Rust HTTP API → `npx github:dohrm/claude-rules add rust-api agent --root apps/api --level gates`
-- React frontend → `add ts-web-app agent --root apps/web --level gates`
-- Rust API + React portal → two roots, two adds: `add rust-api --root apps/api --level gates` then `add ts-web-app --root apps/web --level gates` then `add agent testing cicd --level gates`
-- Tauri desktop app → `add ts-tauri-app rust agent --root apps/desktop --level gates` (never `portal-http` too)
-- Node/TS backend → `add ts-node-api agent --root apps/api --level gates`
-- Python HTTP API → `add python-api agent --root <dir> --level gates`
-- Python worker / script (no HTTP) → `add python agent --root <dir> --level gates` (add `hexagonal` / `backend` only if they apply — no FastAPI)
+Aliases unpack (`rust-api`, `ts-web-app`, `ts-tauri-app`, `ts-node-api`,
+`python-api`, `go-api`); `--root` is the glob lever; `--level gates` brings the kit:
+
+- One app → `npx github:dohrm/claude-rules add rust-api agent --root apps/api --level gates`
+- Two apps → two roots, two adds: `add rust-api --root apps/api --level gates`, then
+  `add ts-web-app --root apps/web --level gates`, then `add agent testing cicd --level gates`
 - Then, separately, when they apply: `add testing`, `add cicd`, `add ops --root deploy`, `add k8s`, `add incident`
+
+A worker or script gets the bare language profile, not the `-api` alias: `hexagonal`
+and `backend` only if they actually apply, and no HTTP stack at all.
 
 Do **not** recommend `rust testing cicd ops hexagonal api backend` as one bag. That is how 21 rules land on a domain entity. `testing` / `cicd` / `ops` are their own adds; `ops` is not rooted on the same tree as `rust`.
 
@@ -72,8 +73,7 @@ IPC rules off the web app's files, and vice versa:
 ```
 add rust-api --root apps/api --level gates
 add ts-web-app --root apps/web --level gates
-add ts-tauri-app --root apps/desktop --level gates
-add react --root apps/mobile --level rules
+add ts-tauri-app --root apps/desktop --level gates      # never portal-http too
 add agent testing cicd --level gates
 ```
 
@@ -88,24 +88,15 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 Create `docs/` and `docs/adr/` if absent.
 
 - One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Shape, budgets, and statuses live in `agent/decision-records.md` — **read it before writing** (path-scoped, may not have loaded yet). Skeleton: `<adr-template>`. Profile selection from step 2 is itself worth an ADR.
-- Every ADR you write is **`Proposed`**. You researched the decision and argued it; you did not take it. Say so when you hand back — list what you propose and what changes if the answer is no — so the human knows there is something waiting on them.
+- Every ADR you write is **`Proposed`** (`agent/decisions.md`). In the hand-back, list what you propose and what changes if the answer is no — otherwise nothing tells the human something is waiting on them.
 - The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
 
 Confirm *"✓ written to `docs/ARCHITECTURE.md` and docs/adr/"*, list the ADRs created, and state
 plainly that they are **proposed and awaiting acceptance**.
 
-Then ask, per ADR: *"Do you accept ADR-NNNN as written?"* On an explicit yes,
-show the exact one-line edit that accepts it —
-
-```
-- **Status**: Proposed          →      - **Status**: Accepted
-```
-
-— and let the human make and commit it. **Never write `Accepted` into the file
-yourself, even on a yes in this same turn**: the rule this follows
-(`agent/decisions.md`) exists precisely because a conversation, however
-thorough, isn't the commit — the human's own edit is the only signal that
-survives once the transcript is gone.
+Then ask, per ADR: *"Do you accept ADR-NNNN as written?"* On an explicit yes, show
+the one-line status edit and let the human make and commit it. **Never write
+`Accepted` yourself, even on a yes in this same turn** — `agent/decisions.md`.
 
 ### 5. Hand off to /plan
 

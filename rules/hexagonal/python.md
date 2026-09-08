@@ -36,20 +36,6 @@ import inside `domain/`.
   `sqlalchemy`, `httpx`, `redis`, `celery`, `boto3`, and any other driver or
   framework. `uuid` / `datetime` / stdlib are fine.
 
-```python
-from dataclasses import dataclass
-from typing import Protocol
-from uuid import UUID
-
-@dataclass(frozen=True)
-class User:
-    id: UUID
-    email: str
-
-class UserRepository(Protocol):
-    async def by_id(self, id: UUID) -> User: ...
-```
-
 ## Adapters — implement the ports
 
 ```python
@@ -66,11 +52,6 @@ chain the cause (`python/error-handling.md`).
 ## Composition root
 
 `lifespan` (or `main.py`) constructs the container and mounts routers.
-`Depends` reads ports off that container. No module-level `engine = create_async_engine(...)`.
-
-## Checklist
-
-- [ ] `domain/` imports no FastAPI / SQLAlchemy / httpx / equivalent
-- [ ] Ports are `Protocol`; signatures use domain errors, not bare `Exception`
-- [ ] ORM / HTTP client types stay in adapters
-- [ ] One composition root; handlers do not open connections
+`Depends` reads ports off that container. No module-level
+`engine = create_async_engine(...)`, and **a handler never opens a connection
+itself** — it receives a port that already has one.

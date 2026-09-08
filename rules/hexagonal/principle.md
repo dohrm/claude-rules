@@ -98,11 +98,3 @@ struct User {
     id: UserId
 }
 ```
-
-## Review Checklist
-
-- [ ] Core has no infra dependencies (no DB drivers, no HTTP clients, no web frameworks)
-- [ ] No direct HTTP/DB calls in domain logic
-- [ ] Port signatures use typed errors
-- [ ] Query structures in core are plain data (no DB document conversion)
-- [ ] HTTP types in core, if any, are used as pure value objects — not to make HTTP calls

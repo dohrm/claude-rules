@@ -18,20 +18,15 @@ Layers, ports, typed errors, and "no DB type in core" stay
 
 ## SOLID, applied here
 
-Use a letter only when it names a cut you already need.
+Use a letter only when it names a cut you already need. The general form is
+`hexagonal/principle.md`; two cuts belong to this profile alone.
 
 - **S** — a command handler does not answer queries; a projection does not
-  validate writes. That is the split. Do not extract a type per field of a
-  command.
-- **O** — a new capability is a new command and new events, not an edit of
-  persisted events (they are immutable).
-- **L** — a projection honours the events it claims to fold. A "faster"
-  view that drops a guarantee the reader relies on is not a substitute.
+  validate writes. That is the split this file owns. Do not extract a type per
+  field of a command.
 - **I** — one command type per operation, not a god-command with optional
   flags for every write. Do not split a command the caller always sends
   together.
-- **D** — same as hexagonal: query structs are plain data; the aggregate
-  does not import a database type.
 
 ## Write Flow
 
@@ -59,6 +54,8 @@ Read models are derived **exclusively from events**. They are never written to d
 
 - **Events are immutable** — never modify or delete persisted events
 - **State changes go through commands** — no direct mutation of aggregate state
+- **Events are persisted before any read model is updated** — the log is the source
+  of truth, the view is derived from it, never alongside it
 - **Read models derived from events only** — via event handlers, never written directly
 - **Commands can be rejected** — a rejected command produces no event and no state change
 - **Snapshots**, if present, are an optimization to skip full replay — not a primary read model
@@ -86,11 +83,3 @@ Hand-written routes follow `api/*`. If a **generator** owns registration and
 derives the spec from commands / read models, follow that generator — do not
 hand-roll a 1:1 DTO layer to satisfy `api` literally. Record the choice in an
 ADR. The hexagonal wire invariant still holds: no DB / client type on the wire.
-
-## Checklist
-
-- [ ] State changes go through commands → aggregate → events
-- [ ] Events persisted before any read model is updated
-- [ ] Read models updated via event handlers only — never written directly
-- [ ] Snapshots, if present, are an optimization — not the primary read model
-- [ ] Rejected commands produce no events

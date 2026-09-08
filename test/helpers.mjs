@@ -13,6 +13,13 @@ export const allEntries = [...registry.shared, ...Object.values(registry.profile
 // Minimal frontmatter reader — mirrors the shipping subset (scalars + one-level
 // lists) that bin/cli.mjs parses. Deliberately a separate implementation: the
 // test must fail if the CLI's parser and the authored files drift apart.
+//
+// It is a deliberate copy of `parseFm` in bin/cli.mjs, character-equivalent today.
+// The tests import nothing from bin/ on purpose — that independence is what makes
+// them a witness rather than a tautology. The cost is that a change to one parser
+// MUST be made to the other, or the suite stops describing the installer. Notably:
+// neither handles inline YAML lists, which is the whole point of the block-list
+// assertion in registry.test.mjs.
 export function readFm(file) {
   const text = readFileSync(file, 'utf8')
   const m = text.match(/^﻿?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)

@@ -42,40 +42,11 @@ an HTTP portal: `logic/` is screen behaviour, never a home for backend data.
 
 ### Store pattern
 
-```typescript
-// features/chat/api/store.ts
-import { create } from 'zustand'
-import { invoke } from '@tauri-apps/api/core'
-
-interface ChatStore {
-  messages: Message[]
-  streaming: string
-  loadHistory: (sessionId: string) => Promise<void>
-  appendStream: (content: string) => void
-  finalizeMessage: () => void
-}
-
-export const useChatStore = create<ChatStore>((set, get) => ({
-  messages: [],
-  streaming: '',
-
-  loadHistory: async (sessionId) => {
-    const messages = await invoke<Message[]>('load_messages', { sessionId })
-    set({ messages })
-  },
-
-  appendStream: (content) =>
-    set((s) => ({ streaming: s.streaming + content })),
-
-  finalizeMessage: () => {
-    const { messages, streaming } = get()
-    set({
-      messages: [...messages, { role: 'assistant', content: streaming }],
-      streaming: '',
-    })
-  },
-}))
-```
+One store per domain under `features/{domain}/api/`, created with `create<T>()`:
+the fetched collection, the in-flight streaming buffer, and one action per
+transition — `loadHistory` (awaits `invoke`, `set`s the result), `appendStream`
+(concatenates a delta), `finalizeMessage` (moves the buffer into the collection and
+clears it). Actions are the only writers; components never `set` from a handler.
 
 ## IPC Wrappers — `core/tauri/`
 
@@ -90,37 +61,22 @@ core/
 ```
 
 ```typescript
-// core/tauri/commands.ts
-import { invoke } from '@tauri-apps/api/core'
-
+// core/tauri/commands.ts — one typed function per Rust command
 export const commands = {
-  loadMessages: (sessionId: string) =>
-    invoke<Message[]>('load_messages', { sessionId }),
-
-  sendMessage: (sessionId: string, text: string) =>
-    invoke<void>('send_message', { sessionId, text }),
-
-  requestPairing: (url: string, label: string) =>
-    invoke<PairRequestResult>('request_pairing', { url, label }),
+  loadMessages: (sessionId: string) => invoke<Message[]>('load_messages', { sessionId }),
+  sendMessage: (sessionId: string, text: string) => invoke<void>('send_message', { sessionId, text }),
 } as const
-```
 
-```typescript
-// core/tauri/events.ts
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-
+// core/tauri/events.ts — one typed subscription per Tauri event
 export function onAssistantStream(
-  handler: (payload: { sessionId: string; content: string; phase: string }) => void
+  handler: (p: { sessionId: string; content: string; phase: string }) => void,
 ): Promise<UnlistenFn> {
-  return listen('ozzie://assistant-stream', (event) => handler(event.payload))
-}
-
-export function onPromptRequest(
-  handler: (payload: { sessionId: string; token: string; message: string }) => void
-): Promise<UnlistenFn> {
-  return listen('ozzie://prompt-request', (event) => handler(event.payload))
+  return listen('app://assistant-stream', (e) => handler(e.payload))
 }
 ```
+
+Each wrapper names its payload type; an untyped `invoke<any>` defeats the point of
+having the boundary in one place.
 
 ## Event → Store Wiring
 
@@ -128,11 +84,7 @@ Event listeners are set up in a top-level provider or effect, wiring Tauri event
 This is the only place where `core/tauri/events` and `features/*/logic/` meet.
 
 ```typescript
-// providers.tsx or a dedicated core/tauri/bridge.ts
-import { onAssistantStream, onPromptRequest } from '@/core/tauri/events'
-import { useChatStore } from '@/features/chat/api/store'
-
-// Setup once at app mount
+// core/tauri/bridge.ts — set up once at app mount
 onAssistantStream(({ content, phase }) => {
   if (phase === 'delta') useChatStore.getState().appendStream(content)
   if (phase === 'done') useChatStore.getState().finalizeMessage()

@@ -59,11 +59,3 @@ you failed to write.
   commitment.
 - ❌ Eligibility, pricing, quotas, permission decisions, status derivation,
   business validation. Generated Zod mirrors the contract — it does not decide it.
-
-## Checklist
-
-- [ ] No server payload copied into component state, a context, or a store
-- [ ] Every mutation declares its invalidation set, in `features/{domain}/api/`
-- [ ] Logout / tenant switch clears the query cache
-- [ ] `staleTime`/`gcTime` chosen per resource, not defaulted by accident
-- [ ] No business rule in the browser; any UI estimate is labelled as one

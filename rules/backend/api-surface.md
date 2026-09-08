@@ -59,11 +59,3 @@ reads — it is never where business rules migrate to.
 - An aggregate read model is named, documented, and holds no business rule.
 - Versioning, OpenAPI emission and DTO policy stay as the `api` profile defines
   them — this rule governs the shape of the surface, not the stack.
-
-## Checklist
-
-- [ ] Every route's name means something to someone who has never seen the UI
-- [ ] No route pair differs only by who is allowed to call it
-- [ ] Field/subset differences are projections and filters, not new endpoints
-- [ ] Any aggregate endpoint is an explicit read model, not a rule container
-- [ ] The route vocabulary matches the domain's, not the frontend's

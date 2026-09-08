@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Open ONE PRD capability and break it into independently shippable sprints (tracer bullets). Elaborates the capability's User Stories against the real code first if they're still a stub. Writes `.work/<capability-slug>/PLAN.md` — committed, ephemeral. Use on /plan, \"slice this into sprints\", \"tracer bullets\", \"open capability N\". Downstream of /prd; hands off to /tasks."
+description: "Open ONE PRD capability and break it into independently shippable sprints (tracer bullets), elaborating stub User Stories against the real code first. Writes `.work/<capability-slug>/PLAN.md` — committed, ephemeral. Use on /plan, \"slice this into sprints\", \"tracer bullets\". Upstream of /tasks."
 ---
 
 Open **one** PRD capability and break it into independently shippable sprints as
@@ -99,9 +99,9 @@ Iterate until validated.
 ### 8. Write the plan
 
 Create `.work/<slug>/` if absent. One file, `.work/<slug>/PLAN.md` — the header,
-then each sprint as `<sprint-unit>` under `## Sprint N: …`. No unit/index split:
-a capability's sprint count is small and the file dies with it, so the growth
-machinery `product/documents.md` reserves for durable docs doesn't apply here.
+then each sprint as `<sprint-unit>` under `## Sprint N: …`. No unit/index split: the
+file dies with the capability, so the growth machinery `product/documents.md`
+reserves for durable docs does not apply.
 
 In extension mode, add sprints; never touch a shipped one. Confirm what was written.
 

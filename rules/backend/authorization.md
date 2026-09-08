@@ -52,12 +52,3 @@ Permissions and scopes appear in the OpenAPI document, alongside the routes they
 gate. That is what lets the portal drive its display from them — and only its
 display (`portal-http/state.md`). A permission change invalidates the cached data
 it governs; a stale cache is a stale authorization.
-
-## Checklist
-
-- [ ] Every route declares a required permission; none defaults to open
-- [ ] Permission names come from the domain, and are defined in one place
-- [ ] Row-level scope is applied in the query, never post-filtered
-- [ ] 403/404 choice is deliberate per resource and rendered as problem+json
-- [ ] Auth implementation lives in infrastructure; the policy lives with the domain
-- [ ] Permissions and scopes are visible in the OpenAPI document

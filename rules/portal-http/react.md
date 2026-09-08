@@ -55,34 +55,11 @@ clears, and what the browser is allowed to derive are all in `portal-http/state.
 Portal-wide state (current user, locale, theme) lives in `core/contexts/` as React Contexts.
 Not in global stores — these are stable values that change rarely and wrap the full app.
 
-```
-core/
-└── contexts/
-    ├── auth-context.tsx      # current_user, isAuthenticated, logout()
-    ├── locale-context.tsx    # locale, setLocale()
-    └── theme-context.tsx     # theme, setTheme()
-```
-
-Provider hierarchy in `app/providers.tsx`:
-
-```tsx
-<LocaleProvider>
-  <ThemeProvider>
-    <AuthProvider>       {/* depends on locale for error messages */}
-      <QueryClientProvider>
-        {children}
-      </QueryClientProvider>
-    </AuthProvider>
-  </ThemeProvider>
-</LocaleProvider>
-```
-
-Consume via typed hooks:
-
-```tsx
-const { user, logout } = useAuth();
-const { locale } = useLocale();
-```
+One context file per concern under `core/contexts/` — `auth-context.tsx`
+(`current_user`, `isAuthenticated`, `logout()`), `locale-context.tsx`,
+`theme-context.tsx` — each exposing a typed hook (`useAuth()`, `useLocale()`).
+`app/providers.tsx` nests them outermost-first by dependency: locale, then theme,
+then auth (its error messages need the locale), then `QueryClientProvider`.
 
 ## Runtime Validation — Zod
 
@@ -107,18 +84,10 @@ are validated at the route boundary with a hand-written Zod schema.
 
 ## `src/api/` Structure
 
-```
-src/api/
-└── generated/              # never edit manually — rewritten on each codegen run
-    ├── types.gen.ts
-    ├── sdk.gen.ts
-    ├── zod.gen.ts
-    └── @tanstack/
-        └── react-query.gen.ts
-
-src/config/
-└── hey-api.ts              # runtimeConfig for the generated client — base URL, auth interceptor
-```
+`src/api/generated/` holds the codegen output — `types.gen.ts`, `sdk.gen.ts`,
+`zod.gen.ts`, `@tanstack/react-query.gen.ts` — rewritten on every run and never
+edited. `src/config/hey-api.ts` holds the `runtimeConfig` for the generated client:
+base URL and auth interceptor.
 
 ## Rules
 

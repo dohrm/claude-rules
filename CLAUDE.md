@@ -6,8 +6,11 @@ This repository is a shared library of reusable coding-agent assets, installed
 into consuming repos via the npx installer (`bin/cli.mjs`, driven by
 `registry.json`) — shadcn-style: copy, own, pin. Not a submodule.
 
-**Two targets.** Claude Code is the canonical authoring format; the installer
-emits/transforms each asset for Cursor via `--agent` (`claude`|`cursor`). Each
+**Two targets, and only two** (`docs/adr/0001-emission-targets-claude-and-cursor.md`).
+Claude Code is the canonical authoring format; the installer emits/transforms each
+asset for Cursor via `--agent` (`claude`|`cursor`). Path scoping is the contract a
+target must support — a tool without it would load the whole corpus every turn, so
+it is not a target. Adding one is an ADR, not a patch. Each
 `registry.json` entry carries a `kind` (`skill`|`kit`|`rule`|`agent`) that
 selects the per-agent emitter in `cli.mjs` (`EMITTERS` table). Skills (`SKILL.md`)
 and kit are portable as-is; rules → Cursor `.mdc`. Cursor has no file-based

@@ -390,6 +390,15 @@ rot on a model bump.
 Claude is the canonical source; each asset is emitted (copied or transformed) for
 Cursor too. Both load a rule because a glob matched.
 
+**Two targets, deliberately** — `KNOWN_AGENTS = ['claude', 'cursor']`. Path-scoped
+rule loading is the contract a target has to support, and it is what every glob in
+`rules/` is tuned for: Claude reads `paths:`, Cursor reads the emitted `globs:`. A
+tool with no path scoping (Windsurf, Copilot, Aider) would import the whole corpus
+on every turn, so narrowing a glob for it would achieve nothing. Adding a target is
+an ADR, not a patch — see `docs/adr/0001-emission-targets-claude-and-cursor.md`.
+`skills/` is portable anyway (the open `SKILL.md` standard) and `kit/` is
+agent-independent, but neither is path-scoped.
+
 | Asset | Claude (canonical) | Cursor |
 |-------|--------------------|--------|
 | **skill** | `.claude/skills/` | `.agents/skills/` |

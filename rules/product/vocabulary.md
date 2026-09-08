@@ -15,7 +15,5 @@ This is the passive habit; every skill already has it. **Building or sharpening*
 the glossary — challenging a term, writing a new entry, recording the ADR a
 decision earns — is `domain-modeling`, and is not this rule's job.
 
-`CONTEXT.md` does not follow `product/documents.md`'s unit-plus-index growth
-pattern: it grows in place, term by term, never a directory of per-term files
-behind a compacted index. One document a reader can hold in their head is the
-whole point — a term should never need a second file to be found.
+It grows **in place**, term by term — never `product/documents.md`'s
+unit-plus-index split. One document a reader can hold in their head is the point.

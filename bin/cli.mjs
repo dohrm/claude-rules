@@ -14,7 +14,7 @@
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
-//   npx github:dohrm/claude-rules budget [<path>]           # what loads for that file, and what it costs
+//   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs'
@@ -184,8 +184,19 @@ function dumpFm(obj) {
 // behaves exactly as before — the installer only rewrites what it is asked to.
 const prefixesFor = (profile, modules) =>
   Object.entries(modules || {}).filter(([, ps]) => ps.includes(profile)).map(([dir]) => dir.replace(/\/+$/, ''))
-const scopeGlobs = (globs, prefixes) =>
-  prefixes.length ? prefixes.flatMap(p => globs.map(g => `${p}/${g}`)) : globs
+// One exception, and it is the same one ROOT_FORBID makes at profile granularity:
+// a glob naming the shared `docs/` tree is never anchored. `docs/` is one tree for
+// the whole repo, never one per module, so prefixing it would silently stop matching
+// the docs/ it was written for. ROOT_FORBID cannot express this for a profile whose
+// OTHER globs do belong to a module — `ops` owns both `ops/slo.md` (docs + alert
+// config) and `ops/delivery.md` (that module's source), so the rule lives here.
+const SHARED_TREE_GLOB = /(?:^|\/)docs\//
+const scopeGlobs = (globs, prefixes) => {
+  if (!prefixes.length) return globs
+  const scopable = globs.filter(g => !SHARED_TREE_GLOB.test(g))
+  const shared = globs.filter(g => SHARED_TREE_GLOB.test(g))
+  return [...prefixes.flatMap(p => scopable.map(g => `${p}/${g}`)), ...shared]
+}
 
 // A rule declares the languages it is about, in its own `paths:` — no new metadata
 // needed. If every glob it carries targets a language this repo did not lock, the
@@ -846,16 +857,23 @@ function repoFiles() {
   return out
 }
 
-// Emitted rules, read back from whichever tree exists — Claude first (complete,
-// including always-on), then Cursor.
-function installedRules() {
-  for (const [root, key, complete] of [
-    ['.claude/rules', 'paths', true],
-    ['.cursor/rules', 'globs', true],
-  ]) {
-    if (!existsSync(root)) continue
+// Emitted rules, read back from one target's tree. Each target names its own root
+// and its own glob key — the transform renames `paths:` to `globs:` on the way out,
+// so measuring Cursor means reading the Cursor key, not guessing.
+const RULE_TREE = {
+  claude: { root: '.claude/rules', key: 'paths', complete: true },
+  cursor: { root: '.cursor/rules', key: 'globs', complete: true },
+}
+// `agent` null = "whatever is installed", Claude first. Naming a target is how
+// `budget --agent cursor` becomes measurable at all: without it the Claude tree
+// always won and the Cursor floor was unobservable.
+function installedRules(agent = null) {
+  for (const a of agent ? [agent] : KNOWN_AGENTS) {
+    const { root, key, complete } = RULE_TREE[a] || {}
+    if (!root || !existsSync(root)) continue
     const files = walk(root).filter(f => /\.mdc?$/.test(f.rel))
     return {
+      agent: a,
       root,
       complete,
       rules: files.map(f => {
@@ -864,7 +882,7 @@ function installedRules() {
       }),
     }
   }
-  return { root: null, complete: false, rules: [] }
+  return { agent: null, root: null, complete: false, rules: [] }
 }
 
 // Every skill's description is read at session start so the agent can decide
@@ -885,9 +903,17 @@ const sum = xs => xs.reduce((n, x) => n + x, 0)
 // "What does opening this file cost me?" — the question every context decision
 // turns on, and the one nobody could answer without reading the tree by hand.
 // Same inputs as doctor: the emitted rules and their globs, nothing else.
-function budget(target) {
-  const { root, complete, rules } = installedRules()
-  if (!root) { console.error('No emitted rule tree found — run "add <profile...>" first.'); process.exit(1) }
+// `--agent` picks which target is measured; the two floors differ (Cursor puts
+// unscoped rules on `alwaysApply: true`), so a routing change has to be checked
+// on both or it is only half verified.
+function budget(target, agent = null) {
+  const { root, complete, rules, agent: measured } = installedRules(agent)
+  if (!root) {
+    console.error(agent
+      ? `No emitted rule tree for ${agent} (${RULE_TREE[agent].root} is absent) — run "add <profile...> --agent ${agent}" first.`
+      : 'No emitted rule tree found — run "add <profile...>" first.')
+    process.exit(1)
+  }
   const path = target ? target.replace(/^\.\//, '').replace(`${process.cwd()}/`, '') : null
   if (path && !existsSync(path)) console.log(`(${path} does not exist here — showing what WOULD load for that path)\n`)
 
@@ -895,11 +921,11 @@ function budget(target) {
   const hit = path
     ? rules.filter(r => r.globs.some(g => globToRe(g).test(path))).sort((a, b) => b.size - a.size)
     : []
-  const skills = skillDescriptions()
+  const skills = skillDescriptions(measured)
   const rows = []
   const push = (label, size, detail = '') => rows.push([label, size, detail])
 
-  console.log(path ? `Context for ${path}\n` : 'Session floor — what loads before any file is read\n')
+  console.log(`${path ? `Context for ${path}` : 'Session floor — what loads before any file is read'}  ·  ${measured}\n`)
   if (!complete) console.log(`  (measured from ${root}, which holds only path-scoped rules — the always-on ones are inlined elsewhere)\n`)
   push(`always-on rules (${always.length})`, sum(always.map(r => r.size)))
   for (const r of always) push(`    ${r.rel}`, r.size)
@@ -1091,9 +1117,10 @@ function doctor() {
   // ---- 4. what every session pays before reading a line of code
   console.log('\nContext budget (always-on)')
   if (agents.includes('claude')) {
-    if (!complete) console.log('  • claude is locked but .claude/rules/ is absent — cannot measure')
+    const claude = installedRules('claude')
+    if (!claude.root) console.log('  • claude is locked but .claude/rules/ is absent — cannot measure')
     else {
-      const on = rules.filter(r => !r.globs.length).sort((a, b) => b.size - a.size)
+      const on = claude.rules.filter(r => !r.globs.length).sort((a, b) => b.size - a.size)
       const total = on.reduce((n, r) => n + r.size, 0)
       console.log(`  rules       ${String(on.length).padStart(3)} files  ${kb(total).padStart(9)}  (${tok(total)})`)
       for (const r of on.slice(0, 3)) console.log(`                ${r.rel} — ${kb(r.size)}${total ? ` (${Math.round(r.size / total * 100)}%)` : ''}`)
@@ -1244,7 +1271,12 @@ async function main() {
     }
     case 'init': initRepo(); break
     case 'doctor': doctor(); break
-    case 'budget': budget(positional[0]); break
+    case 'budget': {
+      const list = agentFlag ? parseAgents() : []
+      if (list.length > 1) { console.error(`budget measures one target at a time — pass a single --agent (${KNOWN_AGENTS.join('|')}).`); process.exit(1) }
+      budget(positional[0], list[0] || null)
+      break
+    }
     case 'list': {
       const lock = readLock()
       console.log('Available profiles:')
@@ -1269,7 +1301,8 @@ async function main() {
         + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
-        + '  budget [<path>]                  what loads when that file is opened, and what it costs (no path: the session floor)\n'
+        + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
+        + '                                   --agent picks the measured target (default: claude, then cursor)\n'
         + '  list                             show available & installed profiles')
   }
 }

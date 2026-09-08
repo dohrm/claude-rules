@@ -1,6 +1,6 @@
 ---
 name: loop-setup
-description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist) + the loop prompt. Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start the loop. Not for one-off tasks."
+description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist). Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start it. Not for one-off tasks."
 ---
 
 You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state file, then hand the exact command to run.
@@ -40,9 +40,9 @@ Every loop carries all four:
 
 ### 4. Write the state file
 
-The loop's state is **one file under `.work/<capability-slug>/`** — working
-memory, committed (so a PR shows the cut it's running against), deleted once
-the capability ships. Not a document, and never under `docs/`.
+The loop's state is **one file under `.work/<capability-slug>/`** — committed
+working memory, deleted once the capability ships, never under `docs/`
+(`product/documents.md`).
 
 **First, look for a file that already exists:**
 
@@ -67,10 +67,9 @@ Emit the invocation for the user's host (ask which if unclear). Same cadre, diff
 Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail — plus `.work/<slug>/SUMMARY.md` once it stops, if `just publish-summary` is wired).
 
 <loop-file-template>
-<!-- `.work/<slug>/loop.md`. Working memory: rewritten every turn, committed,
-     deleted when the capability ships. Never under docs/. A sprint worklist from
-     /tasks has this same skeleton, plus its anchors — in that case add the
-     Guardrails section there instead of creating this file. -->
+<!-- `.work/<slug>/loop.md`, rewritten every turn. A sprint worklist from /tasks has
+     this same skeleton plus its anchors — then add the Guardrails section there
+     instead of creating this file. -->
 # Loop — <objective in one line>
 
 - **Objective (bounded)**: <finite, checkable end state>
@@ -124,7 +123,7 @@ This turn:
 
 On any of these: stop, write the reason and current state under `## Blocked on the human`, and surface it.
 
-If `just publish-summary` is available (this repo may not have `kit/common` wired), run it now — `status=COMPLETED` on the Done-check path above, `status=BLOCKED` or `status=BUDGET_EXHAUSTED` on the stop-and-escalate path — best-effort: if the recipe or `just` itself is missing, skip it silently and stop as above regardless.
+**Then, best-effort:** if `just publish-summary` exists, run it — `status=COMPLETED` on the Done-check path, `status=BLOCKED` or `status=BUDGET_EXHAUSTED` on escalation. If `just` or the recipe is missing, skip it silently and stop as above regardless.
 </loop-prompt-template>
 
 ## Rules

@@ -1,6 +1,6 @@
 ---
 name: postmortem
-description: "Blameless incident retrospective: timeline from evidence, detect/mitigate/resolve separately, contributing factors not one root cause. Writes `docs/postmortem/<YYYY-MM-DD>-<slug>.md` and hands off deltas — never edits the targets. Use on /postmortem, \"incident review\", \"RCA\", \"we had an outage\". Mirror of /pre-mortem."
+description: "Blameless incident retrospective: timeline from evidence, detect/mitigate/resolve separately, contributing factors not one root cause. Writes `docs/postmortem/<date>-<slug>.md`, hands off deltas. Use on /postmortem, \"incident review\", \"RCA\", \"we had an outage\". Mirror of /pre-mortem."
 ---
 
 An incident already happened. Your job is to make **this class of failure** less likely,

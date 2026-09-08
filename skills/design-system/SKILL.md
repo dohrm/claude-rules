@@ -35,7 +35,7 @@ Present the whole system at once, in a single message:
 AESTHETIC: <direction> — <1-line rationale>
 DECORATION: <minimal / intentional / expressive> — <why it matches>
 LAYOUT: <grid-disciplined / creative-editorial / hybrid> — <why>
-COLOR: <approach> + palette (hex) — <rationale>
+COLOR: <restrained / balanced / expressive> + palette (hex) — <rationale>
 TYPOGRAPHY: <display / body / data> (3 precise fonts) — <why these>
 SPACING: <base unit + density> — <rationale>
 MOTION: <minimal-functional / intentional / expressive> — <rationale>
@@ -63,15 +63,13 @@ When the user signs off, write `docs/DESIGN.md` per `<design-template>` (create 
 
 Pick one aesthetic, don't enumerate: Brutally Minimal · Maximalist Chaos · Retro-Futuristic · Luxury/Refined · Playful/Toy-like · Editorial/Magazine · Brutalist/Raw · Art Deco · Organic/Natural · Industrial/Utilitarian.
 
-Decoration: minimal / intentional / expressive. Layout: grid-disciplined / creative-editorial / hybrid. Color: restrained / balanced / expressive. Motion: minimal-functional / intentional / expressive.
-
 **Fonts by role** (draw from these, don't invent):
 - **Display/Hero**: Satoshi, General Sans, Instrument Serif, Fraunces, Clash Grotesk, Cabinet Grotesk
 - **Body**: Instrument Sans, DM Sans, Source Sans 3, Geist, Plus Jakarta Sans, Outfit
 - **Data/Tables**: Geist (tabular-nums), DM Sans (tabular-nums), JetBrains Mono, IBM Plex Mono
 - **Code**: JetBrains Mono, Fira Code, Berkeley Mono, Geist Mono
 
-## Anti-slop (never in your recommendations)
+## Anti-slop (never in your recommendations — and write the resulting bans into `docs/DESIGN.md` § *Anti-slop*, the one home `/ui-prompt` copies from)
 
 - **Font blacklist**: Papyrus, Comic Sans, Impact, Lobster, Bradley Hand, Trajan, Courier New (as body)
 - **Overused fonts** (never as primary unless the user explicitly asks): Inter, Roboto, Arial, Helvetica, Open Sans, Lato, Montserrat, Poppins, **Space Grotesk** (the "safe alternative to Inter" trap)
@@ -125,6 +123,11 @@ Decoration: minimal / intentional / expressive. Layout: grid-disciplined / creat
 - **Approach**: <minimal-functional / intentional / expressive>
 - **Easing**: enter(ease-out) exit(ease-in) move(ease-in-out)
 - **Duration**: micro(50-100ms) short(150-250ms) medium(250-400ms) long(400-700ms)
+
+## Anti-slop — what this project rules out
+- **Fonts**: <the blacklisted and overused faces ruled out for this project>
+- **Visual patterns**: <the banned patterns, concretely — not "avoid gradients">
+- **Copy**: <banned phrasings>
 
 ## Decisions Log
 | Date | Decision | Rationale |

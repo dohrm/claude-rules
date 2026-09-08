@@ -44,15 +44,8 @@ core/ → (nothing — no feature imports)
 Features never import from another `features/` module. Cross-feature data goes
 through server state (each feature fetches independently; the transport deduplicates).
 
-## SOLID, applied here
-
-Use a letter only when it names a cut you already need — the module map is the cut.
-
-- **S** — one domain reason to change per feature. `pages/` assemble; they do not grow logic.
-- **O** — a new screen is a feature (and a page), not an edit of `core/` or another feature.
-- **L** — a `ui/` primitive stays substitutable: same props, no hidden business rule.
-- **I** — `core/` stays small. Do not dump every shared helper there.
-- **D** — features depend on `core/` and `ui/`, never the reverse; features do not import each other.
+SOLID here **is** the module map: a letter only ever names a cut this table already
+draws. The general form is `hexagonal/principle.md`, for the backend.
 
 ## State Categories
 
