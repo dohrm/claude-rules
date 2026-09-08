@@ -146,7 +146,7 @@ exact command. Install `product` first, or read the table in
 | **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify / FastAPI) · problem+json, config, health, pagination |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` | SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` |
-| **Agent OS** | `agent` | autonomy, decisions, subagents; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
+| **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
 | **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
 
 **Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
