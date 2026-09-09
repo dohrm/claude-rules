@@ -46,6 +46,13 @@ branch, one worklist.** Parallel work gets a parallel tree:
 `git worktree add ../<repo>-<slug> -b <branch>`. `just status` reports every
 tree; it never gates.
 
+The human is a writer too. When they edit the tree a loop owns — legitimate, and
+declared as a `human:` line in `## Log` (`skills/loop-setup`) — that line is a
+**fact about the tree**, not an item to redo or undo. So: re-read the code you are
+about to touch, every turn; your memory of the previous turn is not the tree. And
+**never revert a change you cannot explain** — a tree that contradicts the
+worklist is an escalation, not a merge conflict to resolve on your own.
+
 ## Never fake green
 
 - **Hard — never bypass; escalate.** Correctness, security, `secret-scan`,

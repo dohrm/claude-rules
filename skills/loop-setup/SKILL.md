@@ -66,6 +66,15 @@ Emit the invocation for the user's host (ask which if unclear). Same cadre, diff
 
 Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail — plus `.work/<slug>/SUMMARY.md` once it stops, if `just publish-summary` is wired).
 
+And state the one thing the human must not improvise — **editing the code while the loop owns the tree.** It is legitimate (the agent does the minimum, or an item turns out to need exploration) but it is a *transaction*, not a habit:
+
+1. **The loop is at rest** — it is waiting on you, or you interrupted it. Never mid-turn: its `just check` would grade a half-written file, and it would "fix" what it did not break.
+2. Edit.
+3. **Declare it**: one `human: <what and why>` line in `## Log`. Undeclared, the edit competes with the agent's next turn and the agent wins.
+4. Relaunch.
+
+If this happens often, that is a signal about the **cut**, not about the agent: an item needing exploration failed precondition 3 (*end-to-end doable*) and belonged in an `/investigate`, not in the loop.
+
 <loop-file-template>
 <!-- `.work/<slug>/loop.md`, rewritten every turn. A sprint worklist from /tasks has
      this same skeleton plus its anchors — then add the Guardrails section there
@@ -92,8 +101,12 @@ Then state **how to interrupt** the loop and where to watch progress (the state 
 ## Log
 
 <!-- One line per turn, appended: what landed, or what failed and why. Never retry a
-     recorded dead end. -->
+     recorded dead end.
+     A line prefixed `human:` is an edit made OUTSIDE the loop, by the human, while
+     it was at rest — what changed and why. The loop reads those as facts about the
+     tree, never as items to redo or undo. -->
 - <turn>: <win or dead end>
+- human: <what I changed by hand, and why>
 
 ## Blocked on the human
 
@@ -110,9 +123,10 @@ You are running one turn of a bounded loop toward a fixed objective. Work only f
 
 This turn:
 1. Read the state file. Pick the **first unchecked item**. If none remain, go to Done-check.
-2. Do exactly that item — nothing outside its "Out of scope" bounds.
-3. Run the done-command: `<done-command>`. Read its exit code — do not trust a prior run's claim.
-4. Update the state file: check the item only if its own check passed, and append one line to `## Log` (win or dead end).
+2. **Re-read the code you are about to touch.** You are not the only writer: between two turns a human edits from outside the loop — to unblock you, or because the item turned out to need exploration. A `human:` line in `## Log` records it when they remembered to; the tree is authoritative either way. **Never revert a change you cannot explain.** If the tree contradicts your memory or the state file, treat that as the escalation it is: stop and write it under `## Blocked on the human`.
+3. Do exactly that item — nothing outside its "Out of scope" bounds.
+4. Run the done-command: `<done-command>`. Read its exit code — do not trust a prior run's claim.
+5. Update the state file: check the item only if its own check passed, and append one line to `## Log` (win or dead end).
 
 **Done-check:** if `<done-command>` exits green over the whole objective → state "OBJECTIVE MET", stop the loop, do not start another turn.
 

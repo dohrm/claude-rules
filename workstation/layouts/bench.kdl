@@ -1,0 +1,37 @@
+// bench — the layout of one unit of work. Two tabs, two roles, nothing else.
+//
+// Alt+1 / Alt+2 switch role; Ctrl+o w switches bench. Two gestures, two distinct
+// meanings — that is the whole ergonomic claim. Both panes are BARE on purpose:
+// they are where you type (`claude`, `cursor-agent`, whatever you drive today),
+// not decoration. Anything transient — the stack, a curl, a `git diff`, a test
+// run — goes in the floating pane (Alt+w), which disappears when you are done.
+//
+// Deliberately absent: no git-watch pane. A `while true; clear; git status`
+// loop repaints a screen you are not reading and destroys your scrollback; what
+// you actually need to know ("does it want me?") is `fleet`, one session over.
+
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="compact-bar"
+        }
+        children
+    }
+
+    // The loop runs here, and NOTHING else writes to the tree while it does.
+    tab name="loop" focus=true {
+        pane
+    }
+
+    // The workshop: brainstorm the next iteration, analyse what the loop reported,
+    // prepare deltas — out of the loop's context so it stays monomaniacal about
+    // its bounded objective.
+    //
+    // If you hand-edit code from here, it is a TRANSACTION, not a habit:
+    // the loop must be at rest, and you declare the edit in the state file's
+    // `## Log` as `human: <what and why>`. Undeclared edits lose to the agent's
+    // next turn (rules/agent/autonomy.md, "One tree, one writer").
+    tab name="workshop" {
+        pane
+    }
+}

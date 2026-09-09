@@ -146,7 +146,7 @@ exact command. Install `product` first, or read the table in
 | **Frontend** | `react` `portal-flat` + **one** transport: `portal-http` *or* `tauri` | the React framework gates (any React tree) · the flat-domain module map — transport-agnostic · then **one** transport on top. Never both |
 | **Backend** | `api` `backend` | the opinionated HTTP stack per language (axum+utoipa / chi+Huma / Fastify / FastAPI) · problem+json, config, health, pagination |
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
-| **Run** | `ops` `k8s` `incident` | SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` |
+| **Run** | `ops` `k8s` `incident` `devstack` | **in production**: SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` — **on your machine**: `devstack`, the contract between an agent and a running app (no foreground server, no orphan, the log file is the truth) plus the `process-compose` lifecycle at `--level gates` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
 | **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
 
