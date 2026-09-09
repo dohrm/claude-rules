@@ -2,7 +2,7 @@
 // build a throwaway docs/ tree, run the script, assert exit code + message.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
@@ -77,8 +77,16 @@ test('the whole kit library parses, and the root justfile overrides it', { skip:
     for (const r of ['check', 'rust-check', 'ts-check', 'ts-web-check', 'ts-node-check', 'ts-tauri-check',
                      'go-check', 'python-check', 'godot-check',
                      'rust-mutate', 'ts-mutate', 'ts-web-mutate', 'go-cover', 'python-mutate',
-                     'code-review', 'review-guard', 'adr-check', 'docs-check', 'rules-check', 'dup-check', 'status'])
+                     'code-review', 'review-guard', 'adr-check', 'docs-check', 'rules-check', 'dup-check', 'status',
+                     'mutate-from', 'mutate-mark'])
       assert.ok(recipes.has(r), `${r} is not resolvable`)
+
+    // `mutate-diff` (the repo's own recipe) feeds the cleared commit to the mutator,
+    // so the range start is a PARAMETER — defaulting to the whole branch, which is what
+    // a repo that installed rust without kit/common still gets.
+    const shown = spawnSync('just', ['--show', 'rust-mutate'], { cwd: dir, encoding: 'utf8' })
+    assert.match(shown.stdout, /rust-mutate from=base:/)
+    assert.match(shown.stdout, /git diff \{\{ ?from ?\}\}\.\.\.HEAD/)
 
     // The override is the contract that lets a repo adapt a gate without forking it.
     const vars = spawnSync('just', ['--evaluate'], { cwd: dir, encoding: 'utf8' })
@@ -104,7 +112,7 @@ function withReviewRepo(stub, fn) {
     git('add', '-A'); git('commit', '-q', '-m', 'init')
 
     mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
-    for (const f of ['gate.just', 'review-prompt.md'])
+    for (const f of ['gate.just', 'review-prompt.md', 'diff-since.mjs', 'review-guard.mjs'])
       writeFileSync(join(dir, '.dev/kit/common', f), readFileSync(join(REPO, 'kit/common', f), 'utf8'))
     // `base := "HEAD"` keeps `git diff {{base}}...HEAD` valid with one commit and no remote.
     writeFileSync(join(dir, 'justfile'),
@@ -146,7 +154,11 @@ test('code-review clears its temp before dispatch, so mv can never promote a sta
   { skip: JUST.error ? 'just not installed' : false }, () => {
   // A reviewer recipe that exits 0 without writing: the pre-fix `mv` promoted whatever
   // temp file was already on disk as if this run had produced it.
-  withReviewRepo('review-claude:\n    @true\n', (dir, just) => {
+  withReviewRepo(BASE_PREV + 'review-claude:\n    @true\n', (dir, just) => {
+    // A real diff, so the run reaches dispatch: with nothing new since the last pass
+    // the recipe refuses BEFORE it, and this test would pass without proving anything.
+    write(dir, 'src/x.rs', 'fn x() {}\n')
+    commitAll(dir)
     mkdirSync(join(dir, '.work'), { recursive: true })
     writeFileSync(join(dir, '.work/review.tmp'), 'REVIEWED: deadbeef\nVERDICT: CLEAN\n')
 
@@ -163,6 +175,245 @@ test('code-review validates the reviewer through quote(), so the check survives 
     assert.equal(r.status, 2, r.stderr)
     assert.match(r.stdout + r.stderr, /unknown reviewer/)
     assert.ok(!existsSync(join(dir, 'PWNED2')), 'the validation line must not evaluate its own input')
+  })
+})
+
+// `base := "HEAD~1"` (overriding withReviewRepo's `HEAD`, which diffs a commit against
+// itself) lets a test commit a real change and get a real diff out of the recipe.
+const BASE_PREV = 'base := "HEAD~1"\n'
+const commitAll = (dir) => {
+  const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+  git('add', '-A'); git('commit', '-q', '-m', 'change')
+}
+
+test('the prompt lists every changed file but omits generated/vendored/locked bodies',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  // Measured on a real consuming repo: two thirds of a 693 KB diff was lockfile,
+  // installed agent-rules tree and codegen, so the reviewer reviewed THIS library
+  // instead of the feature. The inventory stays complete: an omission the reviewer
+  // cannot see is an omission it reads as "unchanged".
+  withReviewRepo(BASE_PREV + COPY_STUB, (dir, just) => {
+    write(dir, 'src/reviewed.rs', 'fn reviewed() {}\n')
+    write(dir, 'Cargo.lock', 'LOCKED_BODY\n')
+    write(dir, '.claude/skills/x/SKILL.md', 'VENDORED_BODY\n')
+    write(dir, '.work/prompt.md', 'PREVIOUS_PROMPT_BODY\n')
+    write(dir, 'apps/web/src/routeTree.gen.ts', 'GENERATED_BODY\n')
+    commitAll(dir)
+
+    assert.equal(just('review-with', 'claude', '').status, 0)
+    const prompt = readFileSync(join(dir, '.work/adhoc-prompt.md'), 'utf8')
+
+    assert.match(prompt, /=== FILES CHANGED \(full inventory\) ===/)
+    for (const f of ['Cargo.lock', '.claude/skills/x/SKILL.md', '.work/prompt.md',
+                     'apps/web/src/routeTree.gen.ts', 'src/reviewed.rs'])
+      assert.ok(prompt.includes(f), `the inventory must name every changed file, missing ${f}`)
+
+    for (const body of ['LOCKED_BODY', 'VENDORED_BODY', 'PREVIOUS_PROMPT_BODY', 'GENERATED_BODY'])
+      assert.ok(!prompt.includes(body), `${body} must not reach the reviewer's context`)
+    assert.match(prompt, /fn reviewed/, 'source is never excluded')
+  })
+})
+
+test('an oversized prompt fails before dispatch instead of truncating the review',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  // Truncation would not shrink the review, it would review an unknown subset and
+  // still return a verdict — a CLEAN over code the reviewer never received.
+  withReviewRepo(BASE_PREV + 'review_max_bytes := "12000"\n' + COPY_STUB, (dir, just) => {
+    write(dir, 'big.rs', 'fn f() { let _ = 1; }\n'.repeat(2000))
+    commitAll(dir)
+
+    const r = just('code-review', 'claude')
+    assert.notEqual(r.status, 0, 'a prompt over the cap must fail the gate')
+    assert.match(r.stdout + r.stderr, /prompt too large/)
+    assert.ok(!existsSync(join(dir, '.work/review-report.md')),
+      'the check runs before dispatch, so no verdict can be promoted')
+  })
+})
+
+// ------------------------------------------------- incremental Tier 3 (the marker)
+// A branch built by successive loops used to pay, on every block, for every block
+// before it: `git diff <base>...HEAD` is the whole branch. The marker under
+// `.work/<slug>/` is how much of it a gate already cleared.
+//
+// `COPY_STUB` cannot serve here — its "report" is the prompt, which carries no verdict
+// markers, so the guard blocks and nothing is ever marked. These need a reviewer that
+// files a real verdict AND keeps the prompt it was handed.
+const VERDICT_STUB = (verdict = 'CLEAN') =>
+  'review-claude:\n'
+  + '    cp {{review_in}} .work/seen-prompt.md\n'
+  + `    printf '<!-- CI_VERDICT: ${verdict} -->\\n<!-- REVIEWED: %s -->\\n' "$(git rev-parse HEAD)" > {{review_out}}\n`
+// A fixed trunk: `base := "HEAD~1"` moves with HEAD, so it cannot tell "the whole
+// branch" from "the last commit" — which is the very distinction under test.
+const TRUNK = 'base := "trunk"\nwork_slug := "cap"\n'
+const MARKER = '.work/cap/.latest_review'
+const promptOf = (dir) => readFileSync(join(dir, '.work/seen-prompt.md'), 'utf8')
+const trunkAt = (dir) => spawnSync('git', ['branch', 'trunk'], { cwd: dir })
+
+test('code-review reviews only what a previous pass has not already cleared',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'FIRST_BLOCK\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    assert.ok(promptOf(dir).includes('FIRST_BLOCK'), 'the first block is the whole branch')
+    assert.ok(existsSync(join(dir, MARKER)), 'a passing review records what it cleared')
+
+    write(dir, 'second.rs', 'SECOND_BLOCK\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    const prompt = promptOf(dir)
+    assert.ok(!prompt.includes('FIRST_BLOCK'), 'a cleared block must not be re-reviewed')
+    assert.ok(prompt.includes('SECOND_BLOCK'), 'the new block is what is under review')
+    // The inventory stays WHOLE-branch: an incremental diff must never read as "the
+    // earlier commits do not exist" — that is the same trap as review_exclude.
+    assert.match(prompt, /=== REVIEWED THROUGH ===/)
+    assert.ok(prompt.includes('first.rs') && prompt.includes('second.rs'),
+      'the --stat inventory covers the branch, not the increment')
+  })
+})
+
+test('the marker is per developer: it gitignores itself even where .work/ is committed',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'FIRST_BLOCK\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    const ignore = readFileSync(join(dir, '.work/.gitignore'), 'utf8')
+    for (const pattern of ['*/.latest_review', '*/.latest_mutate'])
+      assert.ok(ignore.split('\n').includes(pattern), `${pattern} must never be shared`)
+  })
+})
+
+test('a CRITICAL leaves the marker where it was, so the fix comes back with its block',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB('CRITICAL'), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'FIRST_BLOCK\n')
+    commitAll(dir)
+    assert.notEqual(just('code-review', 'claude').status, 0, 'a CRITICAL fails the gate')
+    assert.ok(!existsSync(join(dir, MARKER)), 'nothing was cleared, so nothing is recorded')
+
+    // The fix, and a reviewer that now signs off: the block it fixes must be in the diff.
+    writeFileSync(join(dir, 'justfile'),
+      readFileSync(join(dir, 'justfile'), 'utf8').replace('CI_VERDICT: CRITICAL', 'CI_VERDICT: CLEAN'))
+    write(dir, 'first.rs', 'FIRST_BLOCK fixed\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    assert.ok(promptOf(dir).includes('FIRST_BLOCK'), 'a block that never passed is still under review')
+  })
+})
+
+test('nothing new since the last pass is refused before dispatch, never reviewed again',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'FIRST_BLOCK\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    const verdict = readFileSync(join(dir, '.work/review-report.md'), 'utf8')
+
+    const again = just('code-review', 'claude')
+    assert.equal(again.status, 2, 'an empty range is a refusal, not an LLM call over nothing')
+    assert.match(again.stdout + again.stderr, /nothing new since the last passing review/)
+    assert.equal(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), verdict,
+      'the standing verdict is what review-guard reads — a refusal must not disturb it')
+
+    // The escape hatch: the whole-branch pass, worth one run before the PR.
+    const full = spawnSync('just', ['incremental=0', 'code-review', 'claude'], { cwd: dir, encoding: 'utf8' })
+    assert.equal(full.status, 0, full.stderr)
+    assert.ok(promptOf(dir).includes('FIRST_BLOCK'))
+  })
+})
+
+// ---------------------------------------------------------------- diff-since.mjs
+// The fallbacks, on the script directly: every way the marker can be wrong costs one
+// full pass, never a hidden commit. Cheaper to enumerate here than through the recipe.
+const DIFF_SINCE = join(REPO, 'kit', 'common', 'diff-since.mjs')
+// stdout carries the ref ALONE — the caller reads it inside `$( )`, so the
+// diagnostics have to stay on stderr. Asserting that split is half the point.
+const since = (dir, ...args) => {
+  const r = spawnSync(process.execPath,
+    [DIFF_SINCE, 'review', '--base', 'trunk', '--slug', 'cap', ...args], { cwd: dir, encoding: 'utf8' })
+  return { status: r.status, ref: (r.stdout || '').trim(), why: r.stderr || '' }
+}
+
+test('diff-since: a marker that no longer describes this branch falls back to the base', () => {
+  withTmpRepo((dir) => {
+    const [first, head] = commits(dir, 2)
+    git(dir, 'branch', 'trunk', first)
+
+    const cases = {
+      'no marker yet': null,
+      'not a sha': 'HEAD~1\n',
+      'a commit that is gone (rebased, amended)': 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n',
+    }
+    for (const [why, body] of Object.entries(cases)) {
+      if (body === null) rmSync(join(dir, '.work'), { recursive: true, force: true })
+      else write(dir, '.work/cap/.latest_review', body)
+      const r = since(dir)
+      assert.equal(r.status, 0)
+      assert.equal(r.ref, 'trunk', `${why}: must diff the whole branch`)
+    }
+
+    // A commit that exists but is not an ancestor of HEAD: the branch was reset or
+    // switched under the marker, so what it cleared is not what is here now.
+    write(dir, '.work/cap/.latest_review', `${head}\n`)
+    git(dir, 'reset', '--hard', '-q', first)
+    const moved = since(dir)
+    assert.equal(moved.ref, 'trunk')
+    assert.match(moved.why, /not an ancestor of HEAD/)
+  })
+})
+
+test('diff-since: a live marker is the range start, and incremental=0 overrides it', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 2)
+    git(dir, 'branch', 'trunk', first)
+    write(dir, '.work/cap/.latest_review', `${first}\n`)
+
+    assert.equal(since(dir).ref, first, 'stdout is the ref alone, diagnostics go to stderr')
+    assert.equal(since(dir, '--incremental', '0').ref, 'trunk')
+  })
+})
+
+test('diff-since: --mark records only a real commit, and the two kinds are separate', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir, 1)
+    const bad = run(DIFF_SINCE, ['review', '--mark', 'deadbeef', '--slug', 'cap'], dir)
+    assert.equal(bad.status, 2, 'a marker that is not a commit is worse than no marker')
+    assert.ok(!existsSync(join(dir, '.work/cap/.latest_review')))
+
+    assert.equal(run(DIFF_SINCE, ['mutate', '--mark', head, '--slug', 'cap'], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/cap/.latest_mutate')))
+    assert.ok(!existsSync(join(dir, '.work/cap/.latest_review')),
+      'review and mutate clear at their own cadence — one marker each')
+  })
+})
+
+test('diff-since: with no --slug the marker follows the branch, sanitized into one segment', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'feat/big-thing')
+    assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/feat-big-thing/.latest_review')),
+      'a branch name is a path here — its slashes must not become directories')
+  })
+})
+
+test('review-guard: --require-report turns "not run" into a failure, for the recipe only', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    // The hole it closes: a CLI that exits 0 having written nothing left the guard at 0,
+    // and code-review would then have marked unreviewed code as cleared.
+    write(dir, '.work/review-report.md', '')
+    const strict = run(REVIEW_GUARD, ['--require-report'], dir)
+    assert.equal(strict.status, 1, 'the reviewer produced no verdict — that is not a pass')
+    assert.match(strict.out, /never as green/)
+
+    const hook = run(REVIEW_GUARD, [], dir)
+    assert.equal(hook.status, 0, 'the pre-push contract is unchanged: declared, never simulated')
   })
 })
 

@@ -41,6 +41,13 @@ rust-check: rust-lint
 # PR job computes. `--relative` inside {{rust_dir}} rewrites the paths so they
 # are workspace-relative, which is what cargo-mutants expects when the Rust
 # workspace is NOT at the repo root. Needs: cargo install cargo-mutants.
-rust-mutate:
-    cd {{rust_dir}} && git diff {{base}}...HEAD --relative -- . > pr.diff
+#
+# `from` is where that range STARTS, and it defaults to the whole branch — the
+# behaviour this recipe always had, and the only one available to a repo that
+# installed rust without kit/common. Pass it the commit mutation last cleared to
+# re-mutate only what is new: `just rust-mutate "$(just mutate-from)"`, which is
+# what common/gate.just's `mutate-from` prints. Mutants cost minutes each, so on a
+# branch built by successive loops that argument is most of the runtime.
+rust-mutate from=base:
+    cd {{rust_dir}} && git diff {{from}}...HEAD --relative -- . > pr.diff
     cd {{rust_dir}} && cargo mutants --in-diff pr.diff --no-shuffle

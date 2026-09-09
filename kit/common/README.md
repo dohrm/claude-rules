@@ -38,7 +38,7 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 | Node.js >= 18 | `brew install node` | your distro's package manager, or [nvm](https://github.com/nvm-sh/nvm) | `winget install OpenJS.NodeJS.LTS` (or `scoop install nodejs`) |
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
-`docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs` and
+`docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs` and
 `publish-summary.mjs` all run on it (that's the reason they're Node rather
 than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
 shell out to `npx`.
@@ -47,13 +47,13 @@ shell out to `npx`.
 
 | File | Holds |
 |---|---|
-| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base` |
+| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base` |
 | `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-3 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
-`worktree-status.mjs`, `publish-summary.mjs`, `review-prompt.md`) ship **in this directory** and are called
+`worktree-status.mjs`, `publish-summary.mjs`, `diff-since.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
 
@@ -63,6 +63,49 @@ root justfile:
 ```just
 review_prompt := "docs/review-prompt.md"
 ```
+
+## Tier 3 measures the block, not the branch
+
+`code-review` used to read `git diff <base>...HEAD` on every run, so a branch grown
+over several loops re-reviewed everything the previous runs had already cleared — the
+tenth block paying for the nine before it, until `review_max_bytes` failed one for the
+size of its own history. Each gate now records the commit it last **passed** on and
+diffs from there:
+
+| | |
+|---|---|
+| `.work/<slug>/.latest_review` | what `code-review` cleared |
+| `.work/<slug>/.latest_mutate` | what `mutate-diff` cleared, once you wire it |
+
+`<slug>` is the branch name unless you set `work_slug` (a `/loop-setup` capability slug
+parks the marker next to that loop's `loop.md`). Both files are per developer —
+`diff-since.mjs` keeps `.work/.gitignore` carrying the patterns, so they stay private
+even in a repo that commits its `.work/` plans.
+
+Three properties, none of them optional:
+
+- **It advances only after the gate passed.** A `CRITICAL` leaves the marker where it
+  was, so the fixes come back for review *with* the block they fix.
+- **It fails back, never closed.** Absent, unparseable, rewritten, rebased, a branch
+  switched under it — anything but a commit that is still an ancestor of `HEAD` means
+  the full `<base>...HEAD`. A stale marker costs one whole pass; a marker trusted
+  blindly hides a rewritten commit from every review that follows.
+- **It is local.** CI always measures the whole PR. The marker is a loop's economy,
+  never the branch's proof — and `just incremental=0 code-review` is the whole-branch
+  read, worth one run before you open one.
+
+Mutation is wired in **your** justfile, because `mutate-diff` is where you name the
+mutators this repo has:
+
+```just
+mutate-diff:
+    just rust-mutate "$(just mutate-from)"
+    just mutate-mark
+```
+
+`mutate-mark` runs last and only on success (just stops at the first failing line), so
+a surviving mutant leaves the marker put. Stryker (`--incremental`) and mutmut (its
+cache) already scope themselves and take no range — leave them on their own line.
 
 `review_in` / `review_out` are **not** configuration: they are how `code-review` (the
 gate) and `review-with` (ad hoc) drive the same `review-<agent>` recipes over separate

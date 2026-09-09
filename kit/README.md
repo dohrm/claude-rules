@@ -37,6 +37,17 @@ reason; they need Node >= 18 and no dependencies.)
 | 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
 | 3 | `just mutate-diff` | per coherent block, before the push — and the PR job | mutation on the diff — NEVER a hook | minutes |
 
+Tier 3 measures **what a previous pass has not already cleared**, not the whole branch:
+`code-review` and (once wired) `mutate-diff` record the commit they last passed on in
+`.work/<slug>/.latest_review` / `.latest_mutate` and diff from there. On a branch built
+by successive loops that is the difference between a cost that grows with the branch
+and one that grows with the block. The marker advances only after the gate passed — a
+`CRITICAL` leaves it put, so the fixes come back with the block they fix — and every
+way it can go stale (rebase, amend, branch switch, a commit that no longer exists)
+falls back to the full `<base>...HEAD`. It is per developer and gitignored; CI always
+measures the whole PR. `just incremental=0 code-review` is the whole-branch pass, worth
+one run before the PR.
+
 `adr-check` sits in Tier 2 but guards a different thing: not whether the code is
 correct, but whether a **decision** was taken by a human. A green gate is
 permission for code, never for a decision. It also warns (advisory; `--strict` to
@@ -126,13 +137,20 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    accepting an ADR a human act — it fails when a new ADR is not `Proposed`, or
    when a status line moved without a commit. Doctrine: `../rules/agent/decisions.md`.
    It is a no-op in a repo with no `docs/adr/`.
-5. **Code review** (only if an agent CLI is available): set `review_cmd` in your
+5. **Code review** (only if an agent CLI is available): set `reviewer` in your
    justfile to that CLI (override `review_prompt` for a repo-specific prompt) and
    gitignore `.work/`. `just code-review` runs a read-only reviewer once per coherent
    block; `just review-guard` reads the verdict it left behind and blocks a push on a
    `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger (it also
    carries the `no-commit-on-trunk` git floor; a solo repo deletes that one command).
-   Doctrine: `../rules/agent/autonomy.md`.
+   The reviewer has no shell, so the prompt IS its whole view: append your repo's
+   generated and vendored paths to `review_exclude` (lockfiles, the installed rules
+   tree and `*.gen.*` are already there) — the `--stat` inventory still names every
+   changed file, so nothing goes missing silently. `review_max_bytes` fails the gate on
+   a diff too big to review rather than letting the reviewer see a random subset of it.
+   Successive runs review only what the last passing one did not clear (the marker
+   above); `work_slug` parks that marker next to a `/loop-setup` capability's `loop.md`
+   instead of under the branch name. Doctrine: `../rules/agent/autonomy.md`.
 6. **Parallel sessions** (only if you run more than one at a time): `just status`.
    The reason it exists is
    the reason it is needed: `.work/` is per-worktree, so `review-guard` answers about
