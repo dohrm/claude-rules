@@ -42,11 +42,43 @@ its imports. So the payload stays whole and PATH gets links.
 | `--force` | replace a `bench`/`fleet` on PATH that is not ours, and overwrite an edited layout |
 | `--ref <r>` | install from a tag instead of the default branch |
 
-Re-running is the update. It refuses to clobber twice over: a binary on PATH that
-is not a link into the payload, and a layout you have edited — because a layout is
-the one thing here you are *meant* to edit, and an update that silently reverts
-your panes is worse than one that tells you to look. `workstation uninstall`
-removes the payload and the links; layouts are left, they are yours.
+### What is yours, and what is not
+
+Re-running is the update, and the two halves are treated differently on purpose:
+
+| | On re-install | Because |
+|---|---|---|
+| the payload (`lib.mjs`, `bin/`) | **replaced wholesale**, silently | it is maintained here and has a witness. Edit it in a clone and use `--link`, or send a patch — a local edit to a copy is lost work |
+| a layout you edited | **kept**, with a notice | a layout is the one thing here you are *meant* to edit; an update that silently reverts your panes is worse than one that tells you to look |
+| a foreign `bench`/`fleet` on PATH | **skipped**, with a notice | it is not ours to replace. The symlink into the payload is what marks ownership — which is also why `uninstall` will not remove a binary it did not create |
+
+`--force` overrides the last two. `workstation uninstall` removes the payload and
+the links; layouts are left, they are yours.
+
+### Three locations, and the one an install must never touch
+
+```
+~/.local/share/claude-rules/workstation/   the payload — code, replaced by an install
+~/.local/state/claude-rules/benches/       your benches — one JSON each, never touched
+~/.config/zellij/layouts/                  the layouts — zellij's directory, not ours
+```
+
+Code goes in `share` and not in `config` for a practical reason, not a pedantic
+one: put code under `~/.config` and every dotfiles tool starts versioning a copied
+`lib.mjs`. The layouts are under zellij's own config path because that is where
+zellij looks for them. `install` prints all three, and `fleet -h` prints the
+registry — otherwise backing up your benches means reading the source.
+
+### Windows
+
+Not supported natively, and `workstation install` refuses rather than failing
+halfway. The *tools* would run — they are plain node, and zellij ships a Windows
+binary — but this installer is POSIX-only on four counts: `~/.local/bin` is not a
+PATH convention there, `symlinkSync` needs Developer Mode or elevation, a
+`#!/usr/bin/env node` file is not executable from PowerShell (it needs a `.cmd`
+shim), and zellij reads its layouts from elsewhere. Under **WSL** this is Linux
+and everything above works unchanged. By hand: keep `bin/` and `lib.mjs` together
+and put a `node <path>\bin\fleet` shim on your PATH.
 
 Node >= 18, no dependencies, no build. `git` and `zellij` are read via the shell;
 both are optional — `fleet` runs in any terminal, and a bench with neither still

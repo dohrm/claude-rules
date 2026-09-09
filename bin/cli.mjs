@@ -1264,6 +1264,10 @@ async function promptAdd() {
 const XDG = {
   data: process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
   config: process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
+  // DUPLICATED, on purpose, from workstation/lib.mjs (REGISTRY). The installer must
+  // not import the payload: the payload it installs may be a downloaded temp copy,
+  // not the one on this disk. Two definitions, one contract — move both or neither.
+  state: process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'),
   bin: join(homedir(), '.local', 'bin'),
 }
 const WS_PAYLOAD = join(XDG.data, 'claude-rules', 'workstation')
@@ -1303,6 +1307,25 @@ async function workstation(action) {
   }
   if (action !== 'install') {
     console.error('Usage: workstation install [--link] [--force]  |  workstation uninstall [--force]')
+    process.exit(1)
+  }
+
+  // Windows: refuse loudly rather than fail halfway. zellij itself ships a Windows
+  // binary, and bench/fleet are plain node with no unix assumption — it is THIS
+  // installer that is POSIX-only, on four counts, and every one of them is a real
+  // fix rather than a flag: ~/.local/bin is not a PATH convention there, symlinkSync
+  // needs Developer Mode or elevation, a `#!/usr/bin/env node` file is not
+  // executable from PowerShell (it needs a .cmd shim), and zellij reads its layouts
+  // from somewhere else. Under WSL this is Linux and everything below works.
+  if (process.platform === 'win32') {
+    console.error('workstation install does not support native Windows yet.\n'
+      + '  The tools would run (they are plain node, and zellij ships a Windows binary) —\n'
+      + '  the INSTALLER is POSIX-only: ~/.local/bin is not on PATH there, symlinks need\n'
+      + '  Developer Mode, a shebang is not executable from PowerShell, and the zellij\n'
+      + '  layout directory differs.\n'
+      + '  Use WSL (it is Linux, so this works unchanged), or install by hand — the\n'
+      + '  payload is workstation/ in the repo: keep bin/ and lib.mjs together and put a\n'
+      + '  `node <path>\\bin\\fleet` shim on your PATH.')
     process.exit(1)
   }
 
@@ -1373,7 +1396,13 @@ async function workstation(action) {
   if (zellij.error || zellij.status !== 0) console.log('  • zellij is not installed: `fleet` still runs anywhere, but `bench start` and the layouts need it.')
   console.log('  • `bench register <path>` for a bench you drive from a GUI host, `bench start .` to open one here.')
   console.log('  • `zellij --session fleet --layout fleet` once — the session you come back to.')
-  console.log(`  • the doctrine these read is the file contract, not this install: ${join(WS_PAYLOAD, 'README.md')}`)
+  // Three XDG locations, each the standard one for what it holds, and the one that
+  // matters is the one an install must never touch: your benches. Say where it is,
+  // or backing it up means reading the source.
+  console.log('\nOn disk:')
+  console.log(`  code    ${WS_PAYLOAD}${link ? ' → the clone' : ''}   (replaced by the next install)`)
+  console.log(`  benches ${join(XDG.state, 'claude-rules', 'benches')}   (yours — never touched by an install)`)
+  console.log(`  layouts ${WS_LAYOUT_DIR}   (zellij's, yours to edit — an install keeps your version)`)
 }
 
 // ----------------------------------------------------------------------- main

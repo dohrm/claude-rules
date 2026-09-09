@@ -15,16 +15,17 @@
 // inside each bench, at push time.
 
 import { existsSync } from 'node:fs'
-import { age, baseRef, git, loopState, readBenches, reviewState, sessions } from '../lib.mjs'
+import { REGISTRY, age, baseRef, git, loopState, readBenches, reviewState, sessions } from '../lib.mjs'
 
 if (process.argv.includes('-h') || process.argv.includes('--help')) {
   console.log('fleet — overview of every registered bench. Register one with `bench start <path>`.')
+  console.log(`\nBenches live in ${REGISTRY} — one JSON file each, yours to back up or edit.`)
   process.exit(0)
 }
 
 const benches = readBenches()
 if (!benches.length) {
-  console.log('No bench registered.\n  bench start .          open one here\n  bench register <path>  add one driven from a GUI host')
+  console.log(`No bench registered (${REGISTRY}).\n  bench start .          open one here\n  bench register <path>  add one driven from a GUI host`)
   process.exit(0)
 }
 

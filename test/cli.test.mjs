@@ -986,6 +986,7 @@ function withTmpHome(fn) {
     HOME: home,
     XDG_DATA_HOME: join(home, '.local', 'share'),
     XDG_CONFIG_HOME: join(home, '.config'),
+    XDG_STATE_HOME: join(home, '.local', 'state'),
   }
   const run = (...args) => {
     const r = spawnSync(process.execPath, [CLI, ...args, '--local', REPO], { cwd: home, encoding: 'utf8', env })
@@ -1010,6 +1011,19 @@ test('workstation install puts both tools on PATH and they actually run', () => 
       const x = spawnSync(process.execPath, [join(home, '.local', 'bin', b)], { encoding: 'utf8', env })
       assert.equal(x.status, 0, `the installed ${b} must run, not just exist:\n${x.stderr}`)
     }
+
+    // The registry path is defined TWICE — bin/cli.mjs prints it, workstation/lib.mjs
+    // uses it — because the installer must not import a payload it may have just
+    // downloaded elsewhere. So assert the two agree, or a future move breaks the one
+    // thing an install must never touch: where the benches live.
+    const announced = r.out.match(/^ {2}benches (\S+)/m)
+    assert.ok(announced, `install must print where benches live:\n${r.out}`)
+    const reg = spawnSync(process.execPath, [join(home, '.local', 'bin', 'bench'), 'register', REPO], { encoding: 'utf8', env })
+    assert.equal(reg.status, 0, `bench register must succeed:\n${reg.stderr}`)
+    assert.ok(
+      existsSync(join(announced[1], 'claude-rules.json')),
+      `bench wrote its record somewhere other than the announced ${announced[1]}`,
+    )
   })
 })
 

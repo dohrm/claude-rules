@@ -16,6 +16,8 @@ import { join } from 'node:path'
 // One JSON file per bench, so two `bench start` in parallel can never race on a
 // shared file, and pruning a dead record is one unlink.
 
+// The path is DUPLICATED in bin/cli.mjs (XDG.state), which prints it after an
+// install. Two definitions, one contract — move both or neither.
 export const REGISTRY = join(
   process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'),
   'claude-rules', 'benches',
