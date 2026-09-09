@@ -29,6 +29,67 @@ review_prompt := kit / "review-prompt.md"
 review_in  := ".work/prompt.md"
 review_out := ".work/review.tmp"
 
+# What the reviewer never sees. The diff is its ONLY view of the change — it has no
+# shell (`review_deny`), so an excluded path is invisible to it, not merely unread.
+# Two rules follow. Exclude only what a human reviewer skips too — generated, vendored,
+# locked — never source. And never let the omission be silent: `code-review` emits the
+# COMPLETE `git diff --stat` inventory above the diff, and `review-prompt.md` tells the
+# reviewer to compare the two, because a reviewer that believes it saw the whole diff
+# will vouch for code it never read.
+# Measured on one real consuming repo: a 693 KB diff, 33% of it source. `Cargo.lock`
+# alone was 31%; the installed agent-rules tree another 18% — twice over, since the
+# installer emits `.claude/` AND `.agents/` byte-identical — so two thirds of the
+# reviewer's context went to files nobody reviews, and it reviewed THIS library instead
+# of the feature. `.work/` is excluded for a second reason: it holds `review_in`, so a
+# repo that commits its plans feeds the reviewer the previous run's prompt.
+# Repo-specific generated paths (a vendored dir, a codegen output) belong in an override
+# in the root justfile, appended to this list — not silently dropped from it.
+#
+# Each pathspec carries its OWN single quotes, because this variable interpolates RAW
+# into the `git diff` line: unquoted, `(` is a shell metacharacter (`syntax error near
+# unexpected token` — caught by test/gates.test.mjs, not by review), and `*.lock` would
+# be glob-expanded by the shell before git ever sees it. `quote()` cannot do the job
+# here: it would wrap the whole list into ONE argument. Keep the convention when you
+# override — one quoted word per pathspec, space-separated.
+review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json'"
+
+# ── Incremental Tier 3 (the marker) ────────────────────────────────────────
+# `code-review` and `mutate-diff` both measured the WHOLE branch, so a branch built by
+# successive loops made every run pay for the blocks the previous ones already cleared:
+# minutes of re-run mutants, and a review prompt that grows until `review_max_bytes`
+# fails a block for the size of its ancestors. Each gate now records the commit it last
+# cleared in `.work/<slug>/.latest_review` / `.latest_mutate` and diffs from there.
+#
+# Three properties make that safe rather than merely cheaper, all in `diff-since.mjs`:
+# the marker advances ONLY after the gate passed (a CRITICAL leaves it where it is, so
+# the fixes come back for review WITH the block they fix); every way it can be wrong —
+# absent, rewritten, rebased, a branch switch in the same tree — falls back to `base`;
+# and the `--stat` inventory below stays whole-branch, so the reviewer is never told
+# the earlier commits do not exist. What incremental review does NOT do is re-read the
+# branch as a whole: `just incremental=0 code-review` is that pass, worth one run
+# before the PR.
+#
+# `work_slug` is the directory under `.work/` — empty means "the branch name", which is
+# right in a repo with one loop per branch. Set it to a `/loop-setup` capability slug to
+# park the marker next to that loop's `loop.md`.
+work_slug   := ""
+incremental := "1"
+
+diff_since  := "node " + kit + "/diff-since.mjs"
+since_scope := "--slug " + quote(work_slug) + " --incremental " + quote(incremental)
+review_from := diff_since + " review --base " + quote(base) + " " + since_scope
+mutate_from := diff_since + " mutate --base " + quote(base) + " " + since_scope
+
+# A diff that does not fit the reviewer's context does not produce a smaller review: it
+# produces a review of an unknown subset that still returns a verdict — a `CLEAN` over
+# code the reviewer never received, which is the one failure this gate exists to
+# prevent. So the size is checked BEFORE dispatch, and it FAILS rather than truncating:
+# declared, never simulated, the same reason `review-guard` blocks a malformed report
+# instead of ignoring it. ~400 KB is ~100k tokens. Raise it if your reviewer's context
+# is bigger, or split the change — a 700 KB diff is a review problem before it is a
+# budget problem.
+review_max_bytes := "400000"
+
 # Folder trust is a gate SEPARATE from the permission flags below, and neither claude
 # nor codex has a CLI flag to skip or pre-seed it inline — it is persisted state, keyed
 # by path, in a file this repo does not own: ~/.claude.json
@@ -172,13 +233,19 @@ review-cursor:
 code-review reviewer=reviewer:
     case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
+    if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_exclude}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
     rm -f {{review_out}}
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
+    printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
+    printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
+    git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
-    git diff {{base}}...HEAD >> {{review_in}}
+    git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} >> {{review_in}}
+    n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review-{{reviewer}}
     mv {{review_out}} .work/review-report.md
-    node {{kit}}/review-guard.mjs
+    node {{kit}}/review-guard.mjs --require-report
+    {{diff_since}} review --mark "$(git rev-parse HEAD)" {{since_scope}}
 
 # ── Ad hoc review (opt-in, conversational) ──────────────────────────────────
 # Same prompt, same per-agent recipes, but on demand and non-blocking: no guard, no
@@ -202,8 +269,11 @@ review-with reviewer=reviewer topic="":
     rm -f .work/adhoc-review.tmp
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/adhoc-prompt.md
     printf '\n\n=== FOCUS ===\n\n%s\n' {{quote(topic)}} >> .work/adhoc-prompt.md
+    printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> .work/adhoc-prompt.md
+    git diff --stat=200 {{base}}...HEAD >> .work/adhoc-prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md
-    git diff {{base}}...HEAD >> .work/adhoc-prompt.md
+    git diff {{base}}...HEAD -- . {{review_exclude}} >> .work/adhoc-prompt.md
+    n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review_in='.work/adhoc-prompt.md' review_out='.work/adhoc-review.tmp' review-{{reviewer}}
     cat .work/adhoc-review.tmp
 
@@ -216,6 +286,30 @@ review-with reviewer=reviewer topic="":
 # rules/agent/autonomy.md.
 review-guard:
     node {{kit}}/review-guard.mjs
+
+# ── Mutation, incrementally (opt-in) ───────────────────────────────────────
+# `mutate-diff` lives in YOUR justfile — it names the mutators this repo actually has,
+# which is why the installer writes it and this library does not. These two recipes are
+# the marker half of it, so the same "only what is new" rule covers Tier 3's other gate:
+#
+#     mutate-diff:
+#         just rust-mutate "$(just mutate-from)"
+#         just mutate-mark
+#
+# `rust-mutate` takes the range start as its argument (it defaults to `base`, so a repo
+# without kit/common keeps working). `mutate-mark` runs LAST and only on success: just
+# stops the recipe at the first failing line, so a surviving mutant leaves the marker
+# where it was and the next run re-mutates that block WITH its fix. Stryker
+# (`--incremental`) and mutmut (its cache) already scope themselves this way; they take
+# no range and belong on their own line, unchanged.
+#
+# CI is untouched — it always measures the whole PR (`<tech>/mutation-ci.yaml`). The
+# marker is a local loop's economy, never the branch's proof.
+mutate-from:
+    @{{mutate_from}}
+
+mutate-mark:
+    {{diff_since}} mutate --mark "$(git rev-parse HEAD)" {{since_scope}}
 
 # ── Parallel work (opt-in) ─────────────────────────────────────────────────
 # One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the

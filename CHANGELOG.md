@@ -35,6 +35,50 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **Tier 3 measures the block, not the branch.** `just code-review` read
+  `git diff <base>...HEAD` on every run, so a branch built by successive
+  loops re-reviewed everything the previous runs had already cleared — the
+  cost grew with the branch, not with the block, until `review_max_bytes`
+  failed a two-file change for the size of its own history. Each gate now
+  records the commit it last **passed** on and diffs from there:
+  `.work/<slug>/.latest_review` and `.work/<slug>/.latest_mutate`, resolved by
+  the new `kit/common/diff-since.mjs`. `<slug>` is the branch name unless you
+  set `work_slug` (point it at a `/loop-setup` capability to park the marker
+  next to that loop's `loop.md`).
+
+  Three properties make it safe rather than merely cheaper. The marker
+  advances **only after the gate passed**, so a `CRITICAL` leaves it where it
+  was and the fixes come back for review with the block they fix. Every way it
+  can be wrong — absent, unparseable, a commit that was rewritten or rebased
+  away, a branch switched under it — falls back to the full `<base>...HEAD`; a
+  stale marker costs one whole pass, a marker trusted blindly hides a
+  rewritten commit from every review that follows. And it is local: CI still
+  measures the whole PR, `just incremental=0 code-review` is the whole-branch
+  read, worth one run before opening one. The `--stat` inventory in the prompt
+  stays whole-branch too, so an incremental diff can never read to the
+  reviewer as "the earlier commits do not exist" (`review-prompt.md` gained
+  the `=== REVIEWED THROUGH ===` section that says which of the two it is
+  looking at). Running it twice with nothing new in between is refused before
+  dispatch — the standing report is the verdict — rather than spending an LLM
+  call on an empty diff.
+
+  **Wiring**: nothing to do for review — `claude-rules update` refreshes
+  `kit/common` and the next `just code-review` starts recording. Mutation is
+  yours, because `mutate-diff` names the mutators this repo has:
+  `just rust-mutate "$(just mutate-from)"` then `just mutate-mark` (last, and
+  only on success). `rust-mutate` takes the range start as an argument now,
+  defaulting to `base`, so a repo without `kit/common` is unaffected. Stryker
+  and mutmut already scope themselves and take no range. The markers are per
+  developer: `diff-since.mjs` keeps `.work/.gitignore` carrying the two
+  patterns, so they stay private even where `.work/` is committed.
+
+  One behaviour change to know: `code-review` now calls `review-guard
+  --require-report`, so a reviewer CLI that exits 0 having written nothing
+  **fails the recipe** instead of reporting "not run" and exiting 0. Without
+  it the marker would advance over code no reviewer ever read. The pre-push
+  hook keeps the old, lenient contract — a missing report is still declared,
+  never simulated.
+
 - **`just publish-summary`** (shared `kit/common`) — a per-loop catch-up file
   for someone running several `/loop-setup` sessions in parallel. Run as the
   last step of the loop prompt, it reads whichever state file the loop was
@@ -67,6 +111,20 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   `/architect` / the `add` command.
 
 ### Changed
+
+- **`just code-review` stops paying for the diff it cannot use.** The reviewer
+  has no shell, so the prompt is its entire view of the change — and on one
+  real repo two thirds of a 693 KB diff was `Cargo.lock`, the installed
+  agent-rules tree (twice: `.claude/` *and* `.agents/`) and codegen, so it
+  reviewed this library instead of the feature. `review_exclude` drops those
+  bodies (lockfiles, `.claude`/`.agents`/`.cursor`/`.dev/kit`, `.work`,
+  `*.gen.*`, `openapi.json`); a complete `git diff --stat` inventory now sits
+  above the diff and the prompt tells the reviewer that a file listed there
+  with no hunk was omitted, not unchanged. `review_max_bytes` (400 KB) fails
+  the gate on a diff too big to review instead of letting the CLI truncate one
+  and return a verdict over code it never received. Append your own generated
+  paths to `review_exclude` in the root justfile — one single-quoted pathspec
+  per word.
 
 - **Architecture principles carry SOLID.** `hexagonal/principle.md`,
   `cqrs/principle.md`, and `portal-flat/principle.md` map S/O/L/I/D
