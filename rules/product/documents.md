@@ -28,6 +28,29 @@ record. One file per capability (`.work/<slug>/PLAN.md`) is enough at this scale
 the unit/index split above exists for documents that must stay readable for the
 life of the project, which this one no longer is.
 
+**"Committed" is one gitignore line, and it is not `.work/`.** What sits *directly*
+in `.work/` is per-tree scratch — the review report, the review prompt, the status
+file — and committing a verdict is how one tree's `CLEAN` ends up authorising
+another's push (`agent/autonomy.md`). What sits in `.work/<slug>/` is the plan. So
+ignore the files and keep the directories:
+
+```gitignore
+# Working memory. A capability's plan and worklists live in .work/<slug>/ and ARE
+# committed — a PR shows the cut it landed on. What sits directly in .work/ is
+# per-tree scratch: review report, review prompt, status.
+.work/*
+!.work/*/
+```
+
+Allow the directories **by shape, not by name**. A denylist of the scratch files
+breaks silently the day the kit adds one — which is how a repo ends up committing
+`.work/status` months later and nobody notices.
+
+This composes with a second, nested ignore that `kit/common/diff-since.mjs` writes
+and owns: `.work/.gitignore`, carrying `*/.latest_review` and `*/.latest_mutate`,
+so the per-developer gate markers stay private *inside* the slug directories this
+pattern un-ignores. Two rules, two scopes — don't collapse them into one.
+
 `.work/<slug>/intent.md` is the same deal one step earlier: it carries **what is
 still open** while a capability is framed and built. It is not an archive and needs
 no successor — what was promised ends up in the PRD, what was decided in an ADR,

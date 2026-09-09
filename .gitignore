@@ -4,7 +4,13 @@ site/dist/
 node_modules/
 package-lock.json
 !test/fixtures/ts-gate/package-lock.json
-.work/
+# Working memory. A capability's plan and worklists live in .work/<slug>/ and ARE
+# committed — a PR shows the cut it landed on. What sits directly in .work/ is
+# per-tree scratch: review report, review prompt, status. By shape, not by name:
+# a denylist of scratch filenames breaks the day the kit adds one.
+# Doctrine: rules/product/documents.md.
+.work/*
+!.work/*/
 .memory/
 /target/
 test/fixtures/rust-gate/target/
