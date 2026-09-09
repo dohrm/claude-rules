@@ -30,8 +30,8 @@ logs_dir := ".logs"
 # silently drives the OTHER tree's stack. A unix socket per tree removes the class of
 # bug: `-U` switches transport, `-u` names the socket.
 #
-# The name is derived from the tree's directory, which is also the bench name, so the
-# socket of a tree is guessable and `fleet`'s unit and this one agree. In /tmp rather
+# The name is derived from the tree's directory, so the socket of a tree is guessable
+# from the path you are standing in and never has to be looked up. In /tmp rather
 # than in-tree on purpose: a unix socket path is capped near 104 bytes on macOS, and a
 # deep monorepo path plus `.logs/pc.sock` gets close enough to matter.
 #

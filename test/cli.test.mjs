@@ -4,11 +4,9 @@
 // emitters, and they cover the per-agent transforms end to end.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, existsSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs'
+import { writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { spawnSync } from 'node:child_process'
-import { CLI, REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
+import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 
 const lockOf = dir => JSON.parse(read(dir, '.claude-rules.lock'))
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
@@ -970,94 +968,5 @@ test('init writes mutate-diff live at --level ratchet', () => {
     ok(runCli(['add', 'rust', '--level', 'ratchet', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
     assert.match(read(dir, 'justfile'), /^mutate-diff: rust-mutate$/m)
-  })
-})
-
-// ------------------------------------------------------------- workstation
-// `workstation install` writes to the MACHINE, so every test here runs against a
-// throwaway HOME. It is a separate verb from `add` on purpose and must stay one:
-// `add` means "install profiles into this repo", and nothing here touches a repo.
-const ok2 = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.out}`); return r }
-
-function withTmpHome(fn) {
-  const home = mkdtempSync(join(tmpdir(), 'claude-rules-home-'))
-  const env = {
-    ...process.env,
-    HOME: home,
-    XDG_DATA_HOME: join(home, '.local', 'share'),
-    XDG_CONFIG_HOME: join(home, '.config'),
-    XDG_STATE_HOME: join(home, '.local', 'state'),
-  }
-  const run = (...args) => {
-    const r = spawnSync(process.execPath, [CLI, ...args, '--local', REPO], { cwd: home, encoding: 'utf8', env })
-    if (r.error) throw r.error
-    return { status: r.status, out: (r.stdout || '') + (r.stderr || '') }
-  }
-  try { return fn({ home, env, run }) } finally { rmSync(home, { recursive: true, force: true }) }
-}
-
-test('workstation install puts both tools on PATH and they actually run', () => {
-  withTmpHome(({ home, env, run }) => {
-    const r = run('workstation', 'install')
-    assert.equal(r.status, 0, `install must succeed:\n${r.out}`)
-
-    for (const b of ['bench', 'fleet']) assert.ok(has(home, '.local/bin', b), `${b} must land on PATH`)
-    for (const l of ['bench.kdl', 'fleet.kdl']) assert.ok(has(home, '.config/zellij/layouts', l), `${l} must be installed`)
-
-    // THE regression this guards. The two bins do `import '../lib.mjs'`, so a
-    // naive install that copies only the executable dies with ERR_MODULE_NOT_FOUND.
-    // Asserting the file exists proves nothing; running it does.
-    for (const b of ['bench', 'fleet']) {
-      const x = spawnSync(process.execPath, [join(home, '.local', 'bin', b)], { encoding: 'utf8', env })
-      assert.equal(x.status, 0, `the installed ${b} must run, not just exist:\n${x.stderr}`)
-    }
-
-    // The registry path is defined TWICE — bin/cli.mjs prints it, workstation/lib.mjs
-    // uses it — because the installer must not import a payload it may have just
-    // downloaded elsewhere. So assert the two agree, or a future move breaks the one
-    // thing an install must never touch: where the benches live.
-    const announced = r.out.match(/^ {2}benches (\S+)/m)
-    assert.ok(announced, `install must print where benches live:\n${r.out}`)
-    const reg = spawnSync(process.execPath, [join(home, '.local', 'bin', 'bench'), 'register', REPO], { encoding: 'utf8', env })
-    assert.equal(reg.status, 0, `bench register must succeed:\n${reg.stderr}`)
-    assert.ok(
-      existsSync(join(announced[1], 'claude-rules.json')),
-      `bench wrote its record somewhere other than the announced ${announced[1]}`,
-    )
-  })
-})
-
-test('workstation install never clobbers an edited layout, or a foreign binary', () => {
-  withTmpHome(({ home, run }) => {
-    ok2(run('workstation', 'install'))
-
-    const layout = join(home, '.config/zellij/layouts/bench.kdl')
-    writeFileSync(layout, '// my own panes\n')
-    const foreign = join(home, '.local/bin/fleet')
-    rmSync(foreign, { force: true })
-    writeFileSync(foreign, '#!/bin/sh\necho mine\n')
-
-    const again = run('workstation', 'install')
-    assert.equal(again.status, 0)
-    assert.match(again.out, /differs — kept yours/)
-    assert.match(again.out, /is not ours — skipped/)
-    assert.equal(read(home, '.config/zellij/layouts/bench.kdl'), '// my own panes\n', 'an edited layout must survive')
-    assert.match(read(home, '.local/bin/fleet'), /echo mine/, 'a foreign binary must survive')
-
-    // --force is the documented escape hatch, and it must actually work.
-    ok2(run('workstation', 'install', '--force'))
-    assert.notEqual(read(home, '.config/zellij/layouts/bench.kdl'), '// my own panes\n')
-  })
-})
-
-test('workstation uninstall removes what it installed and leaves the layouts', () => {
-  withTmpHome(({ home, run }) => {
-    ok2(run('workstation', 'install'))
-    ok2(run('workstation', 'uninstall'))
-    for (const b of ['bench', 'fleet']) assert.ok(!has(home, '.local/bin', b), `${b} must be gone`)
-    assert.ok(!has(home, '.local/share/claude-rules/workstation'), 'the payload must be gone')
-    // Left on purpose: a layout is yours once you have it (README.md).
-    assert.ok(has(home, '.config/zellij/layouts/bench.kdl'), 'layouts are the user’s, not ours to delete')
-    assert.match(run('workstation', 'uninstall').out, /Nothing installed/)
   })
 })

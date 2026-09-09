@@ -88,9 +88,9 @@ flushed it. It is never the read an agent makes mid-turn
 supervisor outlives the pane that started it and the agent turn that asked for it,
 so closing a terminal does not take the stack down and nothing is left orphaned
 when a shell goes away. A human who wants the dashboard runs `just stack` and
-detaches again. The draft this replaced ran the TUI in the foreground of a zellij
-pane, where closing the pane killed the stack and the renderer burned CPU nobody
-was watching.
+detaches again. The draft this replaced ran the TUI in the foreground of a
+terminal pane, where closing the pane killed the stack and the renderer burned
+CPU nobody was watching.
 
 **A unix socket per work tree, and it is not optional.** process-compose serves
 its control API on TCP `:8080` by default. Two work trees of the same repo — the
@@ -112,9 +112,9 @@ other-stack web PID : 40265 -> 40372   restarted
 ```
 
 `devstack.just` passes `-U -u
-/tmp/pc-<tree>.sock`, derived from the tree's directory name, which is also its
-bench name (`workstation/README.md`). In `/tmp` rather than in-tree because a unix
-socket path is capped near 104 bytes on macOS and a deep monorepo path gets close.
+/tmp/pc-<tree>.sock`, derived from the tree's directory name, so the socket of a
+tree is guessable. In `/tmp` rather than in-tree because a unix socket path is
+capped near 104 bytes on macOS and a deep monorepo path gets close.
 Two *different* repos whose directories share a basename would collide — override
 `pc_socket` in the root justfile if that is you.
 

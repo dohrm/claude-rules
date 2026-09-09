@@ -15,13 +15,11 @@
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
-//   npx github:dohrm/claude-rules workstation install [--link]   # fleet/bench → ~/.local, NOT the repo
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync, realpathSync, symlinkSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
-import { tmpdir, homedir } from 'node:os'
-import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 // giget is imported lazily (only add/update without --local need it) so init/list run with no deps.
 
@@ -1244,167 +1242,6 @@ async function promptAdd() {
   }
 }
 
-// ---------------------------------------------------------------- workstation
-// A SEPARATE VERB, on purpose. `add` means "install profiles into this repo" and
-// that meaning is worth protecting: this writes to the MACHINE (~/.local, ~/.config)
-// and never touches the repo you run it from. `workstation/` is reachable from no
-// registry entry for the same reason — a zellij layout is not path-scopable, and a
-// cross-repo dashboard cannot be a per-repo copy.
-//
-// Layout on disk, and it is not arbitrary:
-//
-//   ~/.local/share/claude-rules/workstation/   the payload — lib.mjs AND bin/ together
-//   ~/.local/bin/{bench,fleet}                 symlinks into it
-//   ~/.config/zellij/layouts/{bench,fleet}.kdl copies, yours to edit
-//
-// The bins do `import '../lib.mjs'`, so copying one alone into ~/.local/bin fails
-// with ERR_MODULE_NOT_FOUND. Through a symlink it resolves, because node resolves a
-// module's realpath before resolving its imports. Hence: payload stays whole, PATH
-// gets links.
-const XDG = {
-  data: process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
-  config: process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
-  // DUPLICATED, on purpose, from workstation/lib.mjs (REGISTRY). The installer must
-  // not import the payload: the payload it installs may be a downloaded temp copy,
-  // not the one on this disk. Two definitions, one contract — move both or neither.
-  state: process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'),
-  bin: join(homedir(), '.local', 'bin'),
-}
-const WS_PAYLOAD = join(XDG.data, 'claude-rules', 'workstation')
-const WS_BINS = ['bench', 'fleet']
-const WS_LAYOUTS = ['bench.kdl', 'fleet.kdl']
-const WS_LAYOUT_DIR = join(XDG.config, 'zellij', 'layouts')
-
-/** The clone this CLI is running out of, when there is one. `--link` needs a path
- *  that will still be there tomorrow; a giget temp dir will not. */
-function cloneRoot() {
-  if (localFlag) return localFlag
-  const own = fileURLToPath(new URL('..', import.meta.url))
-  return existsSync(join(own, 'workstation', 'lib.mjs')) ? own : null
-}
-
-/** True when `p` is a symlink we own — i.e. one pointing inside the payload. */
-function oursAt(p) {
-  try {
-    return realpathSync(p).startsWith(realpathSync(WS_PAYLOAD))
-  } catch {
-    return false
-  }
-}
-
-async function workstation(action) {
-  if (action === 'uninstall') {
-    let gone = 0
-    for (const b of WS_BINS) {
-      const p = join(XDG.bin, b)
-      if (!existsSync(p)) continue
-      if (!oursAt(p) && !forceFlag) { console.log(`  ! ${p} is not ours — left alone (--force to remove)`); continue }
-      rmSync(p, { force: true }); logCopy(b, 'removed'); gone++
-    }
-    if (existsSync(WS_PAYLOAD)) { rmSync(WS_PAYLOAD, { recursive: true, force: true }); logCopy('payload', 'removed'); gone++ }
-    console.log(gone ? '\nLayouts were left in place — they are yours (delete them by hand if you want).' : 'Nothing installed.')
-    return
-  }
-  if (action !== 'install') {
-    console.error('Usage: workstation install [--link] [--force]  |  workstation uninstall [--force]')
-    process.exit(1)
-  }
-
-  // Windows: refuse loudly rather than fail halfway. zellij itself ships a Windows
-  // binary, and bench/fleet are plain node with no unix assumption — it is THIS
-  // installer that is POSIX-only, on four counts, and every one of them is a real
-  // fix rather than a flag: ~/.local/bin is not a PATH convention there, symlinkSync
-  // needs Developer Mode or elevation, a `#!/usr/bin/env node` file is not
-  // executable from PowerShell (it needs a .cmd shim), and zellij reads its layouts
-  // from somewhere else. Under WSL this is Linux and everything below works.
-  if (process.platform === 'win32') {
-    console.error('workstation install does not support native Windows yet.\n'
-      + '  The tools would run (they are plain node, and zellij ships a Windows binary) —\n'
-      + '  the INSTALLER is POSIX-only: ~/.local/bin is not on PATH there, symlinks need\n'
-      + '  Developer Mode, a shebang is not executable from PowerShell, and the zellij\n'
-      + '  layout directory differs.\n'
-      + '  Use WSL (it is Linux, so this works unchanged), or install by hand — the\n'
-      + '  payload is workstation/ in the repo: keep bin/ and lib.mjs together and put a\n'
-      + '  `node <path>\\bin\\fleet` shim on your PATH.')
-    process.exit(1)
-  }
-
-  const link = argv.includes('--link')
-  const root = cloneRoot()
-  if (link && !root) {
-    console.error('--link needs a clone that will still exist tomorrow: pass --local <path-to-clone>, or drop --link to copy.')
-    process.exit(1)
-  }
-
-  console.log(link
-    ? `Linking workstation tools: ${WS_PAYLOAD} → ${join(root, 'workstation')}\n`
-    : `Installing workstation tools to ${WS_PAYLOAD}\n`)
-
-  // 1. The payload. Linked = one symlink to the clone, so `git pull` updates the
-  //    tools. Copied = self-contained, which is the cross-machine mode.
-  rmSync(WS_PAYLOAD, { recursive: true, force: true })
-  ensureDir(dirname(WS_PAYLOAD))
-  if (link) {
-    symlinkSync(join(root, 'workstation'), WS_PAYLOAD)
-    logCopy('workstation/', `${WS_PAYLOAD} (symlink)`)
-  } else {
-    const staged = await makeStaged(refFlag || registry.defaultRef, { from: 'workstation' })
-    for (const f of walk(staged.dir)) {
-      const t = join(WS_PAYLOAD, f.rel)
-      ensureDir(dirname(t)); copyFileSync(f.abs, t)
-    }
-    if (staged.temp) rmSync(staged.dir, { recursive: true, force: true })
-    logCopy('workstation/', WS_PAYLOAD)
-  }
-
-  // 2. The two executables, on PATH.
-  ensureDir(XDG.bin)
-  for (const b of WS_BINS) {
-    const target = join(WS_PAYLOAD, 'bin', b)
-    const p = join(XDG.bin, b)
-    if (existsSync(p) && !oursAt(p) && !forceFlag) {
-      console.log(`  ! ${p} exists and is not ours — skipped (--force to replace)`)
-      continue
-    }
-    rmSync(p, { force: true })
-    symlinkSync(target, p)
-    logCopy(`bin/${b}`, p)
-  }
-
-  // 3. The layouts, COPIED and never overwritten: a layout is the one thing here
-  //    you are meant to edit, and an update that silently reverts your panes is
-  //    worse than one that tells you to look.
-  ensureDir(WS_LAYOUT_DIR)
-  for (const l of WS_LAYOUTS) {
-    const src = join(WS_PAYLOAD, 'layouts', l)
-    const dst = join(WS_LAYOUT_DIR, l)
-    if (existsSync(dst) && !forceFlag) {
-      const same = readFileSync(dst, 'utf8') === readFileSync(src, 'utf8')
-      console.log(same ? `  = ${dst} (unchanged)` : `  ! ${dst} differs — kept yours (--force to replace)`)
-      continue
-    }
-    copyFileSync(src, dst)
-    logCopy(`layouts/${l}`, dst)
-  }
-
-  // 4. What the install cannot do for you.
-  const path = (process.env.PATH || '').split(':')
-  const onPath = path.includes(XDG.bin) || path.some(p => { try { return realpathSync(p) === realpathSync(XDG.bin) } catch { return false } })
-  const zellij = spawnSync('zellij', ['--version'], { stdio: 'ignore' })
-  console.log('\nNext:')
-  if (!onPath) console.log(`  • ${XDG.bin} is NOT on your PATH — add it:  export PATH="$HOME/.local/bin:$PATH"`)
-  if (zellij.error || zellij.status !== 0) console.log('  • zellij is not installed: `fleet` still runs anywhere, but `bench start` and the layouts need it.')
-  console.log('  • `bench register <path>` for a bench you drive from a GUI host, `bench start .` to open one here.')
-  console.log('  • `zellij --session fleet --layout fleet` once — the session you come back to.')
-  // Three XDG locations, each the standard one for what it holds, and the one that
-  // matters is the one an install must never touch: your benches. Say where it is,
-  // or backing it up means reading the source.
-  console.log('\nOn disk:')
-  console.log(`  code    ${WS_PAYLOAD}${link ? ' → the clone' : ''}   (replaced by the next install)`)
-  console.log(`  benches ${join(XDG.state, 'claude-rules', 'benches')}   (yours — never touched by an install)`)
-  console.log(`  layouts ${WS_LAYOUT_DIR}   (zellij's, yours to edit — an install keeps your version)`)
-}
-
 // ----------------------------------------------------------------------- main
 async function main() {
   switch (cmd) {
@@ -1433,7 +1270,6 @@ async function main() {
       remove(positional[0] === 'all' ? positional : unpackNames(positional))
       break
     }
-    case 'workstation': await workstation(positional[0]); break
     case 'init': initRepo(); break
     case 'doctor': doctor(); break
     case 'budget': {
@@ -1468,9 +1304,6 @@ async function main() {
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
         + '                                   --agent picks the measured target (default: claude, then cursor)\n'
-        + '  workstation install [--link]     fleet + bench → ~/.local/bin, layouts → ~/.config/zellij\n'
-        + '                                   writes to the MACHINE, never to this repo; --link follows a clone\n'
-        + '  workstation uninstall            remove them (layouts are left: they are yours)\n'
         + '  list                             show available & installed profiles')
   }
 }
