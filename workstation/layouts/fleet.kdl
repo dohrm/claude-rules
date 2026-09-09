@@ -1,0 +1,25 @@
+// fleet — the session you come back to. Start it once:
+//
+//   zellij --session fleet --layout fleet
+//
+// The table is a Command Pane: when `fleet` exits, the pane stays open in a held
+// state showing the exit code, and ENTER re-runs it. So refreshing is one keypress,
+// there is no polling loop, no daemon, and your scrollback survives — you can
+// scroll back to what the fleet looked like an hour ago.
+
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="compact-bar"
+        }
+        children
+    }
+
+    tab name="fleet" focus=true {
+        pane split_direction="horizontal" {
+            // close_on_exit defaults to false: that held state IS the feature.
+            pane name="fleet" command="fleet"
+            pane name="shell" size="30%"
+        }
+    }
+}

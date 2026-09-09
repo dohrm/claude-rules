@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+
+// bench — open, register and close one unit of work.
+//
+// A bench is: a repo (or a worktree) + the zellij session driving it + its
+// `.work/<slug>/` state. `fleet` reads the benches this registers.
+//
+// It registers and it launches. That is ALL it does. It deliberately does NOT
+// create worktrees, scaffold docs/, or write .gitignore entries: a launcher that
+// also decides your repo layout seeds drift in every tree it touches, and the
+// layout is the repo's business (rules/product/documents.md).
+
+import { existsSync, statSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { git, readBenches, removeBench, sessions, validName, writeBench } from '../lib.mjs'
+
+const USAGE = `bench — one unit of work: a tree, a session, a state file.
+
+  bench start [path] [--name <n>] [--layout <l>]   register, then open/attach its zellij session
+  bench register [path] [--name <n>]               register only — for a bench driven from a GUI host
+  bench done [name]                                unregister (never kills the session, never touches the tree)
+
+Defaults: path = ".", name = the directory's basename, layout = "bench".
+See the whole fleet with \`fleet\`.`
+
+const argv = process.argv.slice(2)
+const cmd = argv.shift()
+
+/** Reads `--flag value` out of argv, leaving the positionals. */
+function flag(name) {
+  const i = argv.indexOf(`--${name}`)
+  if (i === -1) return null
+  const value = argv[i + 1]
+  if (value === undefined || value.startsWith('--')) die(`--${name} needs a value`)
+  argv.splice(i, 2)
+  return value
+}
+
+const die = (msg) => { console.error(`bench: ${msg}`); process.exit(1) }
+
+/** Resolve the tree to act on: it must exist, and it must be a git work tree —
+ *  every column `fleet` prints past the name comes from git. */
+function resolveTree() {
+  const nameFlag = flag('name')
+  const path = resolve(argv.shift() ?? '.')
+  if (!existsSync(path) || !statSync(path).isDirectory()) die(`no such directory: ${path}`)
+  const top = git(path, 'rev-parse', '--show-toplevel')
+  if (top === null) die(`not a git work tree: ${path}`)
+  const name = nameFlag ?? basename(top)
+  if (!validName(name)) die(`invalid bench name: "${name}" (letters, digits, . _ - ; max 64)`)
+  return { path: top, name }
+}
+
+switch (cmd) {
+  case 'start':
+  case 'register': {
+    const layout = flag('layout') ?? 'bench'
+    const { path, name } = resolveTree()
+    const existing = readBenches().find((b) => b.name === name)
+    if (existing && resolve(existing.path) !== path)
+      die(`"${name}" is already a bench at ${existing.path} — pass --name to distinguish this one`)
+
+    // Registration is idempotent: re-opening a bench must not reset its opened date.
+    writeBench({ name, path, session: name, opened: existing?.opened ?? new Date().toISOString() })
+    console.log(`${existing ? 'bench already registered' : 'bench registered'}: ${name} → ${path}`)
+
+    if (cmd === 'register') break
+
+    // Two invocations, because `zellij attach` takes no --layout and `zellij
+    // --session <name>` refuses a name it already owns. An EXITED session still
+    // owns its name, so `known` (not `live`) is what decides: attaching to an
+    // exited session resurrects it, which is what you want when you come back
+    // to a bench after a reboot.
+    const zj = sessions()
+    const argvFor = zj?.known.has(name)
+      ? ['attach', name]
+      : ['--session', name, '--layout', layout]
+    const r = spawnSync('zellij', argvFor, { cwd: path, stdio: 'inherit' })
+    if (r.error) die(`could not run zellij (${r.error.code}) — the bench stays registered; \`fleet\` still sees it`)
+    process.exit(r.status ?? 0)
+  }
+
+  case 'done': {
+    const name = argv[0] ?? basename(git(process.cwd(), 'rev-parse', '--show-toplevel') ?? process.cwd())
+    if (!readBenches().some((b) => b.name === name)) die(`no bench named "${name}" — \`fleet\` lists them`)
+    if (!removeBench(name)) die(`could not unregister "${name}"`)
+    console.log(`bench closed: ${name}\n  the tree and its zellij session are untouched (\`zellij kill-session ${name}\` if you want it gone)`)
+    break
+  }
+
+  case '-h':
+  case '--help':
+  case undefined:
+    console.log(USAGE)
+    break
+
+  default:
+    die(`unknown command "${cmd}"\n\n${USAGE}`)
+}
