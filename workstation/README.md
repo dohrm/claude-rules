@@ -17,15 +17,40 @@ driving it + its `.work/<slug>/` state. `bench` opens one, `fleet` shows them al
 ## Install
 
 ```bash
-ln -s "$PWD/workstation/bin/bench" ~/.local/bin/bench
-ln -s "$PWD/workstation/bin/fleet" ~/.local/bin/fleet
-ln -s "$PWD/workstation/layouts/bench.kdl" ~/.config/zellij/layouts/bench.kdl
-ln -s "$PWD/workstation/layouts/fleet.kdl" ~/.config/zellij/layouts/fleet.kdl
+npx github:dohrm/claude-rules workstation install
 ```
 
+A **separate verb** on purpose: `add` means "install profiles into this repo", and
+that meaning is worth protecting. This writes to the machine and never touches the
+repo you run it from.
+
+```
+~/.local/share/claude-rules/workstation/    the payload — lib.mjs AND bin/ together
+~/.local/bin/{bench,fleet}                  symlinks into it
+~/.config/zellij/layouts/{bench,fleet}.kdl  copies, yours to edit
+```
+
+The split is not arbitrary. The two executables do `import '../lib.mjs'`, so
+copying one alone into `~/.local/bin` fails with `ERR_MODULE_NOT_FOUND`; through a
+symlink it resolves, because node resolves a module's realpath before resolving
+its imports. So the payload stays whole and PATH gets links.
+
+| Flag | When |
+|---|---|
+| *(none)* | copy — self-contained, the cross-machine mode |
+| `--link` | symlink the payload to a clone, so `git pull` updates the tools. This is the mode for working *on* them |
+| `--force` | replace a `bench`/`fleet` on PATH that is not ours, and overwrite an edited layout |
+| `--ref <r>` | install from a tag instead of the default branch |
+
+Re-running is the update. It refuses to clobber twice over: a binary on PATH that
+is not a link into the payload, and a layout you have edited — because a layout is
+the one thing here you are *meant* to edit, and an update that silently reverts
+your panes is worse than one that tells you to look. `workstation uninstall`
+removes the payload and the links; layouts are left, they are yours.
+
 Node >= 18, no dependencies, no build. `git` and `zellij` are read via the shell;
-both are optional — a bench with neither still shows up, with `—` in the columns
-they would have filled.
+both are optional — `fleet` runs in any terminal, and a bench with neither still
+shows up with `—` in the columns they would have filled.
 
 ## Use
 
