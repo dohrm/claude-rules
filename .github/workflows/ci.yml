@@ -7,10 +7,12 @@ name: CI
 #   go-gates      — go jalon: just go-lint / go-check (test/fixtures/go-gate)
 #   ts-gates      — ts jalon + derivatives (test/fixtures/ts-gate)
 #   godot-gates   — godot jalon: just godot-lint / godot-check (test/fixtures/godot-gate)
+#   devstack-gates— devstack jalon: the log-file trap and the per-tree control socket
 #
 # Language jobs are separate so a red toolchain names itself. Local `npm test`
 # skips those files when the toolchain is missing; each job sets RUST_GATES=1,
-# PYTHON_GATES=1, GO_GATES=1, TS_GATES=1 or GODOT_GATES=1 so a missing tool is a failure, never a skip-as-pass.
+# PYTHON_GATES=1, GO_GATES=1, TS_GATES=1, GODOT_GATES=1 or DEVSTACK_GATES=1 so a missing tool is a failure,
+# never a skip-as-pass.
 #
 # The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
 # CLI and spends real tokens. It is a model-bump check, run on demand — see the
@@ -47,6 +49,8 @@ env:
   CARGO_MACHETE_SHA256: '48200087f54c55aabcd4db4af1e25742b49846c02a1b1bfa134711945b35b2e9'
   GOLANGCI_LINT_VERSION: '2.13.1'
   GOLANGCI_LINT_SHA256: 'b17bfbc9d4aaa48be7f4f1ce3240bc3d8200c870c072bacf15c26219e2cfb9cc'
+  PROCESS_COMPOSE_VERSION: '1.122.0'
+  PROCESS_COMPOSE_SHA256: '9b6dbc38324c0b0481f1cd1dd828ffdc78117129ec797678f4bf8c4023311281'
 
 jobs:
   test:
@@ -213,9 +217,35 @@ jobs:
 
   # The single required check (rules/cicd/pipeline.md): protecting the matrix job
   # directly means a renamed or skipped leg silently counts as green.
+  devstack-gates:
+    runs-on: ubuntu-latest
+    env:
+      DEVSTACK_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: Install process-compose
+        run: |
+          mkdir -p "$HOME/.local/bin" "$HOME/.config/process-compose"
+          tar="process-compose_linux_amd64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL -o "$tar" \
+            "https://github.com/F1bonacc1/process-compose/releases/download/v${PROCESS_COMPOSE_VERSION}/${tar}"
+          echo "${PROCESS_COMPOSE_SHA256}  $tar" | sha256sum --check --strict
+          tar -xzf "$tar" -C "$HOME/.local/bin" process-compose
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: devstack jalon (the log-file trap + the per-tree control socket)
+        run: node --test test/devstack-gates.test.mjs
+
   ci-ok:
     if: always()
-    needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates]
+    needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates, devstack-gates]
     runs-on: ubuntu-latest
     steps:
       - name: Every gate must have actually succeeded
