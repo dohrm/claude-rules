@@ -15,7 +15,7 @@
 // inside each bench, at push time.
 
 import { existsSync } from 'node:fs'
-import { REGISTRY, age, baseRef, git, loopState, readBenches, reviewState, sessions } from '../lib.mjs'
+import { REGISTRY, age, baseRef, git, loopState, readBenches, reviewState, sessionState, sessions } from '../lib.mjs'
 
 if (process.argv.includes('-h') || process.argv.includes('--help')) {
   console.log('fleet — overview of every registered bench. Register one with `bench start <path>`.')
@@ -35,7 +35,7 @@ const rows = benches.map((rec) => {
   if (!existsSync(rec.path)) {
     return {
       name: rec.name, branch: '(gone)', ahead: '—', dirty: '—', loop: '—', age: '—',
-      review: '—', session: 'gone', mtime: null, file: null,
+      review: '—', session: 'gone', mtime: null, file: null, path: rec.path,
       blocked: [`path no longer exists: ${rec.path} — \`bench done ${rec.name}\``],
     }
   }
@@ -44,9 +44,10 @@ const rows = benches.map((rec) => {
   const porcelain = git(rec.path, 'status', '--porcelain')
   const dirty = porcelain === null ? null : porcelain.split('\n').filter((l) => l.trim()).length
   const loop = loopState(rec.path)
-  const session = zj === null ? 'dormant' : zj.live.has(rec.session || rec.name) ? 'live' : 'dormant'
+  const session = sessionState(rec.session || rec.name, zj)
   return {
     name: rec.name,
+    path: rec.path,
     branch: git(rec.path, 'rev-parse', '--abbrev-ref', 'HEAD') ?? '(no git)',
     ahead: ahead === null ? '—' : `+${ahead}`,
     dirty: dirty === null ? '?' : dirty === 0 ? 'clean' : `${dirty} dirty`,
@@ -98,8 +99,19 @@ for (const r of rows) {
     console.log(`    … +${r.blocked.length - SHOWN} more — ${r.file ?? 'see the worklist'}`)
 }
 
+// `dormant` (registered, no session) and `exited` (the name is still owned, so
+// attaching resurrects it) need DIFFERENT commands. Printing `zellij attach` for a
+// dormant bench sends you straight to "No session with the name ... found!" — which
+// is exactly how this was found, in the field, after the tests had passed.
+function remedy(r) {
+  if (r.session === 'live') return 'already live'
+  if (r.session === 'exited') return `zellij attach ${r.name}`
+  if (r.session === 'no zellij') return `no zellij here — read ${r.file ?? 'its worklist'} directly`
+  return `cd ${r.path} && bench start .`
+}
+
 const waiting = rows.filter((r) => r.blocked.length)
 if (waiting.length) {
   console.log(`\n${waiting.length} bench(es) waiting on you — answer inside the bench, not here:`)
-  for (const r of waiting) console.log(`    ${r.name}: ${r.session === 'live' ? 'already live' : `zellij attach ${r.name}`}`)
+  for (const r of waiting) console.log(`    ${r.name}: ${remedy(r)}`)
 }

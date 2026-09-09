@@ -94,9 +94,15 @@ export function baseRef(cwd) {
 export function sessions() {
   let out
   try {
-    out = execFileSync('zellij', ['list-sessions', '-n'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-  } catch {
-    return null
+    out = execFileSync('zellij', ['list-sessions', '-n'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (err) {
+    // `zellij list-sessions` EXITS 1 when there are simply no sessions, printing
+    // "No active zellij sessions found." on stderr — the same failure shape as a
+    // missing binary. Conflating the two made every caller treat "you have no
+    // sessions" as "zellij is unusable", which is a different answer.
+    if (err?.code === 'ENOENT') return null
+    if (/no active .*sessions/i.test(String(err?.stderr ?? ''))) return { live: new Set(), known: new Set() }
+    return null // a zellij that fails for any other reason is one we cannot read
   }
   const live = new Set()
   const known = new Set()
@@ -107,6 +113,33 @@ export function sessions() {
     if (!line.includes('EXITED')) live.add(name)
   }
   return { live, known }
+}
+
+/** The zellij argv that opens a bench — attach if the name is taken, create if not.
+ *
+ *  Its own function because getting it wrong is silent and this is where it WAS
+ *  wrong: `zellij --session X --layout Y` does not create X. Per zellij's own help,
+ *  `--layout` "if inside a session (or using the --session flag) will be added to
+ *  the session as a new tab" — so with a name that does not exist it fails with
+ *  "There is no active session!". Creating with a layout is `--new-session-with-layout`.
+ *
+ *  `known` and not `live` decides: an EXITED session still owns its name, and
+ *  attaching to it resurrects it, which is what coming back after a reboot means. */
+export function launchArgv(name, layout, zj) {
+  return zj?.known.has(name)
+    ? ['attach', name]
+    : ['--session', name, '--new-session-with-layout', layout]
+}
+
+/** How a bench's session stands, for the eye and for the remedy `fleet` prints.
+ *  `dormant` and `exited` are NOT the same thing: one needs `bench start`, the
+ *  other resurrects with `zellij attach`. Telling a user to attach to a session
+ *  that never existed is how this was found. */
+export function sessionState(name, zj) {
+  if (zj === null) return 'no zellij'
+  if (zj.live.has(name)) return 'live'
+  if (zj.known.has(name)) return 'exited'
+  return 'dormant'
 }
 
 // ── the state files a loop writes ──────────────────────────────────────────

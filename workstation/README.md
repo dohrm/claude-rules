@@ -116,9 +116,24 @@ hour ago.
 None is redundant, and the split is what makes the tool host-agnostic. A
 `loop.md` written by `cursor-agent` in Cursor's GUI is the same file as one
 written by the Claude Code CLI, so `fleet` sees both. Only the *action* column is
-zellij-specific — a bench you drive from a GUI shows `dormant` and no attach
-command, which is itself the information ("that one lives in its own host's
-view").
+zellij-specific.
+
+### The four states, and how you get back in
+
+`bench start .` is **always** the right command — it attaches when the session
+exists and creates it when it does not, so you never have to remember which. The
+`STATE` column is there to tell you what is happening, not to make you pick:
+
+| STATE | Means | `fleet` tells you |
+|---|---|---|
+| `live` | a zellij session is running | already live — `Ctrl+o` `w` to it |
+| `exited` | the session name is still owned, resurrectable | `zellij attach <name>` |
+| `dormant` | registered, no session at all — closed, or driven from a GUI host | `cd <path> && bench start .` |
+| `no zellij` | zellij could not be read here | read the worklist directly |
+
+`dormant` and `exited` are **not** the same thing, and that distinction is load
+bearing: `zellij attach` on a name that never existed answers *"No session with
+the name … found!"*. `fleet` used to print `attach` for both.
 
 Two properties that carry the design:
 
