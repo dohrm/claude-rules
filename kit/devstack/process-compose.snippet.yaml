@@ -1,0 +1,97 @@
+# COPY to `process-compose.yaml` at the repo root, then adapt. The installer never
+# merges it for you — this is a SHAPE, not a stack: three tiers (a dependency, a
+# backend, a frontend) that cover most repos. Delete what you do not have; the point
+# is the wiring, not the services.
+#
+# Doctrine: rules/devstack/running.md. Lifecycle: `.dev/kit/devstack/devstack.just`
+# (`just up` / `down` / `restart <svc>` / `logs <svc>` / `stack`). Never start these
+# commands by hand — a foreground dev server blocks the turn, a backgrounded one
+# outlives it.
+
+version: "0.5"
+
+# The supervisor's own log, distinct from the per-process ones below. Rotation is set
+# because these are long-lived local processes: a chatty service left up for a day
+# would otherwise fill .logs/ silently.
+#
+# These files are for HISTORY and post-mortem, not for finding out what just
+# happened: process-compose writes them in 4 KB blocks and flushes them at shutdown,
+# so a quiet service has a zero-byte log while it runs. Read a log with
+# `just logs <svc>` (which asks the supervisor) — see README.md, it is the least
+# obvious thing in this kit.
+log_location: .logs/process-compose.log
+log_configuration:
+  rotation:
+    max_size_mb: 16
+    max_age_days: 3
+    max_backups: 2
+
+processes:
+  # ── Tier 1: what everything else needs ───────────────────────────────────
+  # A database, a broker, a cache, an emulator. Replace the command with yours.
+  #
+  # `readiness_probe` is what makes `depends_on: process_healthy` mean anything —
+  # without it, "started" only says the process was spawned, and the backend races
+  # its own dependency. Use `http_get` when the dependency speaks HTTP; for a plain
+  # TCP port, the exec form below needs no extra tool on the machine (bash's
+  # /dev/tcp), which is why it is not the draft's `nc -z`.
+  deps:
+    command: "docker compose up db" # ← or `postgres -D ...`, `redis-server`, whatever it is
+    log_location: .logs/deps.log
+    readiness_probe:
+      exec:
+        command: "bash -c 'exec 3<>/dev/tcp/127.0.0.1/5432'"
+      initial_delay_seconds: 2
+      period_seconds: 1
+      timeout_seconds: 2
+      failure_threshold: 30
+    availability:
+      restart: "on_failure"
+      max_restarts: 3
+
+  # ── Tier 2: the backend ──────────────────────────────────────────────────
+  api:
+    command: "just run-api" # ← or `cargo run -p api`, `go run ./cmd/api`, `uv run fastapi dev`
+    log_location: .logs/api.log
+    depends_on:
+      deps:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        scheme: http
+        path: "/health" # ← the health endpoint rules/backend owns
+        port: 8000
+      initial_delay_seconds: 2
+      period_seconds: 2
+      timeout_seconds: 2
+      failure_threshold: 30
+    availability:
+      restart: "on_failure"
+      backoff_seconds: 2
+      max_restarts: 3
+
+  # ── Tier 3: the frontend ─────────────────────────────────────────────────
+  # `process_healthy` on the api, not `process_started`: a dev server that boots
+  # before its backend answers gives you a blank page and a console full of network
+  # errors, which is a diagnosis you then have to un-learn.
+  web:
+    command: "npm run dev" # ← vite, next, whatever serves the portal
+    log_location: .logs/web.log
+    depends_on:
+      api:
+        condition: process_healthy
+    availability:
+      restart: "on_failure"
+      backoff_seconds: 2
+      max_restarts: 3
+
+# Deliberately NOT set here:
+#
+# - `restart: "always"` on anything. A dev server that crash-loops on a syntax error
+#   would restart forever, and the log would be a wall of the same stack trace with
+#   the real first failure scrolled away. `on_failure` + `max_restarts` stops and
+#   leaves the evidence where `just logs <svc>` finds it.
+# - `is_daemon` / `shutdown`. Needed only for a command that forks and returns (a
+#   `docker run -d`, a service manager). If yours does, set both — otherwise
+#   process-compose supervises a pid that already exited. See the health docs.

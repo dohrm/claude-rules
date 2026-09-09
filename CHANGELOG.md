@@ -35,6 +35,46 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`devstack` — the contract between an agent and a running app, plus the
+  `process-compose` lifecycle that makes it cheap.** An agent that needs the app
+  running had three ways to lose a turn: holding a dev server in the foreground
+  (the turn blocks, the output truncates, nothing is learned), leaving an orphan
+  (it holds its port, so the next start fails with a diagnostic about the port and
+  not the code — and the human inherits it), and asserting green against a process
+  that never reloaded the edit.
+
+  `rules/devstack/running.md` is the rule and holds with or without the kit.
+  `kit/devstack` at `--level gates` is the lifecycle: `just up` (detached,
+  headless, returns in ~0.5s) / `down` / `ps` / `restart <svc>` / `logs <svc>` /
+  `follow` / `ports` / `stack` (attach the TUI; detaching leaves the stack up) /
+  `stack-check` (`--dry-run`). NOT a gate — running the app is how you observe
+  behaviour, `just check` is what proves the code.
+
+  **Never tail `.logs/<svc>.log` to find out what just happened**, and this is
+  measured rather than assumed: process-compose writes each per-process log file
+  in 4 KB blocks and flushes it in full only at shutdown. A 400-line service had
+  40960 bytes on disk while running; a one-line service had **zero**, while
+  `process logs` returned that line immediately. A chatty service crosses the
+  block in seconds and looks fine, which is why the trap survives casual testing —
+  so `just logs` asks the supervisor, and the file is for history and post-mortem.
+
+  **A unix socket per work tree, and it is not optional.** process-compose serves
+  its control API on TCP `:8080`, so two worktrees of one repo fight over it — and
+  the second `up` reports success with no port error at all, after which a
+  `process list` returns one view that does not say which tree it describes. An
+  agent then debugs its own code while the interference comes from a sibling
+  checkout. `devstack.just` passes `-U -u /tmp/pc-<tree>.sock`, derived from the
+  tree directory; with it, `just restart` in one tree provably left the other
+  worktree PID untouched. It does NOT isolate your app own ports: one tree runs
+  the stack at a time, the others run `just check`, which needs no server.
+
+  **Wiring**: install only once the repo runs more than one process — in practice
+  almost any repo with a UI, since a front/back monorepo is already two. Copy
+  `process-compose.snippet.yaml` → `process-compose.yaml` and adapt it (a shape,
+  not a stack), gitignore `.logs/`, and `mkdir -p ~/.config/process-compose` —
+  without that directory process-compose prints two JSON debug lines on stderr for
+  every invocation, in front of every recipe output an agent reads.
+
 - **Tier 3 measures the block, not the branch.** `just code-review` read
   `git diff <base>...HEAD` on every run, so a branch built by successive
   loops re-reviewed everything the previous runs had already cleared — the
