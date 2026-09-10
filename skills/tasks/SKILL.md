@@ -44,6 +44,16 @@ traverses (schema, domain, transport, UI, tests). For each, record:
 - **the nearest neighbour** — the closest thing that already does something similar
   and should be imitated. *This is the single most useful line you can hand a fresh
   implementer*: the conventions of the repo are in that file, not in your prose.
+- **the constraint that binds it** — the `Accepted` ADR deciding something about
+  this layer, by number and section (`ADR-0007 § Decision+Consequences`). A
+  pointer, never a summary: the ADR is the home of that fact.
+
+Constraints amortize exactly like anchors, and they are the ones that get skipped —
+step 1 already made you read `docs/ARCHITECTURE.md` and its ADRs to cut the sprint,
+so write down which ones you actually used. An implementer handed no constraint
+reads the whole `docs/adr/` directory to be safe, or reads none of it and finds out
+in review. Skip `Context` and `Implemented` when you point: they serve the reader of
+the decision, not its implementer.
 
 If a layer has no neighbour, say so — it means the sprint introduces a pattern, which
 is a design decision and may belong in an ADR before any code.
@@ -172,6 +182,7 @@ and re-run `/prd` (`product/documents.md`).
 ### TN — <title>
 
 - **Anchor**: `<module or symbol>` · **Neighbour**: `<path:symbol>`
+- **Constrained by**: `<ADR-NNNN § section>` — or `none`, never blank
 - **Consumes**: T0's `<contract element>` <, TN-1's …>
 - **Serves**: <the acceptance criterion this moves>
 - **Done**: `<command that exits green — the gate, or a narrower test first>`
@@ -184,5 +195,7 @@ neighbour for the how.>
 
 - **Re-split freely; never widen.** A too-big task splits mid-loop. A *new acceptance criterion* is not a re-split: stop, back to `/plan`.
 - **`.work/<slug>/` is committed, not gitignored** — a PR shows the cut, not just the diff. It is still ephemeral: deleted once the capability ships, never a durable document.
+- **Name constraints, never restate them.** `none` is an answer; an empty
+  **Constrained by** is a gap an implementer cannot tell from a green light.
 - **Roles, not models.** Planner / implementer / reviewer are roles; never bake a model name into the worklist.
 - Plan mode: writing `.work/*` is allowed.

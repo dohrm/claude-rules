@@ -62,6 +62,13 @@ The framing skills read it — `/prd`, `/plan`, `/pre-mortem`. **An implementer 
 not**: a task already carries its own anchors, and an open product question is not
 its business — paying for that context on every turn of a loop buys nothing.
 
+**Nor the PRD, nor the decision log** — same argument, one step out. A task cut by
+`/tasks` carries `Serves: <acceptance criterion>`, which *is* the PRD projected onto
+that task, and `Constrained by: ADR-NNNN § section`, which is `docs/adr/` projected
+the same way. Both projections were paid once, at the cut. An implementer that opens
+the PRD or walks the decision log is a **worklist that failed to say what bound it** —
+fix the cut, not the reading habit.
+
 Below the threshold, one file is right — a directory for three phases is ceremony,
 and the split is a mechanical migration, not a decision to agonise over.
 
