@@ -33,6 +33,26 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   `ts-tauri-app`, `ts-node-api`) plus `--root` and `--level gates`, not the seven-profile
   bag that loaded 21 rules on a domain entity.
 
+### Fixed
+
+- **`mutate-diff` never advanced its marker, so mutation re-ran the whole branch
+  every time.** `init` wrote it as a dependency list — `mutate-diff: rust-mutate` —
+  which runs each mutator with its *default* range (the whole branch since `base`)
+  and never calls `mutate-mark`. `.work/<slug>/.latest_mutate` was therefore never
+  written, and the incremental economy `diff-since.mjs` exists for was dead on
+  arrival for mutation. `code-review` was unaffected because it is one
+  self-contained recipe in `gate.just` that marks at its own end, which is exactly
+  why the bug survived: the half that was watched worked.
+  `init` now emits the body `kit/common/gate.just` always documented —
+  `just rust-mutate "$(just mutate-from)"` then `just mutate-mark` last, so a
+  surviving mutant leaves the marker where it was and the next run re-mutates that
+  block together with its fix. Only `rust-mutate` takes a range (Stryker and mutmut
+  keep their own caches, `go-cover` measures the whole tree), so the other mutators
+  are emitted as plain lines. Repos without `kit/common` keep the dependency form —
+  the marker recipes are not there to call.
+  **Re-run `claude-rules init` to pick it up**: the justfile is yours, so `update`
+  does not rewrite it.
+
 ### Added
 
 - **`kit/rust`: Tier 3 made affordable enough to stay in the loop.** Measured on
