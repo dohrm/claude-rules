@@ -12,12 +12,16 @@ a 32-mutant diff — **22 of them the baseline alone** (972 s build, 363 s test)
 because cargo-mutants builds a cold scratch copy. Mutation there is compile-bound,
 not test-bound.
 
-After sccache, a faster linker, `debug = "none"` and `-j 2`, the baseline build
-fell to 113 s and a 65-mutant diff still ran ~30 minutes. The drop is real; the
-suite time also fell (363 s → 95 s) for reasons the changes do not explain — the
-codebase moved between the two runs, so only the build figure is attributable.
+After sccache and the kit's Tier 3 levers, the baseline build fell to 113 s and a
+65-mutant diff ran 19 minutes at `-j 2` — 31 caught, 0 missed, and **34 unviable**:
+mutants that do not compile, carry no signal, and still cost a full build each.
+Roughly two thirds of that run produced nothing. (The suite time also fell,
+363 s → 95 s, for reasons the changes do not explain — the codebase moved between
+runs — so only the build figure is attributable.)
 
-The remaining lever is `-j`, and it is the one a laptop cannot spend: raising it
+Excluding the unviable set would bring the run near 9 minutes, which narrows this
+decision's margin honestly: the argument is no longer wall-clock alone. It is that
+the remaining lever is `-j`, and that is the one a laptop cannot spend — raising it
 contends with the editor, rust-analyzer, and the build the agent is about to run.
 
 ## Decision
@@ -46,8 +50,8 @@ author, rather than to a calendar.
 
 ## Alternatives considered
 
-- **Keep it local pre-push** — still ~30 minutes per sprint diff after every lever;
-  the cost spikes when the gate finds something, which is how gates die.
+- **Keep it local pre-push** — 19 minutes measured, ~9 once unviable mutants are
+  excluded; defensible, but it spends cores the editor and the agent are using.
 - **Defer to end of capability, with a budgeted correction task** — feedback five
   sprints from its cause, and a budget whose only legal exit is escalation anyway.
 - **Nightly full sweep instead** — measures erosion of the whole tree, not this
