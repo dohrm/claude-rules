@@ -963,10 +963,31 @@ test('legacy lock without levels migrates agent at gates', () => {
   })
 })
 
+// Without kit/common there are no marker recipes, so the dependency form is the only
+// one that resolves — and rust-mutate's `from` defaulting to `base` is what keeps it working.
 test('init writes mutate-diff live at --level ratchet', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--level', 'ratchet', '--agent', 'claude'], dir))
     ok(runCliBare(['init'], dir))
     assert.match(read(dir, 'justfile'), /^mutate-diff: rust-mutate$/m)
+  })
+})
+
+// With kit/common, `mutate-diff` MUST be a body that feeds the marker in and advances it
+// on the way out. The dependency form silently ran every mutator over the whole branch
+// and never wrote `.work/<slug>/.latest_mutate`, so the incremental economy diff-since.mjs
+// exists for was dead on arrival for mutation — while code-review, one self-contained
+// recipe that marks at its end, worked. Found by running it, not by reading it.
+test('init wires mutate-diff to the marker when kit/common is installed', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'agent', '--level', 'ratchet', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    const just = read(dir, 'justfile')
+    assert.match(just, /^mutate-diff:$/m, 'must be a recipe body, not a dependency list')
+    assert.match(just, /^ {4}just rust-mutate "\$\(just mutate-from\)"$/m, 'the range must come from the marker')
+    // Last line, and only reached when every mutator above it passed: just stops a recipe
+    // at the first failure, so a surviving mutant leaves the marker where it was.
+    const body = just.split(/^mutate-diff:$/m)[1].trim().split('\n').map(l => l.trim())
+    assert.equal(body[body.length - 1], 'just mutate-mark', 'mutate-mark must run last')
   })
 })

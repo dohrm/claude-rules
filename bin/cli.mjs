@@ -627,6 +627,29 @@ const MUTATOR = {
   go: 'go-cover',
   python: 'python-mutate',
 }
+// Which of those take the range start as an argument. Only cargo-mutants does:
+// Stryker (`--incremental`) and mutmut keep their own caches, and `go-cover` measures
+// the whole tree. Passing `mutate-from` to one of the others is an unknown argument,
+// not a harmless no-op — which is why this is a set and not a `.map`.
+const RANGE_MUTATORS = new Set(['rust-mutate'])
+
+/** The `mutate-diff` recipe BODY: feed the marker in, advance it on the way out.
+ *
+ *  It has to be a body, not `mutate-diff: rust-mutate`. A dependency list runs each
+ *  mutator with its DEFAULT range — the whole branch — and never calls `mutate-mark`,
+ *  so `.work/<slug>/.latest_mutate` is never written and every run re-mutates what the
+ *  previous ones already cleared. That is the exact cost `diff-since.mjs` exists to
+ *  remove, and `code-review` avoids only because it is one self-contained recipe that
+ *  marks at its end. The shape below is the one kit/common/gate.just documents.
+ *
+ *  `just` stops a recipe at the first failing line, so `mutate-mark` runs LAST and only
+ *  on success: a surviving mutant leaves the marker where it was, and the next run
+ *  re-mutates that block together with its fix. */
+const mutateBody = (list) => [
+  'mutate-diff:',
+  ...list.map(m => RANGE_MUTATORS.has(m) ? `    just ${m} "$(just mutate-from)"` : `    just ${m}`),
+  '    just mutate-mark',
+]
 function genJustfile(techs, modules, ratchetTechs = []) {
   const imports = kitImports()
   const deps = techs.map(checkDep).join(' ')
@@ -668,18 +691,30 @@ function genJustfile(techs, modules, ratchetTechs = []) {
   ]
   // Only when there is a mutation recipe to name. A hint pointing at a recipe no import
   // provides (`rust-mutate` in a repo with no Rust) is worse than no hint at all.
+  //
+  // The marker recipes (`mutate-from`/`mutate-mark`) live in kit/common, so a repo that
+  // installed a language without it keeps the dependency form — which is also why
+  // `rust-mutate` still defaults its range to `base`.
+  const incremental = existsSync(join(KIT_DIR, 'common'))
+  const shape = (list) => incremental ? mutateBody(list) : [`mutate-diff: ${list.join(' ')}`]
+  const marker = incremental
+    ? ['# The range comes from `mutate-from` and is advanced by `mutate-mark` ON SUCCESS',
+       '# only, so a branch built by successive blocks re-mutates only what is new.']
+    : []
   if (liveMutators.length) out.push('',
     '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
     '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
-    '# This line is live because a locked tech is at --level ratchet.',
-    `mutate-diff: ${liveMutators.join(' ')}`)
+    '# This recipe is live because a locked tech is at --level ratchet.',
+    ...marker,
+    ...shape(liveMutators))
   else if (mutators.length) out.push('',
     '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
     '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
     '# Run it when a coherent block is finished, BEFORE pushing. Uncomment once the tool',
     '# is installed — an absent recipe is a valid answer, and the agent reports mutation',
     '# as not-run rather than pretending. Gitignore pr.diff and coverage.out.',
-    `# mutate-diff: ${mutators.join(' ')}`)
+    ...marker,
+    ...shape(mutators).map(l => `# ${l}`))
   return out.join('\n') + '\n'
 }
 

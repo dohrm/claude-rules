@@ -93,6 +93,13 @@ test('the whole kit library parses, and the root justfile overrides it', { skip:
     assert.equal(vars.status, 0, vars.stderr)
     assert.match(vars.stdout, /rust_dir\s+:= "api"/, 'the root justfile must win over the library')
     assert.match(vars.stdout, /base\s+:= "origin\/trunk"/)
+    // Tier 3 speed is knobs, not a rewrite: -j ships at the same 2 as mutation-ci.yaml,
+    // and every flag that needs something copied or installed first (--profile mutants,
+    // --test-tool, --baseline=skip, --in-place) stays OFF by default, because
+    // `claude-rules update` must not change what an old install actually runs.
+    assert.match(shown.stdout, /-j \{\{ ?mutate_jobs ?\}\}/, 'rust-mutate must pass the jobs knob')
+    assert.match(vars.stdout, /mutate_jobs\s+:= "2"/)
+    assert.match(vars.stdout, /mutate_args\s+:= ""/, 'the escape hatch ships empty')
     // The gate scripts are called where they ship — nothing to move into scripts/.
     assert.match(vars.stdout, /review_prompt\s+:= "\.dev\/kit\/common\/review-prompt\.md"/)
   })
@@ -1070,4 +1077,20 @@ test('publish-summary: an untouched Log placeholder counts as zero turns', () =>
     const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
     assert.match(summary, /\*\*Turns logged\*\*: 0/)
   })
+})
+
+
+// Generated code is excluded from code review (`review_exclude` in gate.just) and must
+// also be excluded from mutation: nobody wrote the assertions that would catch such a
+// mutant, and "fixing" a survivor means editing a file the generator overwrites. This
+// is the one exclusion list that ships FILLED, so a future edit cannot quietly comment
+// it back out — the sprint that regenerates an API client is the one that turns a
+// gate off, and it is thousands of mutants, not the usual few dozen.
+test('kit/rust/mutants.toml ships generated-code exclusions, not just a commented example', () => {
+  const toml = readFileSync(join(REPO, 'kit', 'rust', 'mutants.toml'), 'utf8')
+  const block = toml.match(/^exclude_globs = \[([\s\S]*?)^\]/m)
+  assert.ok(block, 'mutants.toml must declare exclude_globs at the top level')
+  const live = block[1].split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+  assert.ok(live.length > 0, 'exclude_globs is empty — the generated-code defaults were removed')
+  assert.ok(live.some(l => /generated/.test(l)), 'no generated-code glob left in exclude_globs')
 })
