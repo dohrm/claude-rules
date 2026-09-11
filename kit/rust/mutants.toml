@@ -33,6 +33,28 @@ exclude_globs = [
     "**/*.pb.rs",        # prost / tonic
 ]
 
+# ── Unviable mutants — the cost nobody budgets for ──────────────────────────
+# An "unviable" mutant is one whose mutated code DOES NOT COMPILE: cargo-mutants
+# substitutes `Default::default()` or similar, and Rust rejects it wherever there is
+# a generic, an `impl Trait`, a builder returning `Self`, or a type with no
+# `Default`. It carries no signal about your tests — and it still costs a full build
+# attempt, because unviability cannot be predicted without compiling.
+#
+# Measured on one real diff: 34 of 65 mutants unviable, roughly two thirds of a
+# 19-minute run spent compiling code that never ran a test.
+#
+# cargo-mutants writes the list. Harvest it AFTER a run and exclude what it found:
+#
+#     cut -d: -f1 mutants.out/unviable.txt | sort | uniq -c | sort -rn | head
+#
+# Read the shape of that output, not just the lines. Clustered on a few files means
+# the mutator is working on generic or wiring code rather than domain logic — one
+# `exclude_globs` entry, stable across refactors. Scattered across many functions
+# means `exclude_re`, one entry each, and a list that churns; when that happens the
+# real fix is narrowing the scope to the domain crate, not maintaining the list.
+# Large files show up here twice over: more of these shapes, and a more expensive
+# rebuild per mutant (rust.just, "Tier 3 economics").
+
 # ── ADAPT PER REPO — I/O-heavy code (integration-tested, not unit-testable) ──
 # Mutants here survive for the WRONG reason: no unit test can catch a mutated
 # I/O branch. Excluding avoids false survivors drowning the real signal — and

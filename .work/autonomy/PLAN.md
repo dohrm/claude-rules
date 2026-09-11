@@ -14,6 +14,12 @@ first mutant runs**, and the per-mutant cost is compile-bound. Fixing the cost k
 Tier 3 inside the loop and removes the need for deferral — along with its risk of
 shipping unkilled survivors in silence.
 
+**Waves 1 and 2 have shipped** (`feat/rust-tier3-economics`,
+`feat/worktree-cadence`) and the levers were measured end to end. Wave 3 is
+blocked on a human decision, not on work: **ADR-0002 is `Proposed`** and moves
+mutation out of the pre-push loop onto the PR — accepting or rejecting it decides
+what the orchestrator in wave 3 has to enforce.
+
 The measured facts, on one real Rust repo:
 
 | Measure | Value | Reading |
@@ -27,6 +33,24 @@ The measured facts, on one real Rust repo:
 The last row is the toxic one: cost spikes exactly when the gate has something to
 say. A gate anti-correlated with its own usefulness is a gate on its way out —
 `rules/testing/ratchet.md`, "one comment at a time".
+
+After wave 1, measured again on a later state of the same repo:
+
+| Measure | Before | After |
+|---|---|---|
+| Baseline build | 972 s | **113 s** (sccache) |
+| Baseline test | 363 s | 95 s — *not attributable; the codebase moved* |
+| 65-mutant diff, `-j 2` | ~50 min extrapolated | **19 min** |
+| Outcome | — | 31 caught, 0 missed, **34 unviable** |
+
+The surprise is the last cell. An unviable mutant does not compile, carries no
+signal, and still costs a full build: two thirds of that run produced nothing.
+Excluding them lands near 9 minutes, which **narrows ADR-0002's margin** — the
+argument for moving to CI is no longer wall-clock alone but `-j`, the lever a
+laptop cannot spend while the editor and the agent are using the cores.
+
+The survivor-cost spike did not materialise here (0 missed). One run, one diff:
+that reads as "found nothing this time", never as "the suite is proven".
 
 ## Durable decisions
 
@@ -61,22 +85,22 @@ needs both, and the only one that needs an ADR.
 **Goal**: a sprint-sized Tier 3 run in 3–5 minutes instead of ~50. Validated on a
 real Rust repo *before* any of it becomes doctrine.
 
-- [ ] **1.1 `kit/rust/mutants.toml`** — ship generated-code exclusions by default,
+- [x] **1.1 `kit/rust/mutants.toml`** — ship generated-code exclusions by default,
       mirroring `review_exclude` in `kit/common/gate.just`. The concept already
       exists in one gate and is absent from the other. Keep both ADAPT lists; only
       the generated globs are pre-filled. *Protects the variance, not the average:
       the day a sprint regenerates an OpenAPI client, the same run goes from 32
       mutants to thousands.*
-- [ ] **1.2 `kit/rust/rust.just`** — `rust-mutate` gains `-j`, `--profile mutants`,
+- [x] **1.2 `kit/rust/rust.just`** — `rust-mutate` gains `-j`, `--profile mutants`,
       a restricted test scope, and `--baseline=skip` behind a variable (default
       off).
-- [ ] **1.3 `kit/rust/cargo-profile.snippet.toml`** — `[profile.mutants]` with
+- [x] **1.3 `kit/rust/cargo-profile.snippet.toml`** — `[profile.mutants]` with
       `debug = false`. Debuginfo generation is expensive and no one reads a mutant's.
-- [ ] **1.4 `kit/rust/cargo-config.snippet.toml`** — `mold`/`lld` linker. Linking is
+- [x] **1.4 `kit/rust/cargo-config.snippet.toml`** — `mold`/`lld` linker. Linking is
       30–50 % of a Rust incremental rebuild, which is the per-mutant term.
-- [ ] **1.5 `kit/rust/README.md`** — sccache setup, and the `CARGO_TARGET_DIR`
+- [x] **1.5 `kit/rust/README.md`** — sccache setup, and the `CARGO_TARGET_DIR`
       anti-pattern written down with its three failure modes.
-- [ ] **1.6 Measurement protocol** — record before/after from
+- [x] **1.6 Measurement protocol** — record before/after from
       `mutants.out/outcomes.json` (build vs test duration per phase), so the claim
       is a measurement and not a belief.
 
@@ -102,23 +126,23 @@ under 5 minutes, and `outcomes.json` shows the build term collapsed.
 **Goal**: parallel trees that are findable without an archaeological dig, and that
 reconcile instead of accumulating into a forest of detached branches.
 
-- [ ] **2.1 `kit/common/gate.just`** — `worktree_root` (`${CR_WORKTREES:-$HOME/.worktrees}`),
+- [x] **2.1 `kit/common/gate.just`** — `worktree_root` (`${CR_WORKTREES:-$HOME/.worktrees}`),
       plus `just tree <slug>` (creates at the canonical path **and prints it**) and
       `just tree-rm <slug>` (removes worktree **and** branch in one act). A recipe,
       not prose: that is what stops an agent inventing a path.
-- [ ] **2.2 `kit/common/worktree-status.mjs`** — print the absolute path for trees
+- [x] **2.2 `kit/common/worktree-status.mjs`** — print the absolute path for trees
       outside the current repo, so it is pasteable into an IDE rather than
       `../../.worktrees/...`.
-- [ ] **2.3 `rules/agent/autonomy.md`** — four edits:
+- [x] **2.3 `rules/agent/autonomy.md`** — four edits:
       split `mutate-diff` from `code-review` in the cadence table (1–3 min vs tens
       of minutes: not the same animal); define **coherent block = sprint**, which is
       where the per-task drift came from; state the worktree root rule; state
       capability-level parallelism.
-- [ ] **2.4 `skills/tasks/SKILL.md`** — worktree is per **capability**, not per
+- [x] **2.4 `skills/tasks/SKILL.md`** — worktree is per **capability**, not per
       sprint (today it says `<repo>-<slug>-NN`, contradicting `autonomy.md`'s
       `<repo>-<slug>`); drop `or observation` from the acceptance-criteria line so
       every criterion carries a command.
-- [ ] **2.5 `rules/testing/ratchet.md`** — two additions: the survivor cost spike
+- [x] **2.5 `rules/testing/ratchet.md`** — two additions: the survivor cost spike
       (a survivor pays the full suite; a killed mutant exits on the first red test),
       and the crate-size ↔ mutation-cost link — **the hexagonal rule is also the
       mutation-performance rule**, which is an argument the repo does not yet make.
@@ -204,11 +228,15 @@ three statuses. No new verdict file.
 
 These block specific items, not the whole plan.
 
-- **Is mutation scoped to unit tests only?** Doctrinal, not technical — it is the
-  highest-yield lever in wave 1 and it changes what the mutation score means.
-  Blocks 1.2.
+- **Accept, reject or amend ADR-0002** — mutation as a PR gate. It is the one that
+  blocks wave 3: the orchestrator's chaining gate is different depending on whether
+  mutation runs before the push or on the PR. An agent cannot move that status line.
+- **Is mutation scoped to unit tests only?** Still open, and now lower-yield than it
+  looked: the run is compile-bound, and 0 survivors means the suite time was never
+  paid. Exposed as `mutate_args`; decide it on a run that actually misses something.
 - **Accept the `--baseline=skip` invariant?** Converts a fail-closed self-check into
-  an orchestrator guarantee. Blocks turning it on by default.
+  an orchestrator guarantee. Moot if ADR-0002 is accepted — CI has no loop to skip a
+  baseline for.
 - **Does `/tasks --headless` ship?** Blocks 3.4 only.
 - **Cursor degradation for the orchestrator** — parameterized like `reviewer`, or
   declared Claude-only? Blocks 3.1.
