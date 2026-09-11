@@ -47,7 +47,7 @@ shell out to `npx`.
 
 | File | Holds |
 |---|---|
-| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base` |
+| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base`, `worktree_root` |
 | `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-3 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |

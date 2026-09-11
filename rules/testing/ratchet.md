@@ -49,6 +49,22 @@ agent-written tests be trusted without reading every assertion by hand.
   getters, `Display`/logging. Keep the exclusion list in the tool's config, next to
   the code, not in the CI file.
 
+### Where the time actually goes
+
+Two properties decide whether this gate survives contact with a real loop, and
+neither is the one people optimise first:
+
+- **A killed mutant exits on the first red test; a survivor pays the whole suite.**
+  So the run gets slower the more it finds — the cost spikes exactly when the gate
+  has something to say. Watch that number, because that is the shape of a gate on
+  its way to being switched off. A slow suite is a mutation problem before it is a
+  CI problem.
+- **In a compiled language the cost is the rebuild, not the test run.** The unit of
+  recompilation is the module the mutant is in — the crate, the package — so a
+  small pure domain unit mutates in seconds and a large mixed one in minutes. The
+  architecture rule that keeps I/O out of the domain is also the rule that makes
+  this gate affordable; measured numbers for Rust are in `kit/rust/README.md`.
+
 | Lang | Recipe | Tool |
 |---|---|---|
 | Rust | `just rust-mutate` | cargo-mutants `--in-diff` |

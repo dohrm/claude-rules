@@ -115,9 +115,14 @@ sprint to cut. Run against a worklist, it adds its `## Guardrails` section to
 Create `sprint/<slug>-NN` off the trunk. One commit per completed task, the task's
 title as the subject — the `git log` becomes the sprint's real account.
 
-If another session is already working in this checkout, the branch gets **its own
-worktree** (`git worktree add ../<repo>-<slug>-NN -b sprint/<slug>-NN`) — one tree,
-one writer, one `.work/` (`agent/autonomy.md`).
+If another session is already working in this checkout, the work moves to **the
+capability's worktree** — `just tree <slug>`, which prints its path — and the
+sprint branch is created *inside* it. One tree per capability, one branch per
+sprint: `.work/<slug>/` is per-tree and holds this capability's plan and every one
+of its worklists, so a tree per sprint would split one work unit across trees
+(`agent/autonomy.md`). Parallel work belongs between capabilities, not between the
+sprints of one — two vertical slices of the same capability traverse the same
+layers.
 
 Then hand off, and stop:
 
@@ -145,7 +150,7 @@ and re-run `/prd` (`product/documents.md`).
 
 ## Acceptance criteria (from the sprint — the real definition of done)
 
-- [ ] <criterion, verbatim from the sprint> → verified by `<command or observation>`
+- [ ] <criterion, verbatim from the sprint> → verified by `<command that exits green>`
 
 ## Anchors
 
