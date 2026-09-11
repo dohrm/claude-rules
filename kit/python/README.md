@@ -46,7 +46,7 @@ is a `uv`-managed dependency group — see below, not a separate system install.
 | `pyproject.snippet.toml` | merge into `<python_dir>/pyproject.toml` | ruff, mypy, pytest, deptry, mutmut | `src`, `files`, `target-version`, mypy overrides |
 | `.python-version` | `<python_dir>/.python-version` | uv | match `requires-python` |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just python-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI, the witness | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** (ADR-0002) | runner, `working-directory` |
 
 Dev tools go in a dependency group, never in runtime deps:
 

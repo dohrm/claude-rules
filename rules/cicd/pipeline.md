@@ -25,10 +25,13 @@ runnable locally with one command.
 
 The legitimate exceptions are the things that *cannot* run locally, and they are
 fewer than they look: publishing, and anything requiring a secret. That is the
-list. **Tier 3 is not on it** — "it needs the PR diff" is not a reason, because
-`git diff <base>...HEAD` computes the same merge-base set on a laptop. Mutation
-stays out of the *hooks* (minutes per run), not out of the machine: `just
-mutate-diff` before the push, the PR job as a witness.
+list. **Code review is not on it** — "it needs the PR diff" is not a reason, because
+`git diff <base>...HEAD` computes the same merge-base set on a laptop.
+
+**Mutation is the one Tier 3 check that gates in CI** (`ADR-0002`), and not because
+it needs the PR: it needs cores, and `-j` is what a laptop cannot spend while the
+editor and the agent are using them. Running it locally stays possible and buys back
+a round trip; the PR job is the gate.
 
 Snippet: `.dev/kit/cicd/ci.snippet.yaml`. Tiers and when they run:
 `.dev/kit/README.md`. One job per technology so a red one names its own

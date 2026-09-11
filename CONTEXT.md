@@ -69,8 +69,9 @@ _Avoid_: check (the recipe name), validation
 
 **Tier**:
 One of the three depths of enforcement: Tier 1 (lint/format), Tier 2
-(typecheck/tests/contracts), Tier 3 (mutation/coverage ratchet — run before
-push, never in a hook or `check`).
+(typecheck/tests/contracts), Tier 3 (code review and mutation — never in a hook or
+`check`). A tier is a *depth*, not a venue: Tier 3's two halves run in different
+places — review before the push, mutation as a pull-request gate (`ADR-0002`).
 _Avoid_: level, stage
 
 **Witness** (crate/package):

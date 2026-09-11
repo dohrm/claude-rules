@@ -16,7 +16,9 @@ score can**: it changes the code and asks whether any test notices.
 just mutate-diff     # the locked techs' mutate / cover recipes; never a hook
 ```
 
-CI re-runs the same recipes as a **witness**. Wiring and tool limits (Stryker has
+**CI is where mutation gates** (`ADR-0002`): it runs on the pull request, on the
+diff, and a red job blocks the merge. That is the enforcement point, not a witness
+of a local run. Wiring and tool limits (Stryker has
 no `--since`, mutmut is path-scoped, Go has no production-grade mutator): the
 language kit README. `just mutate-diff` does not see whether a survivor should
 be deleted, asserted, or excluded.
@@ -42,9 +44,11 @@ agent-written tests be trusted without reading every assertion by hand.
   run takes minutes.
 - **Never a git hook.** Anything that re-runs the suite once per mutant destroys
   the fast local loop (see `kit/README.md` for the tiers).
-- **But run it locally, before the push.** `git diff <base>...HEAD` gives the same
-  merge-base set on a laptop that the PR job computes. Learning at PR time what
-  you could have learned in the editor costs a round trip per survivor.
+- **Locally: optional, and worth it when you doubt the tests you just wrote.**
+  `git diff <base>...HEAD` gives a laptop the same merge-base set the PR job
+  computes, so a local run buys back the round trip. It is not owed: measured at
+  tens of minutes on a real diff, it was a tax on every block for feedback most
+  blocks did not need.
 - **Exclude what mutation cannot judge**: pure I/O adapters, generated code,
   getters, `Display`/logging. Keep the exclusion list in the tool's config, next to
   the code, not in the CI file.

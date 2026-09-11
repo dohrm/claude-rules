@@ -49,7 +49,7 @@ devDependency — see below, not a separate system install. `ts-web` /
 | `eslint.base.js` | `<ts_dir>/eslint.config.js` | eslint (ts-lint) | `globalIgnores` |
 | `tsconfig.base.json` | `<ts_dir>/tsconfig.json` | tsc (ts-check) | `include`, path aliases |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just ts-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI, the witness | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** (ADR-0002) | runner, `working-directory` |
 
 ```bash
 npm i -D eslint typescript typescript-eslint globals vitest
