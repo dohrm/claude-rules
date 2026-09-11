@@ -1,6 +1,6 @@
 # ADR-0002: Mutation testing is a PR gate, not a pre-push step
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-09-11
 
 ## Context
