@@ -312,6 +312,96 @@ mutate-mark:
     {{diff_since}} mutate --mark "$(git rev-parse HEAD)" {{since_scope}}
 
 # ── Parallel work (opt-in) ─────────────────────────────────────────────────
+# Where every worktree of every repo on this machine lives. ONE root, outside any
+# repo, at a path that is DERIVABLE rather than remembered: an agent computes it
+# instead of inventing one, and you open it without searching. Override
+# `CR_WORKTREES` to move the whole set at once.
+#
+# Why not `<repo>/.worktrees/`, which would be easier to reach: it puts a checkout
+# inside the tree every tool scans. Cargo workspace globs descend into it,
+# `cargo mutants` copies the workspace to a scratch dir and would copy every
+# worktree with it, rust-analyzer and ripgrep index them, and `just check` globs
+# them. `.gitignore` does not stop tooling that does not read it.
+#
+# Why not `../<repo>-<slug>` either, which is what this doctrine used to say: it
+# scatters trees among the sibling repos of your dev directory, which is the
+# archaeological dig this replaces.
+worktree_root := env_var_or_default('CR_WORKTREES', env_var_or_default('HOME', '.') / '.worktrees')
+
+# `just tree <slug> [branch]` — the worktree for one CAPABILITY, at its canonical
+# path, printed on stdout so the next step (an `cd`, an IDE, an orchestrator) does
+# not have to guess it. Idempotent: an existing tree is printed, not recreated.
+#
+# One tree per capability, one branch per sprint INSIDE it — not one tree per
+# sprint. `.work/<capability-slug>/` is per-worktree and holds that capability's
+# plan and every sprint worklist, so any other arrangement splits one work unit
+# across trees (rules/agent/autonomy.md, "One tree, one writer").
+#
+# And parallelise across CAPABILITIES, never across the sprints of one: a sprint is
+# a vertical slice, so two sprints of the same capability traverse the same layers
+# and collide by construction. `Blocked by` in the plan serialises the dependent
+# ones; the others are independent as promises, not as files.
+#
+# git refuses to check out a branch that is already live in another tree. That is
+# the invariant, enforced by the tool rather than by prose — leave it that way.
+#
+# A shebang recipe because the path has to be computed once and reused; every other
+# recipe in this file is per-line on purpose. Needs a POSIX shell.
+tree slug branch="":
+    #!/usr/bin/env sh
+    set -eu
+    repo=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
+    path="{{worktree_root}}/$repo/{{slug}}"
+    branch="{{branch}}"
+    [ -n "$branch" ] || branch="work/{{slug}}"
+    if [ -d "$path" ]; then printf '%s\n' "$path"; exit 0; fi
+    mkdir -p "$(dirname "$path")"
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+        git worktree add "$path" "$branch" >&2
+    else
+        git worktree add "$path" -b "$branch" >&2
+    fi
+    printf '%s\n' "$path"
+
+# `just tree-rm <slug>` — the other half, and the reason the forest never grows: a
+# tree and its branch die in ONE act, at the merge. A tree that outlives its branch
+# is how you end up re-implementing something that already shipped on a branch
+# nobody remembers.
+#
+# Nothing is forced, deliberately: this is a reconciliation tool, not a delete
+# button. It succeeds exactly when the work really did land, and discarding work
+# stays a separate, explicit, hand-typed act (`git worktree remove --force`,
+# `git branch -D`).
+#
+# BOTH preconditions are checked BEFORE anything is removed, which is not the
+# obvious order and is the one that matters. Letting git enforce them in passing
+# looked equivalent and was not: `worktree remove` happily succeeded, then
+# `branch -d` refused the unmerged branch, and the recipe had deleted the only
+# checkout of work it then declined to clean up — an orphan branch, which is the
+# forest this exists to prevent. Found by running it, not by reading it.
+#
+# "Merged" is measured against `{{base}}`, the same trunk every other gate here
+# measures against. A `base` that does not resolve (no remote fetched yet) fails
+# CLOSED: unproven is not the same as merged.
+tree-rm slug:
+    #!/usr/bin/env sh
+    set -eu
+    repo=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
+    path="{{worktree_root}}/$repo/{{slug}}"
+    [ -d "$path" ] || { printf 'no worktree at %s\n' "$path" >&2; exit 2; }
+    branch=$(git -C "$path" rev-parse --abbrev-ref HEAD)
+    if [ -n "$(git -C "$path" status --porcelain)" ]; then
+        printf '%s has uncommitted changes — commit or discard them first, nothing removed.\n' "$path" >&2; exit 2
+    fi
+    if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null; then
+        printf 'cannot resolve {{base}}, so "merged" is unprovable — nothing removed. Fetch it, or pass base=<ref>.\n' >&2; exit 2
+    fi
+    if ! git merge-base --is-ancestor "$branch" {{quote(base)}}; then
+        printf '%s is not merged into {{base}} — nothing removed. Merge it, or discard it by hand.\n' "$branch" >&2; exit 2
+    fi
+    git worktree remove "$path"
+    git branch -d "$branch"
+
 # One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the
 # tree it runs in: two sessions in one checkout share one verdict, and A's CLEAN
 # authorises B's push (rules/agent/autonomy.md, "One tree, one writer").

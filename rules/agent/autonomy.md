@@ -11,7 +11,9 @@ enforces correctness; the human judges design.
 2. Run **`just check`**. No justfile → `lefthook run pre-commit --all-files && lefthook run pre-push --all-files`.
 3. Read the failure, fix the ROOT CAUSE, re-run until green.
 4. Once the block stands alone — **before pushing** — run the Tier 3 recipes the
-   repo has: `just mutate-diff`, then `just code-review`. Kill survivors that
+   repo has: `just code-review` **first**, then `just mutate-diff`. Review costs
+   minutes and can send a whole block back to the drawing board; mutation costs tens
+   of them and would have measured code the redesign deletes. Kill survivors that
    deserve it (`testing/ratchet.md`), fix `CRITICAL`, loop to 2.
 5. Hand back only after a **fresh green run**. Belief is not permission. Do not
    trust a prior run's claim — re-run and read the exit code.
@@ -21,8 +23,15 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 | When | Command | What it answers |
 |---|---|---|
 | Per iteration | `just check` (Tier 1-2) | fmt, lint, tests, deny — seconds |
-| Per coherent block, before push | `just mutate-diff` then `just code-review` | do the tests *assert*? judgment a gate cannot make |
+| Per sprint, before push | `just code-review` | judgment a gate cannot make — minutes |
+| Per sprint, before push | `just mutate-diff` | do the tests *assert*? — tens of minutes |
 | Per push | CI | a **witness**, same tools on the PR diff |
+
+**The coherent block is the sprint**, not the task. Say it plainly because the
+drift is one-way: a loop that commits per task starts running Tier 3 per task, and
+then Tier 3 is a tax somebody eventually removes. And the two Tier 3 recipes are
+not one thing — review is minutes, mutation is tens of minutes. Splitting them is
+what lets the cheap half stay frequent when the expensive half cannot.
 
 `just code-review` writes `.work/review-report.md`. `just review-guard` (pre-push,
 no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.
@@ -42,9 +51,29 @@ A green gate never settles a **decision** — that line is `agent/decisions.md`.
 
 `.work/` (review report, worklist) is per-tree. Two sessions in one checkout
 share one verdict: A's `CLEAN` authorises B's push. **One tree, one writer, one
-branch, one worklist.** Parallel work gets a parallel tree:
-`git worktree add ../<repo>-<slug> -b <branch>`. `just status` reports every
-tree; it never gates.
+branch, one worklist.**
+
+Parallel work gets a parallel tree, at a path you do not have to remember:
+
+```bash
+just tree <capability-slug>     # prints the path; one tree per capability
+just tree-rm <capability-slug>  # tree AND branch, at the merge, in one act
+```
+
+Every tree on the machine lives under one root (`$CR_WORKTREES`, default
+`~/.worktrees/<repo>/<slug>`) — outside every repo, because a checkout nested in a
+repo is one every tool scans. **One tree per capability, one branch per sprint
+inside it**: `.work/<capability-slug>/` is per-tree and holds that capability's plan
+and all its worklists, so any other split puts one work unit in two trees.
+
+**Parallelise across capabilities, never across the sprints of one.** A sprint is a
+vertical slice, so two sprints of the same capability traverse the same layers and
+collide by construction — `Blocked by` in the plan serialises the dependent ones,
+and the rest are independent as promises, not as files.
+
+The tree dies with the work. `tree-rm` removes nothing unless the tree is clean and
+the branch is merged, so a forest of detached branches is something you have to
+build on purpose. `just status` reports every tree; it never gates.
 
 The human is a writer too. When they edit the tree a loop owns — legitimate, and
 declared as a `human:` line in `## Log` (`skills/loop-setup`) — that line is a

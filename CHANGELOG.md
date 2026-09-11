@@ -87,6 +87,28 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   - **`mutate_jobs`, default `2`** — matches the `-j 2` `mutation-ci.yaml` already
     used, so `rust-mutate` now runs two jobs where it ran one. Each job copies the
     build directory, so raising it multiplies **disk**, not just CPU.
+- **`just tree <slug>` / `just tree-rm <slug>` — worktrees you can find, and that
+  do not accumulate.** The doctrine used to say `git worktree add ../<repo>-<slug>`,
+  which scatters checkouts among the sibling repos of your dev directory; finding one
+  later was an archaeological dig. Every tree now lives under **one root outside every
+  repo** — `$CR_WORKTREES`, default `~/.worktrees/<repo>/<slug>` — at a path that is
+  *derivable* rather than remembered, so an agent computes it instead of inventing one,
+  and `just status` prints it absolute (it used to print `../../..` forms nothing
+  could paste). Not `<repo>/.worktrees/`, tempting as that is: a checkout nested in
+  the repo is one every tool scans — cargo workspace globs, `cargo mutants` copying
+  the workspace to scratch, rust-analyzer, ripgrep, `just check`.
+  - **One tree per capability, one branch per sprint inside it.** `.work/<slug>/` is
+    per-tree and holds that capability's plan and all its worklists, so a tree per
+    sprint splits one work unit across trees. This also settles a contradiction:
+    `autonomy.md` said per capability and `/tasks` said per sprint.
+  - **Parallelise across capabilities, never across the sprints of one.** A sprint is
+    a vertical slice, so two sprints of one capability traverse the same layers and
+    collide by construction — they are independent as promises, not as files.
+  - `tree-rm` removes the worktree **and** the branch in one act, and removes neither
+    unless the tree is clean and the branch is merged into `base`. Both checks run
+    *before* anything is removed: letting git enforce them in passing looked
+    equivalent and was not — `worktree remove` succeeded, `branch -d` then refused,
+    and the recipe had deleted the only checkout of work it declined to clean up.
 
 
 - **`devstack` — the contract between an agent and a running app, plus the
@@ -205,6 +227,24 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   `/architect` / the `add` command.
 
 ### Changed
+
+- **The cadence table splits `code-review` from `mutate-diff`, and names the
+  coherent block.** They were one row, and they are not one thing: review is minutes,
+  mutation is tens of them. Review now runs **first** — it can send a block back to
+  the drawing board, and mutation would otherwise have measured code the redesign
+  deletes. And "per coherent block" is now stated as **per sprint, not per task**,
+  because the drift is one-way: a loop that commits per task starts running Tier 3
+  per task, and then Tier 3 is a tax somebody removes.
+- **`rules/testing/ratchet.md` says where mutation time actually goes.** A killed
+  mutant exits on the first red test while a survivor pays the whole suite, so the
+  run gets slower the more it finds — the shape of a gate on its way to being
+  switched off. And in a compiled language the cost is the rebuild, whose unit is the
+  crate or package: the architecture rule that keeps I/O out of the domain is also
+  what makes this gate affordable.
+- **`/tasks` acceptance criteria must name a command**, not "a command *or
+  observation*". Step 1 already refuses a criterion no machine can check; the
+  template still offered the escape hatch.
+
 
 - **`just code-review` stops paying for the diff it cannot use.** The reviewer
   has no shell, so the prompt is its entire view of the change — and on one

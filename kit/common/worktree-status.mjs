@@ -149,6 +149,13 @@ for (const block of listed.split(/\n{2,}/)) {
   if (tree.path && !tree.bare) trees.push(tree)
 }
 
+/** How to name a tree so the reader can act on it: relative when it is below the
+ *  current directory, absolute the moment it is not. */
+function shownPath(tree) {
+  const rel = relative(process.cwd(), tree.path) || '.'
+  return rel.startsWith('..') ? resolve(tree.path) : rel
+}
+
 const here = git(process.cwd(), 'rev-parse', '--show-toplevel')
 const rows = trees.map((tree) => {
   const ahead = git(tree.path, 'rev-list', '--count', `${base}..HEAD`)
@@ -157,7 +164,10 @@ const rows = trees.map((tree) => {
   const worklist = worklistState(tree)
   return {
     mine: here !== null && resolve(tree.path) === resolve(here),
-    path: (relative(process.cwd(), tree.path) || '.') + (tree.prunable ? ' (prunable)' : tree.locked ? ' (locked)' : ''),
+    // Relative while the tree is under the cwd, ABSOLUTE once it is not. Worktrees
+    // live under `worktree_root` now (gate.just), so the relative form was a
+    // `../../.worktrees/<repo>/<slug>` nobody can paste into an IDE or an orchestrator.
+    path: shownPath(tree) + (tree.prunable ? ' (prunable)' : tree.locked ? ' (locked)' : ''),
     branch: tree.branch ?? `(detached ${(tree.head ?? '').slice(0, 7)})`,
     ahead: ahead === null ? '—' : `+${ahead}`,
     dirty: dirty === null ? '?' : dirty === 0 ? 'clean' : `${dirty} dirty`,

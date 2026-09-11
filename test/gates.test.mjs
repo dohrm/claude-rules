@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
 
@@ -1093,4 +1093,69 @@ test('kit/rust/mutants.toml ships generated-code exclusions, not just a commente
   const live = block[1].split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
   assert.ok(live.length > 0, 'exclude_globs is empty — the generated-code defaults were removed')
   assert.ok(live.some(l => /generated/.test(l)), 'no generated-code glob left in exclude_globs')
+})
+
+// `just tree` / `just tree-rm` — the worktree lifecycle. Worth a real test rather than
+// a parse check, because the failure that matters here is an ORDERING one that reads
+// fine: removing the worktree before verifying the branch is merged leaves an orphan
+// branch and deletes the only checkout of the work it then refuses to clean up. That is
+// the forest these recipes exist to prevent, so the "refuses AND leaves the tree
+// standing" arm is the point of the test.
+test('tree / tree-rm: canonical path, and nothing is removed until the work has landed',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withTmpRepo(dir => {
+    const git = (...a) => {
+      const r = spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
+      assert.equal(r.status, 0, `git ${a.join(' ')}: ${r.stderr}`)
+      return r.stdout.trim()
+    }
+    const just = (...a) => spawnSync('just', a, {
+      cwd: dir, encoding: 'utf8', env: { ...process.env, CR_WORKTREES: join(dir, 'trees') },
+    })
+
+    git('init', '-q', '-b', 'main', '.')
+    git('config', 'user.email', 't@t')
+    git('config', 'user.name', 't')
+    writeFileSync(join(dir, 'seed.txt'), 'x')
+    git('add', '-A'); git('commit', '-qm', 'init')
+
+    mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
+    writeFileSync(join(dir, '.dev/kit/common/gate.just'), readFileSync(join(REPO, 'kit/common/gate.just'), 'utf8'))
+    writeFileSync(join(dir, 'justfile'),
+      'set allow-duplicate-recipes := true\nset allow-duplicate-variables := true\n'
+      + "import '.dev/kit/common/gate.just'\nbase := \"main\"\n")
+
+    // The path is DERIVABLE, printed on stdout alone, and creating twice is idempotent —
+    // an agent recomputes it instead of remembering it, and re-running costs nothing.
+    const made = just('tree', 'cap-a')
+    assert.equal(made.status, 0, made.stderr)
+    const treePath = made.stdout.trim()
+    assert.equal(treePath, join(dir, 'trees', basename(dir), 'cap-a'))
+    assert.ok(existsSync(treePath), 'the worktree was not created at the path it printed')
+    assert.equal(just('tree', 'cap-a').stdout.trim(), treePath, 'tree must be idempotent')
+
+    // Unmerged work: refuse, and leave BOTH halves alone.
+    writeFileSync(join(treePath, 'new.txt'), 'work')
+    spawnSync('git', ['add', '-A'], { cwd: treePath })
+    spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'unmerged'], { cwd: treePath })
+    const unmerged = just('tree-rm', 'cap-a')
+    assert.notEqual(unmerged.status, 0, 'an unmerged branch must not be removed')
+    assert.match(unmerged.stderr, /not merged into main/)
+    assert.ok(existsSync(treePath), 'the worktree must survive a refusal — otherwise the branch is orphaned')
+
+    // Dirty tree: refuse before touching anything, even once the branch is mergeable.
+    git('merge', '-q', 'work/cap-a')
+    writeFileSync(join(treePath, 'scratch.txt'), 'uncommitted')
+    const dirty = just('tree-rm', 'cap-a')
+    assert.notEqual(dirty.status, 0, 'a dirty tree must not be removed')
+    assert.match(dirty.stderr, /uncommitted changes/)
+    assert.ok(existsSync(treePath))
+
+    // Clean and merged: tree and branch go together, in one act.
+    rmSync(join(treePath, 'scratch.txt'))
+    const gone = just('tree-rm', 'cap-a')
+    assert.equal(gone.status, 0, gone.stderr)
+    assert.ok(!existsSync(treePath), 'the worktree should be gone')
+    assert.ok(!git('branch', '--list', 'work/cap-a').trim(), 'the branch should be gone with it')
+  })
 })
