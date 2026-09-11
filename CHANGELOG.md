@@ -228,6 +228,30 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Changed
 
+- **Mutation moved from the agent's pre-push loop to a pull-request gate**
+  (`docs/adr/0002-mutation-is-a-pr-gate.md`, Accepted). Measured on one Rust
+  workspace: 19 minutes for a 65-mutant diff at `-j 2` — 31 caught, 0 missed, and
+  34 **unviable** (mutants that do not compile, carry no signal, and cost a full
+  build each). Excluding those lands near 9 minutes, so the case is not wall-clock
+  alone: the remaining lever is `-j`, and that is what a laptop cannot spend while
+  the editor and the agent are using the cores. CI can.
+  - `just mutate-diff` leaves the cadence table in `agent/autonomy.md`. It stays
+    available as an **optimisation** — run it to buy back a round trip on code you
+    doubt, never as a step owed before pushing. `just code-review` is unchanged and
+    still local, per sprint: its feedback can redesign a block, so it stays close.
+  - The three `mutation-ci.yaml` snippets say **the gate**, not "the witness". The
+    Rust one now treats a persistent compiler cache on the runner as part of the
+    gate rather than a commented tuning option — the same workspace took 972 s of
+    baseline build cold against 113 s warm, and a cold runner turns this job from
+    minutes into a quarter of an hour.
+  - `CONTEXT.md` redefines **Tier** as a *depth, not a venue*: Tier 3's two halves
+    now run in different places, so the old "run before push" wording could not
+    survive as part of the definition.
+  - Applied to TS and Python too, since the decision carries no language
+    qualifier — but their mutation cost was never measured. They inherit a cadence
+    justified on Rust numbers; say so rather than imply otherwise.
+
+
 - **The cadence table splits `code-review` from `mutate-diff`, and names the
   coherent block.** They were one row, and they are not one thing: review is minutes,
   mutation is tens of them. Review now runs **first** — it can send a block back to

@@ -5,24 +5,20 @@
 
 ## Context
 
-`rules/agent/autonomy.md` puts `just mutate-diff` in the agent's per-block loop,
-and `kit/rust/mutation-ci.yaml` calls its CI job "the WITNESS, not the first
-observation". Measured on one Rust workspace, that loop step cost ~50 minutes for
-a 32-mutant diff — **22 of them the baseline alone** (972 s build, 363 s test),
-because cargo-mutants builds a cold scratch copy. Mutation there is compile-bound,
-not test-bound.
+`rules/agent/autonomy.md` puts `just mutate-diff` in the agent's per-block loop, and
+`kit/rust/mutation-ci.yaml` calls its CI job "the WITNESS, not the first
+observation".
 
-After sccache and the kit's Tier 3 levers, the baseline build fell to 113 s and a
-65-mutant diff ran 19 minutes at `-j 2` — 31 caught, 0 missed, and **34 unviable**:
-mutants that do not compile, carry no signal, and still cost a full build each.
-Roughly two thirds of that run produced nothing. (The suite time also fell,
-363 s → 95 s, for reasons the changes do not explain — the codebase moved between
-runs — so only the build figure is attributable.)
+Measured on one Rust workspace, that loop step cost ~50 minutes on a 32-mutant
+diff, and 19 minutes on a 65-mutant one after the kit's Tier 3 levers. It is
+compile-bound, not test-bound: cargo-mutants builds a cold scratch copy, and a
+third of those mutants were **unviable** — they do not compile, carry no signal,
+and cost a full build each. Figures and levers: `kit/rust/README.md`.
 
-Excluding the unviable set would bring the run near 9 minutes, which narrows this
-decision's margin honestly: the argument is no longer wall-clock alone. It is that
-the remaining lever is `-j`, and that is the one a laptop cannot spend — raising it
-contends with the editor, rust-analyzer, and the build the agent is about to run.
+Excluding the unviable set lands near 9 minutes, so wall-clock alone no longer
+carries this decision. What carries it is that the remaining lever is `-j`: cores a
+laptop cannot spend while the editor and the agent are using them, and a runner
+can.
 
 ## Decision
 
@@ -56,3 +52,18 @@ author, rather than to a calendar.
   sprints from its cause, and a budget whose only legal exit is escalation anyway.
 - **Nightly full sweep instead** — measures erosion of the whole tree, not this
   change; no owner, and no merge to block.
+
+## Implemented
+
+This record underestimated its own surface: the inverted doctrine was stated in
+eight places, not the four named above — the cost of arguing every design choice
+where it applies. The inventory is in the CHANGELOG, not here.
+
+The Decision carries no language qualifier, so it was applied to TS and Python as
+well. Their mutation cost was **never measured**; they inherit a cadence justified
+on Rust numbers. If that turns out wrong for either, it is a new record.
+
+Not load-bearing yet: all three `mutation-ci.yaml` snippets still ship
+`continue-on-error: true`, so until a consuming repo ratchets its baseline this
+gate reports and does not block. And nothing fails if the doctrine is reverted — it
+is prose, and no test asserts it.

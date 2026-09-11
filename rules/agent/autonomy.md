@@ -10,11 +10,11 @@ enforces correctness; the human judges design.
 1. Write the code AND its tests.
 2. Run **`just check`**. No justfile → `lefthook run pre-commit --all-files && lefthook run pre-push --all-files`.
 3. Read the failure, fix the ROOT CAUSE, re-run until green.
-4. Once the block stands alone — **before pushing** — run the Tier 3 recipes the
-   repo has: `just code-review` **first**, then `just mutate-diff`. Review costs
-   minutes and can send a whole block back to the drawing board; mutation costs tens
-   of them and would have measured code the redesign deletes. Kill survivors that
-   deserve it (`testing/ratchet.md`), fix `CRITICAL`, loop to 2.
+4. Once the block stands alone — **before pushing** — run `just code-review` and
+   fix `CRITICAL`, then loop to 2. **Mutation is not in this loop**: it is a gate on
+   the pull request (`ADR-0002`). Run `just mutate-diff` yourself only to avoid a
+   round trip on code you have reason to doubt — it is an optimisation, never a step
+   you owe.
 5. Hand back only after a **fresh green run**. Belief is not permission. Do not
    trust a prior run's claim — re-run and read the exit code.
 
@@ -24,14 +24,19 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 |---|---|---|
 | Per iteration | `just check` (Tier 1-2) | fmt, lint, tests, deny — seconds |
 | Per sprint, before push | `just code-review` | judgment a gate cannot make — minutes |
-| Per sprint, before push | `just mutate-diff` | do the tests *assert*? — tens of minutes |
 | Per push | CI | a **witness**, same tools on the PR diff |
+| Per pull request | `mutate-diff` in CI | do the tests *assert*? — **the gate**, not a witness |
 
 **The coherent block is the sprint**, not the task. Say it plainly because the
 drift is one-way: a loop that commits per task starts running Tier 3 per task, and
-then Tier 3 is a tax somebody eventually removes. And the two Tier 3 recipes are
-not one thing — review is minutes, mutation is tens of minutes. Splitting them is
-what lets the cheap half stay frequent when the expensive half cannot.
+then Tier 3 is a tax somebody eventually removes.
+
+The two Tier 3 checks are not one thing, which is why only one of them is here.
+Review is minutes and its feedback can redesign a block, so it stays close. Mutation
+was measured at tens of minutes, and its remaining lever is `-j` — cores a laptop
+cannot spend while the editor and the agent are using them. It moved to the PR,
+where it **blocks the merge**: enforcement kept, the loop untaxed, one round trip
+per survivor accepted as the price (`ADR-0002`).
 
 `just code-review` writes `.work/review-report.md`. `just review-guard` (pre-push,
 no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.
