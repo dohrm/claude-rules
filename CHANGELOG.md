@@ -35,6 +35,40 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`kit/rust`: Tier 3 made affordable enough to stay in the loop.** Measured on
+  one real workspace, a 32-mutant sprint diff cost ~50 minutes — **22 of them the
+  baseline** (972 s build + 363 s test) before the first mutant ran. So mutation in
+  Rust is *compile*-bound, not test-bound, and the levers are linking and codegen,
+  not test selection. Two consequences are now written down in
+  `kit/rust/README.md` under **Tier 3 economics**: the unit of recompilation is the
+  crate (so the hexagonal rule is also a performance rule), and a killed mutant
+  exits on the first red test while a **survivor pays the whole suite** — the cost
+  spikes exactly when the gate has something to say, which is how a gate ends up
+  switched off (`rules/testing/ratchet.md`).
+  - `mutants.toml` now ships `exclude_globs` **filled** with generated-code
+    patterns instead of a commented example. `review_exclude` in `gate.just`
+    already kept generated files out of code review; the same doctrine now reaches
+    the other gate. This protects the *variance*: a normal sprint is a few dozen
+    mutants, the sprint that regenerates an OpenAPI or protobuf client is
+    thousands. A test asserts the list cannot be quietly emptied again.
+  - **`cargo-profile.snippet.toml`** (`[profile.mutants] debug = "none"`) and
+    **`cargo-config.snippet.toml`** (sccache, mold/lld) — both opt-in, because each
+    needs merging into a file the installer never touches. `cargo-config` also
+    documents why a shared `CARGO_TARGET_DIR` is the trap it looks like the
+    solution to: cargo locks it (so parallel worktrees serialize), branches thrash
+    each other's fingerprints, and mutation artifacts land in the tree
+    rust-analyzer reads. Mutualize with a content-addressed cache instead.
+  - **`mutate_args`** — one escape hatch rather than five knobs, shipped empty:
+    `--profile mutants`, `--test-tool=nextest`, `--baseline=skip`, `--in-place`.
+    `--baseline=skip` removes the whole 1335 s baseline and is **fail-open alone**
+    (against a red tree every mutant "fails" and reads as killed) — it is safe only
+    where something just proved the tree green in that directory, so it waits for
+    an orchestrator. `--in-place` wants a dedicated mutation worktree.
+  - **`mutate_jobs`, default `2`** — matches the `-j 2` `mutation-ci.yaml` already
+    used, so `rust-mutate` now runs two jobs where it ran one. Each job copies the
+    build directory, so raising it multiplies **disk**, not just CPU.
+
+
 - **`devstack` — the contract between an agent and a running app, plus the
   `process-compose` lifecycle that makes it cheap.** An agent that needs the app
   running had three ways to lose a turn: holding a dev server in the foreground

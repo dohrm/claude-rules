@@ -1,12 +1,49 @@
-# Mutation testing config — Tier 3 quality gate (CI only, NEVER in the git hook).
+# Mutation testing config — Tier 3 quality gate (CI + local block, NEVER in the git hook).
 # COPY to `<workspace>/.cargo/mutants.toml` and adapt the two marked lists.
 #
 # Why not in lefthook: cargo-mutants re-runs the test suite once per mutant —
 # minutes, not seconds. In a hook it would destroy the fast "agent closes its
 # own loop" loop. Mutation runs on the PR (changed code only, `--in-diff`) and
-# optionally as a nightly full sweep. See mutation-ci.yaml.
+# optionally as a nightly full sweep. See mutation-ci.yaml, and rust.just's
+# "Tier 3 economics" block for what actually costs the time.
 #
 # cargo-mutants reads this file automatically (default path .cargo/mutants.toml).
+
+# ── Generated code — shipped filled in, unlike the two lists below ──────────
+# Mutating generated code is meaningless twice over: nobody wrote the assertions
+# that would catch it, and the fix for a survivor would be editing an artifact the
+# generator overwrites. `rules/testing/ratchet.md` already names generated code as
+# a thing mutation cannot judge, and `review_exclude` in kit/common/gate.just
+# already keeps it out of code review — this is the same doctrine reaching the
+# other gate, which it previously did not.
+#
+# This protects the VARIANCE, not the average. A typical sprint diff is a few dozen
+# mutants and would not notice; the sprint that regenerates an OpenAPI or protobuf
+# client is thousands, and that is the run that makes someone turn the gate off.
+# Measured on one real workspace: 8128 mutants for a whole-tree sweep, generated
+# sources at the top of the per-file count.
+#
+# Extend it with YOUR generator's output path; delete a line your repo cannot
+# produce. Paths are relative to the workspace root.
+exclude_globs = [
+    "**/generated/**",
+    "**/*-generated/**",
+    "**/*_generated.rs",
+    "**/*.gen.rs",
+    "**/*.pb.rs",        # prost / tonic
+]
+
+# ── ADAPT PER REPO — I/O-heavy code (integration-tested, not unit-testable) ──
+# Mutants here survive for the WRONG reason: no unit test can catch a mutated
+# I/O branch. Excluding avoids false survivors drowning the real signal — and
+# since a survivor pays the FULL suite runtime while a killed mutant exits on the
+# first red test, a false survivor is also the most expensive kind.
+# Target pure logic (domain/aggregates); exclude reconcile loops, adapters,
+# binary entrypoints. Refine as pure logic is split out of I/O crates.
+# Append to exclude_globs above — TOML has one list per key.
+#
+#   "crates/operator/src/**",   # e.g. k8s reconcile loops = I/O
+#   "**/main.rs",               # binary entrypoints (arg parsing / wiring)
 
 # ── ADAPT PER REPO — equivalent / low-value mutants ─────────────────────────
 # Mutating a trivial accessor to a constant is technically "missed" but carries
@@ -18,15 +55,8 @@ exclude_re = [
     # "RegistryEntry::property",
 ]
 
-# ── ADAPT PER REPO — I/O-heavy code (integration-tested, not unit-testable) ──
-# Mutants here survive for the WRONG reason: no unit test can catch a mutated
-# I/O branch. Excluding avoids false survivors drowning the real signal.
-# Target pure logic (domain/aggregates); exclude reconcile loops, adapters,
-# binary entrypoints. Refine as pure logic is split out of I/O crates.
-exclude_globs = [
-    # "crates/operator/src/**",   # e.g. k8s reconcile loops = I/O
-    # "**/main.rs",               # binary entrypoints (arg parsing / wiring)
-]
-
 # ── Safety: never let a mutant that spins forever hang CI ───────────────────
+# Each timeout is paid in full, per mutant. `--test-tool=nextest` (see rust.just's
+# `mutate_args`) gives per-test timeouts instead, which cuts the tail rather than
+# capping it.
 minimum_test_timeout = 30
