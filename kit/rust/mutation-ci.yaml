@@ -8,7 +8,7 @@ name: Mutation
 # Runs on PR against changed code only (`--in-diff`) so it stays minutes, not
 # hours. Scoping/exclusions live in .cargo/mutants.toml (I/O crates, getters).
 #
-# THIS JOB IS THE GATE (ADR-0002). It is not a witness of a local run: mutation
+# THIS JOB IS THE GATE. It is not a witness of a local run: mutation
 # left the agent's pre-push loop because it was measured at ~19 minutes on a
 # 65-mutant diff, and its remaining lever is `-j` — cores a laptop cannot spend
 # while the editor and the agent are using them. A runner can. Surfacing survivors

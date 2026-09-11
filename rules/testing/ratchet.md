@@ -16,7 +16,7 @@ score can**: it changes the code and asks whether any test notices.
 just mutate-diff     # the locked techs' mutate / cover recipes; never a hook
 ```
 
-**CI is where mutation gates** (`ADR-0002`): it runs on the pull request, on the
+**CI is where mutation gates**: it runs on the pull request, on the
 diff, and a red job blocks the merge. That is the enforcement point, not a witness
 of a local run. Wiring and tool limits (Stryker has
 no `--since`, mutmut is path-scoped, Go has no production-grade mutator): the

@@ -79,6 +79,30 @@ test('no absolute local path leaked into a shipped asset', () => {
   }
 })
 
+// A shipped asset must never cite a CONCRETE decision record. Installed into a
+// consuming repo, `ADR-0002` names THAT repo's ADR-0002 — a different decision, or
+// none — so the citation does not merely dangle, it resolves to the wrong thing.
+// The doctrine a rule states stands on its own authority anyway; the attribution is
+// what does not travel.
+//
+// Two exemptions, both real: inside a `<...-template>` block the number belongs to
+// the consuming repo (`/architect` writes its ADR-0001), and `ADR-NNNN` is the
+// placeholder the library uses when it means "cite one, by number".
+test('no shipped asset cites a concrete decision record outside a template', () => {
+  const TEMPLATE_OPEN = /^\s*<[a-z][a-z-]*-template>\s*$/
+  const TEMPLATE_CLOSE = /^\s*<\/[a-z][a-z-]*-template>\s*$/
+  for (const file of [...proseFiles(), ...walk(join(REPO, 'kit'))]) {
+    let inTemplate = false
+    read(file).split('\n').forEach((line, i) => {
+      if (TEMPLATE_OPEN.test(line)) { inTemplate = true; return }
+      if (TEMPLATE_CLOSE.test(line)) { inTemplate = false; return }
+      if (inTemplate) return
+      assert.doesNotMatch(line, /ADR-\d{4}|docs\/adr\/\d{4}/,
+        `${rel(file)}:${i + 1}: cites a concrete ADR — use ADR-NNNN, or move it inside a template`)
+    })
+  }
+})
+
 // The skills that own a document say where it goes; keep those paths consistent with
 // the living-documents rule, which is what docs-check enforces in the consuming repo.
 test('document-producing skills name a path under docs/', () => {

@@ -228,6 +228,21 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Changed
 
+- **Shipped assets no longer cite this library's own decision records.** A rule or
+  kit file that said "(`ADR-0002`)" was read, once installed, against the consuming
+  repo's `docs/adr/` — where `ADR-0002` is a *different* decision, or none. The
+  citation did not dangle, it resolved to the wrong thing, which is worse. The
+  doctrine each rule states stands on its own authority; only the attribution was
+  lost, and attribution is exactly what does not travel between repos.
+  - Concrete numbers used as format examples in prose (`ADR-0007 § Decision`,
+    "supersede ADR-0003") become `ADR-NNNN`, the placeholder the rest of the
+    library already uses. They read as real references, and one day one of them is.
+  - `/architect`'s `ADR-0001` stays: it is inside `<architecture-template>`, so the
+    number belongs to the repo the skill is writing for.
+  - A test enforces it — a shipped asset may cite a concrete record only inside a
+    template block.
+
+
 - **Mutation moved from the agent's pre-push loop to a pull-request gate**
   (`docs/adr/0002-mutation-is-a-pr-gate.md`, Accepted). Measured on one Rust
   workspace: 19 minutes for a 65-mutant diff at `-j 2` — 31 caught, 0 missed, and

@@ -12,7 +12,7 @@ enforces correctness; the human judges design.
 3. Read the failure, fix the ROOT CAUSE, re-run until green.
 4. Once the block stands alone — **before pushing** — run `just code-review` and
    fix `CRITICAL`, then loop to 2. **Mutation is not in this loop**: it is a gate on
-   the pull request (`ADR-0002`). Run `just mutate-diff` yourself only to avoid a
+   the pull request. Run `just mutate-diff` yourself only to avoid a
    round trip on code you have reason to doubt — it is an optimisation, never a step
    you owe.
 5. Hand back only after a **fresh green run**. Belief is not permission. Do not
@@ -36,7 +36,7 @@ Review is minutes and its feedback can redesign a block, so it stays close. Muta
 was measured at tens of minutes, and its remaining lever is `-j` — cores a laptop
 cannot spend while the editor and the agent are using them. It moved to the PR,
 where it **blocks the merge**: enforcement kept, the loop untaxed, one round trip
-per survivor accepted as the price (`ADR-0002`).
+per survivor accepted as the price.
 
 `just code-review` writes `.work/review-report.md`. `just review-guard` (pre-push,
 no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.

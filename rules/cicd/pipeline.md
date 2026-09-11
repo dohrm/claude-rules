@@ -28,7 +28,7 @@ fewer than they look: publishing, and anything requiring a secret. That is the
 list. **Code review is not on it** — "it needs the PR diff" is not a reason, because
 `git diff <base>...HEAD` computes the same merge-base set on a laptop.
 
-**Mutation is the one Tier 3 check that gates in CI** (`ADR-0002`), and not because
+**Mutation is the one Tier 3 check that gates in CI**, and not because
 it needs the PR: it needs cores, and `-j` is what a laptop cannot spend while the
 editor and the agent are using them. Running it locally stays possible and buys back
 a round trip; the PR job is the gate.

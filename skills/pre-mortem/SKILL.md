@@ -61,7 +61,7 @@ After each disposition, restate the **residual**: what's left of this risk once 
 You own `docs/premortem/`. When a mitigation changes the design, emit a **precise delta** against the owning artifact and offer to apply it — do not touch it yourself. This holds for documents **and** for code/config:
 
 - PRD change → *"Delta for `docs/PRD.md`: add to Out of Scope — `<text>`. Run `/prd` to apply?"*
-- Architecture change → *"Delta: supersede ADR-0003 with a new ADR — `<decision>`. Run `/architect` to apply?"*
+- Architecture change → *"Delta: supersede ADR-NNNN with a new ADR — `<decision>`. Run `/architect` to apply?"*
 - Plan change → *"Delta: insert a hardening sprint before Sprint 2 — `<slice>`. Run `/plan` to apply?"*
 - Code/config change → *"Delta: wire `ts-check` into the `check` target; create `deny.toml`. Want me to apply these now, or leave them as tickets?"* — a bundle of code changes lands only on an explicit go-ahead, never as a silent side effect of the analysis.
 
@@ -102,7 +102,7 @@ One paragraph: the central imbalance or assumption that orients every failure be
 
 | ID | Risk (1 line) | Persona | Lethality | Disposition | Mitigation / owner | Pending delta |
 |----|---------------|---------|-----------|-------------|--------------------|---------------|
-| R-1 | … | … | High | Mitigated | … | `/architect`: supersede ADR-0003 |
+| R-1 | … | … | High | Mitigated | … | `/architect`: supersede ADR-NNNN |
 | R-2 | … | … | Medium | Accepted (owner: …) | rationale … | — |
 
 ## Rounds

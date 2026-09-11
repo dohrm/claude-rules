@@ -7,7 +7,7 @@ name: Mutation (TS)
 #
 # Runs on PR against changed files only so it stays minutes, not hours.
 #
-# THIS JOB IS THE GATE (ADR-0002). Mutation left the agent's pre-push loop, so
+# THIS JOB IS THE GATE. Mutation left the agent's pre-push loop, so
 # surfacing survivors here is the design rather than a sign the local loop was
 # skipped. `just ts-mutate` stays available to buy back a round trip on code you
 # doubt. Stryker has no `--since`, so the two scope differently — locally

@@ -5,7 +5,7 @@ name: Mutation (Python)
 # is the gate that lets AI-written unit tests be trusted without reading every
 # assertion by hand. Doctrine: rules/testing/ratchet.md.
 #
-# THIS JOB IS THE GATE (ADR-0002). Mutation left the agent's pre-push loop, so
+# THIS JOB IS THE GATE. Mutation left the agent's pre-push loop, so
 # surfacing survivors here is the design rather than a sign the local loop was
 # skipped. `just python-mutate` stays available to buy back a round trip on code
 # you doubt — an optimisation, never a step owed before pushing.

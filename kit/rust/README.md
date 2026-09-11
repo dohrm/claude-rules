@@ -57,7 +57,7 @@ apt install mold               # or: brew install mold
 | `cargo-profile.snippet.toml` | merge into `<rust_dir>/Cargo.toml` | `cargo mutants --profile mutants` | nothing; opt in via `mutate_args` |
 | `cargo-config.snippet.toml` | merge into `<rust_dir>/.cargo/config.toml` | every `cargo` invocation | pick your linker target; sccache as-is |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just rust-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** (ADR-0002) | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `working-directory` |
 
 `rust-fmt.sh` is a **special case**: only when a generated member crate
 must be skipped (`cargo fmt --all` would fight the generator). Swap the

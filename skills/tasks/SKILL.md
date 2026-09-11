@@ -45,7 +45,7 @@ traverses (schema, domain, transport, UI, tests). For each, record:
   and should be imitated. *This is the single most useful line you can hand a fresh
   implementer*: the conventions of the repo are in that file, not in your prose.
 - **the constraint that binds it** — the `Accepted` ADR deciding something about
-  this layer, by number and section (`ADR-0007 § Decision+Consequences`). A
+  this layer, by number and section (`ADR-NNNN § Decision+Consequences`). A
   pointer, never a summary: the ADR is the home of that fact.
 
 Constraints amortize exactly like anchors, and they are the ones that get skipped —
