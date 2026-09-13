@@ -35,11 +35,10 @@ Once `rustup`/`cargo` are on the `PATH`, the rest is one command everywhere:
 ```bash
 rustup component add rustfmt clippy
 cargo install cargo-deny cargo-machete
-cargo install cargo-mutants   # Tier 3 only
+cargo install cargo-mutants   # Tier 4 only
 ```
 
-Optional, and every one of them is about Tier 3 being fast enough to stay in
-the loop — read **Tier 3 economics** below before installing any of them:
+Optional tools for making Tier 4 affordable on the PR and during local diagnosis — read **Tier 4 economics** below before installing any of them:
 
 ```bash
 cargo install sccache          # mutualizes the dependency build across trees
@@ -64,7 +63,7 @@ must be skipped (`cargo fmt --all` would fight the generator). Swap the
 fmt line in the root justfile and add `#![allow(clippy::all)]` on that
 crate. Most repos never need it.
 
-## Tier 3 economics — what actually costs the time
+## Tier 4 economics — what actually costs the time
 
 Measured on one real workspace, because the intuition is wrong in a way that
 changes which levers are worth pulling:

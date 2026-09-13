@@ -1,0 +1,16 @@
+{
+  "agent": "code-reviewer",
+  "rules": [
+    "common",
+    "agent",
+    "product"
+  ],
+  "ci_verdict_in": [
+    "CRITICAL"
+  ],
+  "stdout_matches": [
+    "(?i)(draft|saisie)",
+    "edit-expert"
+  ],
+  "judge": "Does it identify that failedSave destroys the unsaved draft, cite the stable edit-expert invariant, and recommend preserving it rather than relaxing the contract?"
+}

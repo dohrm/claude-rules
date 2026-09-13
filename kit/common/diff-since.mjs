@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// How much of this branch a Tier-3 gate has ALREADY cleared, and from where the next
+// How much of this branch a local T3/T4 gate has ALREADY cleared, and from where the next
 // run should therefore diff.
 //
 // The problem it solves is measured, not theoretical: `code-review` and `mutate-diff`

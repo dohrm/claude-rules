@@ -34,6 +34,10 @@ the agent's pre-push loop.
 - Tier 3 keeps `just code-review` local and per sprint. Review is minutes and can
   send a block back to the drawing board; only mutation moves.
 
+Amendment 2026-09-13: the validation vocabulary now calls review **T3** and
+mutation **T4**. This renames the depths; the PR cadence and calibration policy
+above remain unchanged.
+
 ## Consequences
 
 Survivors are found ~10 minutes after a push instead of in the editor: one round

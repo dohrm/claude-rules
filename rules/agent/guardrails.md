@@ -15,7 +15,8 @@ code a tired human can understand six months later.
   earns one.
 - Never silently change user-visible behavior, filesystem layout, security policy,
   or milestone scope.
-- **A dependency is a decision, not a convenience.** Say why in the change summary,
+- **A dependency needs a reason.** Apply `agent/decisions.md` to decide whether it
+  is an architectural decision or an implementation choice. Say why in the change summary,
   and check it: needed by *this* milestone, maintained enough for the risk, clean
   through the supply-chain gate (e.g. `cargo deny`), not a duplicate of one already
   there.

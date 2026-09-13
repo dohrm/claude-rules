@@ -11,7 +11,7 @@ just godot-check     # godot-lint → dotnet test → headless import + export
 `godot-lint` is pre-commit (`dotnet build` + `check-no-new-gd.sh`).
 `godot-check` is pre-push — and `just check` only after you override
 `godot_dir` / `godot_bin` / `godot_export_preset` (the lock cannot derive a
-binary or a preset). No Tier 3. Wiring: `.dev/kit/godot/README.md`.
+binary or a preset). No Tier 4. Wiring: `.dev/kit/godot/README.md`.
 
 | Recipe | Command | Config |
 |---|---|---|

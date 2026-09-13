@@ -13,7 +13,7 @@ just ts-tauri-check    # React webview (Tauri)
 ```
 
 Pick the recipe that matches the runtime. `ts-lint` / `ts-*-lint` is
-pre-commit; `*-check` is pre-push and `just check`. Tier 3 is `*-mutate`
+pre-commit; `*-check` is pre-push and `just check`. Tier 4 is `*-mutate`
 (Stryker) — never a hook. Wiring: `.dev/kit/ts/README.md` (and the
 matching derivative README).
 

@@ -42,7 +42,7 @@ Produce a **drift table**, one row per command CI runs:
 
 Three verdicts, no fourth: **move it** into a justfile recipe (the default),
 **keep it** as a legitimate CI-only exception (publishing, anything needing a
-secret — name which), or **delete it** (dead or duplicated). Tier 3 is *not* such
+secret — name which), or **delete it** (dead or duplicated). Tier 4 is *not* such
 an exception: mutation runs locally too (`just mutate-diff`), so a mutation job
 whose command has no justfile counterpart is drift like any other. Present the table
 and the diagnosis before touching a file.
@@ -57,7 +57,7 @@ Propose it in a few lines and get a yes:
 
 - One gate job **per technology** (parallel, and a red job names its toolchain),
   each running `just <tech>-check`.
-- Tier 3 as its own job, **non-blocking until ratcheted** (`testing/ratchet.md`).
+- Tier 4 as its own job, **non-blocking until ratcheted** (`testing/ratchet.md`).
 - One aggregator job (`ci-ok`) as the single required check, so a skipped job
   cannot read as green.
 - A release workflow only if the repo publishes something.
@@ -65,7 +65,7 @@ Propose it in a few lines and get a yes:
 ### 4. Write
 
 Start from the installed snippets — `kit/cicd/ci.snippet.yaml`,
-`kit/cicd/release.snippet.yaml`, and the Tier-3 job from each language kit — and
+`kit/cicd/release.snippet.yaml`, and the Tier-4 job from each language kit — and
 adapt: delete the jobs for absent technologies, set `runs-on`, pin the toolchain
 versions, point the working directories at the justfile's `*_dir` values. Never
 copy a command out of the justfile into the workflow.
@@ -77,7 +77,7 @@ End with the short list only a human can do, each with why:
 - the runner label / self-hosted runner,
 - the secrets to create (name them; never a value, never in a file),
 - the **branch protection**: make `ci-ok` the required check,
-- when to flip Tier 3 to blocking (after the baseline is measured),
+- when to flip Tier 4 to blocking (after the baseline is measured),
 - who pushes tags — the release trigger is a human act (`cicd/release.md`).
 
 Then stop. You do not push tags, you do not create releases, and you do not enable

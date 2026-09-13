@@ -8,7 +8,7 @@ title: "Go Quality Gates"
 just go-check     # go-lint → test -race → build → govulncheck
 ```
 
-`go-lint` is pre-commit; `go-check` is pre-push and `just check`. Tier 3
+`go-lint` is pre-commit; `go-check` is pre-push and `just check`. Tier 4
 is `just go-cover` — a coverage map, never mutation, never a hook.
 Wiring: `.dev/kit/go/README.md`. Needs **golangci-lint v2**.
 

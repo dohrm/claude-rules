@@ -31,6 +31,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
+import { checkExperience } from './experience-check.mjs'
 
 const args = process.argv.slice(2)
 const strict = args.includes('--strict')
@@ -290,6 +291,7 @@ function main() {
   const problems = []
   const warnings = []
   for (const doc of LIVING) checkLiving(doc, problems, warnings)
+  checkExperience(docsDir, problems)
   checkContinued(warnings)
 
   if (warnings.length > 0) report(warnings)

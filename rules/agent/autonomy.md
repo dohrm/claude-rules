@@ -23,20 +23,21 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 | When | Command | What it answers |
 |---|---|---|
 | Per iteration | `just check` (Tier 1-2) | fmt, lint, tests, deny — seconds |
-| Per sprint, before push | `just code-review` | judgment a gate cannot make — minutes |
+| Per sprint, before push | `just code-review` (Tier 3) | judgment a gate cannot make — minutes |
 | Per push | CI | a **witness**, same tools on the PR diff |
-| Per pull request | `mutate-diff` in CI | do the tests *assert*? — **the gate**, not a witness |
+| Per pull request | `mutate-diff` in CI (Tier 4) | do the tests *assert*? — **the gate**, not a witness |
 
 **The coherent block is the sprint**, not the task. Say it plainly because the
 drift is one-way: a loop that commits per task starts running Tier 3 per task, and
 then Tier 3 is a tax somebody eventually removes.
 
-The two Tier 3 checks are not one thing, which is why only one of them is here.
+Tier 3 is code review; Tier 4 is mutation (or the weaker Go coverage ratchet).
 Review is minutes and its feedback can redesign a block, so it stays close. Mutation
 was measured at tens of minutes, and its remaining lever is `-j` — cores a laptop
 cannot spend while the editor and the agent are using them. It moved to the PR,
-where it **blocks the merge**: enforcement kept, the loop untaxed, one round trip
-per survivor accepted as the price.
+where it **blocks the merge once calibrated and ratcheted**. Shipped snippets
+start non-blocking to measure the baseline; declare that state rather than claiming
+enforcement. One round trip per survivor is accepted as the price.
 
 `just code-review` writes `.work/review-report.md`. `just review-guard` (pre-push,
 no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.

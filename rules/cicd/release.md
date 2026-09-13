@@ -50,7 +50,8 @@ authority, and a green pipeline is permission for the code, never for the releas
 
 ## Pre-release checklist (what the agent prepares)
 
-1. Gates green on the release commit (`just check`), Tier 3 included.
+1. T1–2 green on the release commit (`just check`), T3 review cleared, and the
+   configured T4 PR gates green. T3/T4 are separate from `just check`.
 2. Version bumped in the single manifest; tag name matches it.
 3. `Unreleased` promoted to the new version with a date; entries rewritten for
    consumers; breaking changes and their migration listed first.

@@ -25,6 +25,19 @@ never for a **decision**.
   make a choice already implemented look authorised is the documentation equivalent
   of `--no-verify`.
 
+## Which choices need an ADR
+
+Use an ADR for a durable project constraint: technology/architecture selection,
+security/authentication policy, a mandated structural library, or a change to an
+Accepted decision. Existing profiles already settle their conventions; applying
+one does not require an ADR per implementation detail. Profile selection can be
+recorded once with the stack decision.
+
+Local, reversible choices within that frame belong to the implementer: a helper,
+a component, an interaction variant or an ordinary dependency consistent with the
+stack. Explain relevant dependency trade-offs in the change summary and run the
+supply-chain checks. Novelty alone is not architectural significance.
+
 ## The ceremony stops at the ADR
 
 An ADR is the **only** document with a ceremony. Generalising it to the rest is how a
@@ -33,13 +46,20 @@ repository loses the ability to change its mind.
 | Document | Regime |
 |---|---|
 | `docs/adr/**` | **Ceremony** — the rule above, and `agent/decision-records.md`. |
-| `EXPERIENCE.md`, `DESIGN.md`, `DATA-MODEL.md`, `ARCHITECTURE.md`, the PRD, `.work/*` | **Amended in place** — a human's feedback on the built artifact outranks prose written before that artifact existed. |
+| `EXPERIENCE.md`, `docs/experience/*`, `DESIGN.md`, `DATA-MODEL.md`, `ARCHITECTURE.md`, the PRD, `.work/*` | **Amended in place** — a human's feedback on the built artifact outranks prose written before that artifact existed. |
 
 The asymmetry is about what the document holds, not about how much it matters. The
 others are **descriptive**: they say what the product does, so the running product is
 a better source than the guess that preceded it. An ADR is an **arbitration** — what
 was refused and at what cost — and `Alternatives considered` is not something you can
 observe on a screen. Only a new arbitration replaces an arbitration.
+
+Experience contracts can be `stable` on the developer's explicit instruction
+(`product/experience.md`). This protects retained behavior, not an ADR-like
+ceremony: agents may record the instruction and subsequent authorized corrections.
+Amendable does not mean disposable — never change a retained invariant or its
+status just to justify an implementation. Review may flag a demonstrated regression
+against that contract; visual preferences with no supplied requirement remain advice.
 
 So when a human corrects the thing they have just used:
 

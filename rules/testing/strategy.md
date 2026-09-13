@@ -26,6 +26,16 @@ for a reason a user would care about, delete it.
 Push a test **down** the levels whenever the same failure could be caught lower.
 An e2e test that fails because of a wrong tax rate is a unit test wearing a costume.
 
+## Experience contracts
+
+For UI work, protect retained transitions/outcomes for the affected actor profile:
+retry preserves the draft, cancellation changes nothing, duplicate submit is blocked.
+Use the lowest test level that detects the failure, with E2E where actual browser
+integration matters. Layout snapshots are appropriate for supplied visual
+requirements, not for freezing an exploratory composition. Shared business/security
+invariants apply to every actor's path even when the steps differ. Test execution,
+source review and human usability judgment are distinct evidence.
+
 ## Rules
 
 - **One behavior per test**, named after that behavior — `rejects_expired_token`,

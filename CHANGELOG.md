@@ -12,6 +12,38 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Added
+
+- **Experience contracts per journey and actor.** `/experience` now explores or
+  stabilizes a selected screen/workflow under `docs/experience/`, indexed by
+  `docs/EXPERIENCE.md`. `exploring`/`stable` and `toolkit`/`specified` are independent:
+  retain a behavior without freezing its layout, or honor supplied UX specifications.
+  Developer instruction is required for stabilization; agents may record it directly.
+  Existing single-file documents keep working; migrate only the selected journey.
+- **Frontend experiments may keep components local** until retained and useful for
+  reuse. `/design-system`, `/ui-prompt` and `/tasks` carry the toolkit, actor scope
+  and relevant experience constraints without requiring a new ADR per component.
+- **T3 review distinguishes contract violations, suggestions and verification gaps.**
+  A demonstrated regression against a stable experience or supplied visual requirement
+  can block; differing actor journeys and exploratory composition do not inherently
+  conflict. Runtime/visual checks are never claimed from source inspection alone.
+  `.work/review-report.md` and the pre-push guard's behavior are unchanged.
+- **docs-check validates experience structure.** Unique IDs, required metadata and
+  sections, index links and local evidence/spec references. Stable units require a
+  validation source; specified visuals require references. No browser, network fetch
+  or proof of human authorship. Update the whole common kit, including its new
+  `experience-check.mjs` helper; no additional wiring beyond `docs-check`.
+
+### Changed
+
+- **Four validation depths:** T1 lint, T2 technical checks, T3 independent review,
+  T4 mutation/Go coverage ratchet. Generated justfile guidance now matches PR mutation
+  cadence; local mutation stays optional and shipped CI remains non-blocking during
+  calibration. Existing justfile recipes are not automatically rewritten.
+- **ADR scope clarified:** durable architectural/security constraints and mandated
+  structural libraries need records; reversible implementation choices within the
+  selected profiles do not require an ADR merely because they are new.
+
 ### Breaking
 
 - **`cqrs` drops `cqrs-rust-lib`.** The profile is the write/read +

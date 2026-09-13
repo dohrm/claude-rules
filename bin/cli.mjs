@@ -682,9 +682,8 @@ function genJustfile(techs, modules, ratchetTechs = []) {
     '# base := "origin/trunk"',
     '',
     '# THE recipe — the one an agent closes its loop on before handing back, in seconds.',
-    '# Tier 3 is deliberately absent: it costs minutes, so it runs per coherent block'
-      + (mutators.length ? ' (`mutate-diff` below),' : ','),
-    '# not per iteration. Opt-in gates to add here as you enable',
+    '# T3 review runs per coherent block; T4 mutation gates the PR after calibration.',
+    '# Neither belongs in this per-iteration recipe. Opt-in gates to add as you enable',
     '# them: adr-check docs-check rules-check dup-check'
       + (existsSync(join(KIT_DIR, 'godot')) ? ' — and godot-check, once godot_dir/godot_bin/godot_export_preset are set' : ''),
     deps ? `check: ${deps}` : '# check: adr-check docs-check    # no language locked — list the gates this repo has',
@@ -702,17 +701,17 @@ function genJustfile(techs, modules, ratchetTechs = []) {
        '# only, so a branch built by successive blocks re-mutates only what is new.']
     : []
   if (liveMutators.length) out.push('',
-    '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
+    '# Tier 4 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
     '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
     '# This recipe is live because a locked tech is at --level ratchet.',
     ...marker,
     ...shape(liveMutators))
   else if (mutators.length) out.push('',
-    '# Tier 3 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
+    '# Tier 4 — do the tests ASSERT, or do they merely execute? Coverage cannot answer',
     '# that; mutation can. Minutes, not seconds: NEVER a git hook, never part of `check`.',
-    '# Run it when a coherent block is finished, BEFORE pushing. Uncomment once the tool',
-    '# is installed — an absent recipe is a valid answer, and the agent reports mutation',
-    '# as not-run rather than pretending. Gitignore pr.diff and coverage.out.',
+    '# PR gate after calibration; local runs are optional. Uncomment once the tool',
+    '# is installed, wire its CI job and ratchet the measured baseline to blocking.',
+    '# Declare absent/non-blocking checks. Gitignore pr.diff and coverage.out.',
     ...marker,
     ...shape(mutators).map(l => `# ${l}`))
   return out.join('\n') + '\n'

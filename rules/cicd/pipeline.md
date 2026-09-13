@@ -28,14 +28,14 @@ fewer than they look: publishing, and anything requiring a secret. That is the
 list. **Code review is not on it** — "it needs the PR diff" is not a reason, because
 `git diff <base>...HEAD` computes the same merge-base set on a laptop.
 
-**Mutation is the one Tier 3 check that gates in CI**, and not because
+**Mutation is the Tier 4 gate in CI**, and not because
 it needs the PR: it needs cores, and `-j` is what a laptop cannot spend while the
 editor and the agent are using them. Running it locally stays possible and buys back
 a round trip; the PR job is the gate.
 
 Snippet: `.dev/kit/cicd/ci.snippet.yaml`. Tiers and when they run:
 `.dev/kit/README.md`. One job per technology so a red one names its own
-toolchain; Tier 3 is a separate job until ratcheted. The snippet does not see
+toolchain; Tier 4 is a separate job until ratcheted. The snippet does not see
 pinning, fork-PR secrets, or a skipped required check reading as green.
 
 ## Rules

@@ -74,16 +74,30 @@ The backend owns them. Where it publishes a machine-readable contract, types are
 ## Adding a Feature
 
 1. Create `features/{domain}/` with `components/`, `api/`, `logic/`
-2. Build from `ui/` — no ad-hoc styled elements in `features/`
+2. Reuse suitable `ui/` components and shared tokens. A scoped experiment may keep
+   a component local to its feature; promote it when retained and reuse warrants it.
 3. Register the route in `pages/`
 4. Global infrastructure → consume from `core/`, do not duplicate
 
 ## LLM Boundary Contract
 
 When asked to build a new view:
-- New visual primitives → `ui/`
+- Shared visual primitives → `ui/`; experimental primitives may stay feature-local
+  while their interaction is being explored.
 - New business view → `features/{domain}/components/`
 - New data fetching → `features/{domain}/api/`
 - New route → `pages/`
 - Never mix layers within a single component file
 - Never move a business decision into the browser — see the transport profile's state rule
+
+## Experience scope
+
+Keep toolkit style consistent across the portal. Stabilize behavior per screen or
+workflow **and actor profile**, never across the whole portal. Read the relevant
+`docs/experience/` contracts through `docs/EXPERIENCE.md` when present; preserve
+legacy requirements too. `exploring` leaves interaction alternatives open; `stable`
+protects the retained properties. `toolkit` leaves composition free; `specified`
+adds the supplied visual requirements. Neither relaxes API contracts, authorization,
+typing, accessibility requirements or backend ownership of business logic.
+Different profiles may reach the same service through different sequences. Do not
+"simplify" them into one journey merely to reuse a screen.

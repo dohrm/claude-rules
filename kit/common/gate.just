@@ -10,7 +10,7 @@
 # Recipes run with the working directory of the ROOT justfile, never of this file, so
 # every path below is repo-relative.
 
-# The branch a feature is measured against (Tier 3 + code review). Override it from
+# The branch a feature is measured against (T3 review + T4 mutation). Override it from
 # the root justfile when the trunk is not origin/main.
 base := "origin/main"
 
@@ -53,7 +53,7 @@ review_out := ".work/review.tmp"
 # override — one quoted word per pathspec, space-separated.
 review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json'"
 
-# ── Incremental Tier 3 (the marker) ────────────────────────────────────────
+# ── Incremental T3/T4 (the marker) ────────────────────────────────────────
 # `code-review` and `mutate-diff` both measured the WHOLE branch, so a branch built by
 # successive loops made every run pay for the blocks the previous ones already cleared:
 # minutes of re-run mutants, and a review prompt that grows until `review_max_bytes`
@@ -290,7 +290,7 @@ review-guard:
 # ── Mutation, incrementally (opt-in) ───────────────────────────────────────
 # `mutate-diff` lives in YOUR justfile — it names the mutators this repo actually has,
 # which is why the installer writes it and this library does not. These two recipes are
-# the marker half of it, so the same "only what is new" rule covers Tier 3's other gate:
+# the marker half of it, so the same "only what is new" rule covers Tier 4 mutation:
 #
 #     mutate-diff:
 #         just rust-mutate "$(just mutate-from)"

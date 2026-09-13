@@ -1,0 +1,23 @@
+{
+  "skill": "experience",
+  "rules": [
+    "common",
+    "agent",
+    "product"
+  ],
+  "prompt": "Use /experience to stabilize only the expert order editor. I am the developer: after stakeholder walkthroughs today (2026-09-13), I explicitly retain the inline edit \u2192 save flow, with draft preservation and retry after a failure. Record my instruction as the validation source. Keep layout free within the toolkit; no imposed visual specifications. The existing contract is docs/experience/edit-expert.md. The application is not accessible in this workspace, so runtime evidence remains unverified; do not invent it. Update the contract and index as needed now; no further approval is needed.",
+  "artifacts": {
+    "docs/experience/edit-expert.md": {
+      "matches": [
+        "\\*\\*Status\\*\\*:\\s*stable",
+        "\\*\\*Visual policy\\*\\*:\\s*toolkit",
+        "(?i)unverified"
+      ],
+      "max_words": 750
+    }
+  },
+  "gates": [
+    "docs-check.mjs docs --strict"
+  ],
+  "judge": "Does it preserve the actor-scoped behavior, record the real developer instruction, leave visual composition free and accurately report runtime verification as unavailable, without requiring an ADR or another approval?"
+}

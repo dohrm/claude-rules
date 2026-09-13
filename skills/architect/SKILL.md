@@ -88,7 +88,7 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 
 Create `docs/` and `docs/adr/` if absent.
 
-- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Shape, budgets, and statuses live in `agent/decision-records.md` — **read it before writing** (path-scoped, may not have loaded yet). Skeleton: `<adr-template>`. Profile selection from step 2 is itself worth an ADR.
+- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). Shape, budgets, and statuses live in `agent/decision-records.md` — **read it before writing** (path-scoped, may not have loaded yet). Skeleton: `<adr-template>`. Record the selected profiles with the stack/boundary decision they implement; do not create a separate ADR for each profile or local implementation choice.
 - Every ADR you write is **`Proposed`** (`agent/decisions.md`). In the hand-back, list what you propose and what changes if the answer is no — otherwise nothing tells the human something is waiting on them.
 - The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
 

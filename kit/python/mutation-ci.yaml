@@ -1,6 +1,6 @@
 name: Mutation (Python)
 
-# Tier 3 quality gate: are the tests meaningful, or do they just execute code
+# Tier 4 quality gate: are the tests meaningful, or do they just execute code
 # without asserting? Coverage says nothing about this; mutation score does. This
 # is the gate that lets AI-written unit tests be trusted without reading every
 # assertion by hand. Doctrine: rules/testing/ratchet.md.

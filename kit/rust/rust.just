@@ -14,7 +14,7 @@
 # root justfile's managed block, which overrides this default.
 rust_dir := "."
 
-# Merge-base for Tier 3. kit/common/gate.just defines the same default when `agent
+# Merge-base for Tier 4. kit/common/gate.just defines the same default when `agent
 # --level gates` is installed; allow-duplicate-variables on the root justfile
 # lets either win. Defined here so `just rust-mutate` parses without common.
 base := "origin/main"
@@ -37,7 +37,7 @@ rust-check: rust-lint
     cd {{rust_dir}} && cargo deny check licenses advisories sources
     cd {{rust_dir}} && cargo machete --skip-target-dir
 
-# ── Tier 3 economics ───────────────────────────────────────────────────────
+# ── Tier 4 economics ───────────────────────────────────────────────────────
 # Measured on one real workspace, and the numbers decide which levers are worth
 # having: a 32-mutant diff took ~50 minutes, of which **22 were the BASELINE** —
 # 972 s of build plus 363 s of test BEFORE the first mutant. cargo-mutants copies

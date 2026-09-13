@@ -53,7 +53,7 @@ devDependency — see below, not a separate system install. `ts-web` /
 
 ```bash
 npm i -D eslint typescript typescript-eslint globals vitest
-npm i -D @stryker-mutator/core   # Tier 3 only
+npm i -D @stryker-mutator/core   # Tier 4 only
 ```
 
 Commit `package.json` and the lockfile.

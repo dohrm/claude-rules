@@ -104,6 +104,20 @@ runner can reach the output, and it prints that the *questioning* is no longer t
 Comparing runners is the point: the same case, the same assertions, and the gates as
 the oracle, tell you whether a rule survives the trip to another agent.
 
+## Experience cases
+
+`reviewer-experience-profiles` and `reviewer-experience-exploring` check that actor
+variants and local composition experiments do not produce blocking false alarms.
+`reviewer-experience-recovery` plants a lost-draft regression; the `specified` case
+omits a required Cancel action. `experience-stabilize` exercises explicit developer
+validation without an ADR ceremony, with runtime evidence still unavailable.
+
+These are source/contract fixtures, not browser or screenshot tests. Verdict/regex
+checks cover the explicit outcomes; `--judge` additionally checks the reasoning
+(including unwanted unification and invented runtime evidence). The cases are
+validated structurally by `npm test`; real model behavior is only established when
+these cases are run against a model. Adding them is not a claim that they passed.
+
 ## Case format
 
 ```
