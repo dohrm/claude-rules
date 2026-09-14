@@ -13,8 +13,8 @@ installs or removes together (e.g. `rust`, `hexagonal`, `product`).
 _Avoid_: package, plugin
 
 **Level**:
-`rules` or `gates` — whether a profile installs prose only, or prose plus the
-enforced kit. Recorded per profile in the lock.
+`rules`, `gates` or `ratchet` — prose only, prose plus the kit, or kit with
+mutation aggregation enabled by init. Wiring determines actual enforcement. Recorded per profile in the lock.
 _Avoid_: tier, mode
 
 **Root**:
@@ -68,10 +68,10 @@ authority on code correctness — never on a decision (`agent/decisions.md`).
 _Avoid_: check (the recipe name), validation
 
 **Tier**:
-One of the three depths of enforcement: Tier 1 (lint/format), Tier 2
-(typecheck/tests/contracts), Tier 3 (code review and mutation — never in a hook or
-`check`). A tier is a *depth*, not a venue: Tier 3's two halves run in different
-places — review before the push, mutation as a pull-request gate (`ADR-0002`).
+One of four depths: Tier 1 (lint/format), Tier 2 (typecheck/tests/contracts),
+Tier 3 (independent code review before push), Tier 4 (mutation, or the weaker Go
+coverage ratchet, on the PR). T3/T4 stay out of `check`; the deterministic T3
+review guard runs on pre-push. Mutation can also be run locally, optionally.
 _Avoid_: level, stage
 
 **Witness** (crate/package):
@@ -102,6 +102,13 @@ A decision record under `docs/adr/`. `Proposed` by an agent; `Accepted` /
 `Rejected` / `Superseded` / `Deprecated` only by a human, in a commit
 (`agent/decisions.md`).
 _Avoid_: RFC, design doc
+
+**Experience contract**:
+One screen or workflow for one actor profile under `docs/experience/`, indexed by
+`docs/EXPERIENCE.md`. Carries flow, invariants, recovery, freedom and evidence.
+`exploring` / `stable` describes whether the developer retained the behavior;
+`toolkit` / `specified` independently describes visual constraints. A stable
+contract is amendable on explicit developer feedback, without an ADR ceremony.
 
 ## Flagged ambiguities
 

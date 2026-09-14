@@ -8,7 +8,7 @@ title: "Python Quality Gates"
 just python-check     # python-lint → mypy → pytest → pip-audit + deptry
 ```
 
-Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is pre-push and `just check`. Tier 3 is `just python-mutate` — never a hook. Wiring: `.dev/kit/python/README.md`.
+Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is pre-push and `just check`. Tier 4 is `just python-mutate` — never a hook. Wiring: `.dev/kit/python/README.md`.
 
 | Recipe | Command | Config (merge `pyproject.snippet.toml`) |
 |---|---|---|

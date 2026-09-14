@@ -1,6 +1,6 @@
 name: Coverage ratchet (Go)
 
-# Tier 3 quality gate for Go — deliberately NOT mutation testing.
+# Tier 4 quality gate for Go — deliberately NOT mutation testing.
 #
 # WHY NOT MUTATION: the Go mutation tools (go-mutesting, gremlins) are not
 # maintained to the level of cargo-mutants or Stryker — slow, flaky on generics,

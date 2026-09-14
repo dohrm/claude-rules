@@ -23,6 +23,14 @@ A generator produces best when aimed at a single screen. Ask ONE question:
 2. **The target tool**: "Which generator — **Claude Artifacts**, **v0**, **Lovable**, **Bolt**, **Figma Make**, or other? It changes the prompt's format and tech assumptions."
 3. **Fidelity**: "**Static mockup** (one screen, no logic) or **interactive** (real states, wired interactions)?"
 
+After selecting the screen, select its actor profile and read only the matching
+contract(s) through the experience index. Carry `exploring`/`stable`, the properties
+to preserve, the remaining freedom and `toolkit`/`specified` into the prompt. Do not
+copy another actor's journey. Link supplied visual references for `specified`;
+missing access is a named gap, not permission to invent their content. Legacy
+single-file requirements still apply. An exploratory prompt can permit variants
+within the stated freedom while preserving existing toolkit tokens and invariants.
+
 ### 3. Compose
 
 Build the prompt per `<prompt-template>`, then adapt it to the target (see Target Knowledge). Rules while composing:
@@ -57,7 +65,11 @@ Build the **<screen name>** screen for **<product, 1 line from PRD>**.
 
 **Actor & goal**: <who uses this screen and what they're here to do — from EXPERIENCE.md>
 
-**Layout**: <the screen's structure — nav/header/content regions — from EXPERIENCE.md flow + DESIGN.md layout approach>
+**Experience contract**: <link/ID · actor · exploring or stable>
+**Visual policy**: <toolkit or specified; links/revision for supplied requirements>
+**Preserve**: <retained behavior and shared invariants>
+**Freedom**: <where the generator may propose variants>
+**Layout**: <required structure if specified; otherwise a proposal within the toolkit>
 
 **Visual system** (use exactly, do not alter):
 - Colors: primary `#…`, secondary `#…`, neutrals `#…→#…`, semantic success/warning/error/info `#…`

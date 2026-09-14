@@ -8,7 +8,7 @@ title: "Rust Quality Gates"
 just rust-check     # rust-lint → tests → deny + machete
 ```
 
-`rust-lint` is pre-commit; `rust-check` is pre-push and `just check`. Tier 3 is `just rust-mutate` — never a hook. Wiring: `.dev/kit/rust/README.md`.
+`rust-lint` is pre-commit; `rust-check` is pre-push and `just check`. Tier 4 is `just rust-mutate` — never a hook. Wiring: `.dev/kit/rust/README.md`.
 
 | Recipe | Command | Config |
 |---|---|---|

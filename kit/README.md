@@ -35,9 +35,10 @@ reason; they need Node >= 18 and no dependencies.)
 |------|--------|---------|------|---------|
 | 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
 | 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
-| 3 | `just mutate-diff` | per coherent block, before the push — and the PR job | mutation on the diff — NEVER a hook | minutes |
+| 3 | `just code-review` | per coherent block/sprint, before push | independent review; CRITICAL blocks via pre-push review-guard | minutes |
+| 4 | `just mutate-diff` | PR gate after calibration; optional locally | mutation / Go coverage ratchet — NEVER a hook | minutes |
 
-Tier 3 measures **what a previous pass has not already cleared**, not the whole branch:
+Local T3/T4 runs measure **what a previous pass has not already cleared**, not the whole branch:
 `code-review` and (once wired) `mutate-diff` record the commit they last passed on in
 `.work/<slug>/.latest_review` / `.latest_mutate` and diff from there. On a branch built
 by successive loops that is the difference between a cost that grows with the branch
@@ -57,7 +58,9 @@ ways a decision log becomes something nobody reads. Doctrine:
 
 `docs-check` guards the other documents against the same rot. It **fails** when an
 index and its units disagree — a link to a unit that does not exist, a unit no index
-carries — because those are facts, not judgments; it **warns** on the budgets (index
+carries — because those are facts, not judgments. Experience contracts also require
+valid metadata, a declared validation source when stable, and resolvable local
+references (including supplied visual specs); it **warns** on the budgets (index
 over a screen, unit over its ceiling, a single-file PRD/PLAN past the split
 threshold, a `(continued)` heading). `docs/adr/` is left to `adr-check`. Doctrine:
 `../rules/product/documents.md`.
@@ -79,10 +82,9 @@ always one an agent can close its own loop on locally. Doctrine:
 `../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
 
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the
-fast loop. That makes it a **per-block** gate, not a per-iteration one — and *not*
-a CI-only one: `git diff <base>...HEAD` gives the same merge-base set locally that
-the PR job computes, so `just mutate-diff` runs it before the push and CI re-runs
-it as a witness. It is scoped to changed code and ratcheted from a baseline (a
+fast loop. It is a **T4 PR gate**, with optional local runs to avoid a round trip.
+`git diff <base>...HEAD` gives local and CI runs the same merge-base set; CI is the
+enforcement point once calibrated, not a witness of an obligatory local run. It is scoped to changed code and ratcheted from a baseline (a
 healthy repo often sits ~70%, so it starts non-blocking). Per language:
 `rust/mutation-ci.yaml` (cargo-mutants), `ts/mutation-ci.yaml` (Stryker —
 `--incremental` locally, it has no `--since`), `python/mutation-ci.yaml` (mutmut —
@@ -190,6 +192,7 @@ kit/
 │   ├── adr-check.mjs           # OPT-IN gate: an agent proposes a decision, a human accepts it
 │   ├── docs-check.mjs          # OPT-IN gate: PRD/PLAN stay units + a compacted index as they grow
 │   ├── review-prompt.md        # the headless reviewer's prompt (`just code-review`, any CLI)
+│   ├── experience-check.mjs    # docs-check helper: experience metadata and references
 │   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
 │   ├── worktree-status.mjs     # OPT-IN report, never a gate: every worktree at a glance — `just status`
 │   ├── publish-summary.mjs     # OPT-IN report, never a gate: one loop's terminal state → SUMMARY.md
@@ -207,15 +210,15 @@ kit/
 │   ├── rust-fmt.sh             # SPECIAL CASE (bash): only if a generated member crate must be skipped
 │   ├── lefthook.snippet.yml    # Tier 1-2 Rust commands → merge into root lefthook.yml
 │   ├── deny.toml               # Tier 2 supply-chain — copy to <rust_dir>/ (adapt registry / private crates)
-│   ├── mutants.toml            # Tier 3 config → copy to <rust_dir>/.cargo/ (adapt exclusions)
-│   └── mutation-ci.yaml        # Tier 3 CI job → copy to .gitea/workflows/ (adapt runner)
+│   ├── mutants.toml            # Tier 4 config → copy to <rust_dir>/.cargo/ (adapt exclusions)
+│   └── mutation-ci.yaml        # Tier 4 CI job → copy to .gitea/workflows/ (adapt runner)
 ├── ts/                         # JALON — language floor
 │   ├── README.md               # config map: file → destination → recipe
 │   ├── ts.just                 # ts-lint / ts-check / ts-mutate — npm exec --no-install
 │   ├── eslint.base.js          # no-explicit-any + no-non-null-assertion → COPY to eslint.config.js
 │   ├── tsconfig.base.json      # strict, no DOM → COPY to tsconfig.json
 │   ├── lefthook.snippet.yml    # Tier 1-2 → merge into root lefthook.yml
-│   └── mutation-ci.yaml        # Tier 3 CI job (Stryker) → .gitea/ or .github/workflows/
+│   └── mutation-ci.yaml        # Tier 4 CI job (Stryker) → .gitea/ or .github/workflows/
 ├── ts-web/                     # JALON — React portal (HTTP)
 │   ├── README.md
 │   ├── ts-web.just             # ts-web-lint / ts-web-check (react-hooks + jsx-a11y + DOM)
@@ -236,13 +239,13 @@ kit/
 │   ├── go.just                  # go-lint / go-check / go-cover, imported by the justfile
 │   ├── lefthook.snippet.yml     # Tier 1-2 Go commands → merge into root lefthook.yml
 │   ├── golangci.base.yml        # v2 config → COPY to <go_dir>/.golangci.yml
-│   └── coverage-ci.yaml         # Tier 3 CI job — a coverage RATCHET, not mutation (header says why)
+│   └── coverage-ci.yaml         # Tier 4 CI job — a coverage RATCHET, not mutation (header says why)
 ├── python/                     # JALON — toolchain owns the chain
 │   ├── README.md                # config map: snippet → destination → recipe
 │   ├── python.just              # python-lint / python-check / python-mutate, imported by the justfile
 │   ├── lefthook.snippet.yml     # Tier 1-2 Python commands → merge into root lefthook.yml
 │   ├── pyproject.snippet.toml   # ruff+mypy+pytest+deptry+mutmut → MERGE into pyproject.toml
-│   └── mutation-ci.yaml         # Tier 3 CI job (mutmut, changed files — it has no diff mode)
+│   └── mutation-ci.yaml         # Tier 4 CI job (mutmut, changed files — it has no diff mode)
 ├── godot/                      # JALON — toolchain owns the chain
 │   ├── README.md               # config map: file → destination → recipe
 │   ├── godot.just              # godot-lint / godot-check — not in default check

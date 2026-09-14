@@ -61,7 +61,7 @@ the code moved under it.
 - **Reinvented wheel**: an existing pattern/utility being duplicated.
 - **Complexity without justification**: a simpler form would do.
 
-### Architecture — an `Accepted` ADR is the only blocking spec
+### Architecture — accepted ADRs bind architectural choices
 
 Read the ADRs that bear on the changed files: the decision log in
 `docs/ARCHITECTURE.md` indexes them, and a `/tasks` worklist names the ones its
@@ -71,12 +71,39 @@ sprint was cut against under **Constrained by**. Then:
   section it breaks. That is a fact the author can check, and it is the ONLY
   architectural finding that earns a 🔴.
 - **Every other architectural finding is 🔵**, however strongly you hold it. A
-  `Proposed` ADR binds nothing. `EXPERIENCE.md`, `DESIGN.md` and `ARCHITECTURE.md`
-  prose are amendable on human feedback, so disagreeing with one is never grounds
-  to block a push — an ADR is the one document with a ceremony, and the one whose
-  contradiction is opposable.
+  `Proposed` ADR binds nothing. Architectural preferences in `ARCHITECTURE.md` are
+  not accepted decisions. Experience regressions and supplied visual requirements
+  have their own contract below; they do not need an ADR.
 - A diff that makes an `Accepted` ADR look plainly wrong is worth a 🔵 saying so.
   Superseding it is a human's act (`agent/decisions.md`), never a review's.
+
+### Experience — preserve the selected journey, not an imagined uniform portal
+
+For UI changes, read `docs/EXPERIENCE.md` and the affected contracts under
+`docs/experience/` (a worklist's **Experience** links narrow that read). Check the
+actor and scope; expert and assisted journeys may legitimately differ. Read the
+shared toolkit in `docs/DESIGN.md` and applicable supplied visual references.
+Legacy single-file requirements still count; missing new metadata does not erase
+an explicit requirement or establish that a journey was validated.
+
+- **Violation**: a demonstrated regression against a `stable` contract's retained
+  property, or an explicit `specified` visual requirement, can be 🔴. Cite the
+  contract ID/property or supplied requirement, code location and evidence. An
+  authorized developer correction updates contract and checks together; inspect
+  its recorded source. Do not accept an agent's silent weakening or downgrade as
+  proof of authorization. Missing/ambiguous authorization is a question to surface.
+- **Suggestion**: alternative layout, assistance or composition inside the declared
+  freedom is 🔵 at most. An `exploring` journey is not a frozen layout; feature-local
+  experimental components are not automatically an extraction defect. Avoid taste
+  nits and do not unify different actors' paths just to share screens.
+- **Unverified**: name the property and missing evidence/access. Code inspection,
+  reading a test, a test execution, a walkthrough and a visual comparison are
+  different evidence. This read-only review cannot run a browser or tests: never
+  claim it exercised a flow or saw a referenced screen it could not access. A gap
+  alone is not a proven 🔴; report it as 🟡 and use WARNINGS when no critical exists.
+
+Security, API contracts, accessibility requirements and business invariants apply
+even during exploration. Mutation results do not prove usability or visual fidelity.
 
 ### Text/i18n string safety (high-value, easily missed)
 
@@ -90,13 +117,16 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 ## Code Review: [file(s) or feature]
 
 ### 🔴 Critical (must fix)
-[bugs, panics, security, correctness, a contradicted `Accepted` ADR]
+[bugs, security, correctness, contradicted Accepted ADR or retained experience requirement]
 
 ### 🟡 Warnings (should fix)
 [bad patterns, lint, AI slop, YAGNI]
 
 ### 🔵 Design notes (worth discussing)
 [architecture with no ADR against it, alternatives, testability]
+
+### Experience evidence (when UI is in scope)
+[contract + actor · property · evidence read/observed · remaining unverified checks]
 
 ### ✅ What works
 [genuinely good decisions only — no padding]

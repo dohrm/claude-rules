@@ -52,7 +52,7 @@ Dev tools go in a dependency group, never in runtime deps:
 
 ```bash
 uv add --dev ruff mypy pytest pytest-cov pip-audit deptry
-uv add --dev mutmut    # Tier 3 only
+uv add --dev mutmut    # Tier 4 only
 ```
 
 Commit `pyproject.toml`, `uv.lock`, and `.python-version`.

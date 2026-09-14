@@ -1,0 +1,13 @@
+{
+  "agent": "code-reviewer",
+  "rules": [
+    "common",
+    "agent",
+    "product"
+  ],
+  "ci_verdict_in": [
+    "CLEAN",
+    "WARNINGS"
+  ],
+  "judge": "Does it allow the local composition experiment, without demanding a frozen layout or extraction into a shared component? No persistence is promised by the declared prototype scope."
+}

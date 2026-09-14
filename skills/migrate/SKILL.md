@@ -125,7 +125,7 @@ Keep local extra hooks (helm, boundaries, trunk guard, review-guard). Do
 not add a language hook the repo omitted unless the human wants that tax.
 
 CI (GitHub or Gitea): same just names as local. Split jobs per toolchain
-are fine. Aggregator (`ci-ok`) stays the required check. Tier 3 stays out
+are fine. Aggregator (`ci-ok`) stays the required check. Tier 4 stays out
 of `check` and out of hooks. After recipe aliases, grep workflows.
 
 If the justfile is true and CI still invents commands, `/ci-setup` audit

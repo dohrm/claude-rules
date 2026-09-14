@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: "Cut ONE sprint of a capability's PLAN.md into tasks sized to the green boundary, anchored in the existing code. Writes `.work/<capability-slug>/tasks/NN-<sprint-slug>.md`. Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Between /plan and /loop-setup."
+description: "Cut ONE sprint of a capability's PLAN.md into tasks sized to the green boundary, anchored in the existing code. Writes a sprint worklist under .work/. Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Between /plan and /loop-setup."
 ---
 
 `/plan` deliberately withholds file names, symbols and layers — a sprint is a promise,
@@ -55,8 +55,16 @@ reads the whole `docs/adr/` directory to be safe, or reads none of it and finds 
 in review. Skip `Context` and `Implemented` when you point: they serve the reader of
 the decision, not its implementer.
 
-If a layer has no neighbour, say so — it means the sprint introduces a pattern, which
-is a design decision and may belong in an ADR before any code.
+If a layer has no neighbour, say so. A new pattern needs an ADR only when it
+changes a durable architectural constraint (`agent/decisions.md`); a local
+implementation choice does not need one merely because it is new.
+
+For UI work, read `docs/EXPERIENCE.md` and only the contracts for affected journeys
+and actor profiles. Record their links, status, visual policy and applicable
+property names under **Experience** in each task; do not copy the contracts. Legacy
+single-file requirements remain applicable. Distinguish tests of stable behavior
+from experiments: a task may explore layout without freezing it in snapshots.
+Contract status never relaxes API, security or existing behavioral checks.
 
 ### 3. Freeze the contract — as code, not prose
 
@@ -188,6 +196,7 @@ and re-run `/prd` (`product/documents.md`).
 
 - **Anchor**: `<module or symbol>` · **Neighbour**: `<path:symbol>`
 - **Constrained by**: `<ADR-NNNN § section>` — or `none`, never blank
+- **Experience**: <contract link · actor · status · visual policy · properties, or none>
 - **Consumes**: T0's `<contract element>` <, TN-1's …>
 - **Serves**: <the acceptance criterion this moves>
 - **Done**: `<command that exits green — the gate, or a narrower test first>`

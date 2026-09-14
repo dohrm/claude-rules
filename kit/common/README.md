@@ -48,7 +48,7 @@ shell out to `npx`.
 | File | Holds |
 |---|---|
 | `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `publish-summary`, `dup-check`, `adr-check`, `docs-check`, `rules-check`, `base`, `worktree_root` |
-| `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-3 recipe |
+| `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-4 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
@@ -64,7 +64,21 @@ root justfile:
 review_prompt := "docs/review-prompt.md"
 ```
 
-## Tier 3 measures the block, not the branch
+## Experience contracts in docs-check
+
+When `docs/experience/` exists, `docs-check` also checks its index, unique IDs,
+actor/scope, status, visual policy, behavior/evidence sections and local links.
+`stable` requires a declared developer validation source; `specified` requires
+links to supplied visual references. HTTP(S) references are syntax-checked offline,
+not fetched. Local targets must exist; anchors and their contents are not checked.
+The helper `experience-check.mjs` ships beside `docs-check.mjs`; update both together
+(the installer copies the common kit directory). No new recipe or configuration.
+
+Legacy single-file `EXPERIENCE.md` remains valid. The checker does not authenticate
+approval or verify a UI: evidence may explicitly remain unverified. Format and
+lifecycle are in `rules/product/experience.md` in the source library.
+
+## Local T3/T4 runs measure the block, not the branch
 
 `code-review` used to read `git diff <base>...HEAD` on every run, so a branch grown
 over several loops re-reviewed everything the previous runs had already cleared — the
@@ -183,7 +197,7 @@ Two things the proof does not cover, so check them by hand:
 - **CI**, if a workflow calls a recipe by name (`rules/cicd/pipeline.md`: CI calls
   `just check`, never its own copy of the commands). `--summary` shows the names, so
   a disappeared name is caught by step 4 — a *renamed* one is not.
-- **`.gitignore`**, if you enable Tier 3 or code review: `pr.diff`, `coverage.out`,
+- **`.gitignore`**, if you enable mutation or code review: `pr.diff`, `coverage.out`,
   `.work/`, `mutants/`, `reports/`.
 
 If the old justfile referenced `scripts/adr-check.mjs` (or the other gate scripts),

@@ -1,0 +1,16 @@
+{
+  "agent": "code-reviewer",
+  "rules": [
+    "common",
+    "agent",
+    "product"
+  ],
+  "ci_verdict_in": [
+    "CRITICAL"
+  ],
+  "stdout_matches": [
+    "(?i)cancel",
+    "edit-expert"
+  ],
+  "judge": "Does it identify the missing required Cancel action from the supplied specification, grounded in source inspection rather than claiming to have rendered or visually compared the screen?"
+}

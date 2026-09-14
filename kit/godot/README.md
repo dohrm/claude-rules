@@ -14,7 +14,7 @@ and `godot_export_preset` first (the lock cannot derive a binary or a
 preset), then add the recipe. Lefthook is a thin trigger: merge
 `lefthook.snippet.yml`.
 
-There is no Tier 3. Godot has no production-grade mutation tool.
+There is no language-specific Tier 4. T3 code review remains available through the agent profile. Godot has no production-grade mutation tool.
 
 ## The chain
 

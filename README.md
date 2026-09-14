@@ -63,6 +63,44 @@ does one new feature on a repo that already ships — `/onboard` wires an existi
 repo onto the workflow, it frames nothing. An existing install of an older harness
 is `/migrate` (gap table, then compose the lock and justfile) — not `/onboard`.
 
+### Frontend exploration and retained experiences
+
+The toolkit is shared across a portal; journeys are scoped to **one screen or
+workflow and one actor profile**. Expert and assisted paths may reach the same
+service without using the same sequence. API, authorization, typing and business
+boundaries still apply during exploration.
+
+`/experience` explores a journey or, on the developer's explicit instruction,
+stabilizes the behavior they retained. It writes a short contract under
+`docs/experience/<journey>-<actor>.md`, indexed by `docs/EXPERIENCE.md`:
+
+| Dimension | Values | Meaning |
+|---|---|---|
+| Status | `exploring` / `stable` | an interaction hypothesis / retained behavior to preserve |
+| Visual policy | `toolkit` / `specified` | shared components/tokens with free composition / supplied visual requirements |
+
+`docs/DESIGN.md` remains the home of the shared toolkit. A local UI experiment
+can stay in its feature until retained and useful for reuse. No new ADR is needed
+for each screen or component. An explicit developer correction updates a stable
+contract and its checks together; the agent cannot silently weaken it to fit code.
+
+Example requests: `/experience explore order editing for an occasional operator`,
+then `/experience stabilize this expert editing flow; retain draft on failure,
+allow retry, leave layout free`. A supplied UX specification can constrain either
+status independently; link its applicable screens/states and revision.
+
+T3 review reports **violations**, **suggestions** and **unverified properties**
+separately, citing the contract and evidence. Source review never claims a browser
+walkthrough. `docs-check` validates contract structure and local references, not
+runtime behavior, visual conformity or human approval. Existing single-file
+`EXPERIENCE.md` documents remain valid; migrate only the selected journey when
+adopting this format. No change to the review report path or pre-push guard policy.
+
+Install `product` for the contract rule and skills; `agent --level gates` supplies
+`docs-check` and the reviewer. Existing installs pick up the assets with `update`;
+keep `docs-check` wired into the repo's `check` recipe. Format and lifecycle:
+[`rules/product/experience.md`](./rules/product/experience.md).
+
 ### Two boundaries the whole library is built around
 
 1. **The machine settles correctness.** An agent writes the code *and* its tests,
@@ -92,7 +130,9 @@ docs/
 │   └── prd/            # one capability per file, with its status  (units)
 ├── ARCHITECTURE.md     # stack + boundaries + the decision log     (index)
 │   └── adr/            # one decision per file, ~400 words         (units)
-├── DESIGN.md           EXPERIENCE.md          # visual / behavioral systems
+├── DESIGN.md                                 # shared toolkit
+├── EXPERIENCE.md                             # journey/actor index
+│   └── experience/                           # exploring/stable contracts
 ├── OBSERVABILITY.md    # SLIs, SLOs, gaps, alert table             (index)
 ├── runbook/            # one per failure mode, one screen
 ├── postmortem/         # one per incident, blameless
@@ -357,15 +397,15 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just <tech>-check` | 2 — + tests, supply chain, build | pre-push hook, tens of seconds |
 | `just check` | 1+2, every tech — **the command an agent closes its loop on** | before every hand-back |
 | `just adr-check` | 2 — a decision was taken by a human (+ ADR size/section advisories) | opt-in, with `docs/adr/` |
-| `just docs-check` | 2 — an index and its units agree (+ budget advisories) | opt-in, with a PRD/PLAN |
-| `just mutate-diff` | 3 — mutation / coverage ratchet, on the merge-base diff | per coherent block, before the push; minutes; never a hook |
-| `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | same cadence as `mutate-diff`; writes `.work/review-report.md` |
+| `just docs-check` | 2 — index/unit consistency, experience fields/references (+ budget advisories) | opt-in, with product docs |
+| `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |
+| `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block/sprint, before push; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
 | `just status` | — reports, never gates: every worktree at a glance (branch, dirty, worklist, verdict, blockers) | opt-in, when sessions run in parallel trees |
 
-Tier 3 is **not** a CI-only tier: `git diff <base>...HEAD` computes the same set on
-a laptop that the PR job computes on a runner, so the agent runs it before pushing
-and CI re-runs it as a witness. It ships per language (`kit/rust/mutation-ci.yaml`,
+Tier 3 is independent review before push. Tier 4 mutation gates the PR; running
+it locally is optional. `git diff <base>...HEAD` gives local and CI runs the same
+merge-base set. T4 ships per language (`kit/rust/mutation-ci.yaml`,
 `kit/ts/mutation-ci.yaml`, `kit/python/mutation-ci.yaml`, `kit/go/coverage-ci.yaml`) and starts **non-blocking**:
 measure a baseline, then ratchet. The Tier 1-2 pipeline is `kit/cicd/ci.snippet.yaml`, whose jobs call the
 same `just` recipes — a command CI has and the justfile does not is drift the agent's
@@ -479,8 +519,8 @@ or **the profile catalogue above** disagrees with the registry, when a rule cite
 sibling rule that no longer exists, or when a shipped workflow uses an expression
 syntax GitHub rejects.
 
-`eval/` covers the two subagents and four skills (`/architect`, `/plan`, `/runbook`,
-`/postmortem`), judged where possible by the kit's own gates — `adr-check --strict`
+`eval/` covers the two subagents and five skills (`/architect`, `/plan`, `/runbook`,
+`/postmortem`, `/experience`), judged where possible by the kit's own gates — `adr-check --strict`
 and `docs-check --strict` are the oracle, so the assertion stays deterministic while
 the prose varies. It runs against the two remaining targets (`claude`, `cursor`)
 and anything else through `--cmd`. The remaining skills are evaluable but not

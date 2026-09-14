@@ -6,10 +6,27 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 
 const lockOf = dir => JSON.parse(read(dir, '.claude-rules.lock'))
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
+
+test('experience contracts ship for both targets and the installed document gate runs', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'product', 'agent', '--level', 'gates'], dir))
+    assert.ok(has(dir, '.claude/rules/product/experience.md'))
+    assert.ok(has(dir, '.cursor/rules/product/experience.mdc'))
+    assert.ok(has(dir, '.claude/skills/experience/SKILL.md'))
+    assert.ok(has(dir, '.agents/skills/experience/SKILL.md'))
+    mkdirSync(join(dir, 'docs'), { recursive: true })
+    writeFileSync(join(dir, 'docs/EXPERIENCE.md'), '# Experience\n[Missing](experience/missing.md)\n')
+    const r = spawnSync(process.execPath, [join(dir, '.dev/kit/common/docs-check.mjs')],
+      { cwd: dir, encoding: 'utf8' })
+    assert.equal(r.status, 1, r.stderr)
+    assert.match(r.stderr, /missing reference experience\/missing.md/)
+  })
+})
 
 test('add rust --agent claude: rules only by default; common language is the only shared', () => {
   withTmpRepo(dir => {

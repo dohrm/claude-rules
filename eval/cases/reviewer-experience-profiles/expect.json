@@ -1,0 +1,16 @@
+{
+  "agent": "code-reviewer",
+  "rules": [
+    "common",
+    "agent",
+    "product"
+  ],
+  "ci_verdict_in": [
+    "CLEAN",
+    "WARNINGS"
+  ],
+  "stdout_not_matches": [
+    "(?i)(must|should|need to)\\s+(unify|standardize|merge)\\s+(the\\s+)?(journeys|flows|paths)"
+  ],
+  "judge": "Does the review preserve the intentional expert/assisted journey difference and avoid requiring their unification or claiming a runtime walkthrough? Unverified runtime evidence may be named."
+}

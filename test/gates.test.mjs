@@ -1159,3 +1159,150 @@ test('tree / tree-rm: canonical path, and nothing is removed until the work has 
     assert.ok(!git('branch', '--list', 'work/cap-a').trim(), 'the branch should be gone with it')
   })
 })
+
+// Experience contracts: two actor journeys can share a service without sharing a
+// sequence. The document gate validates evidence declarations, never the UI itself.
+const EXPERIENCE = `# Edit order — expert
+
+- **ID**: edit-order-expert
+- **Actor**: expert operator
+- **Scope**: edit an existing order from opening it through save or cancellation
+- **Status**: stable
+- **Visual policy**: toolkit
+- **Validation source**: 2026-09-13 developer selected the inline editor after a walkthrough
+
+## Outcome
+Change the order and see the persisted value.
+
+## Flow
+Open → edit inline → save → confirmation.
+
+## Invariants
+A failed save preserves the draft; a pending save cannot be submitted again.
+
+## Recovery
+Keep the draft on error and offer retry. Cancellation restores the saved values.
+
+## Freedom
+Layout and component composition may change inside the shared toolkit.
+
+## Evidence
+Retry: unverified; needs an integration test. Usability: developer walkthrough.
+
+## Visual references
+None — toolkit only.
+`
+const experienceRepo = (dir, contract = EXPERIENCE) => {
+  write(dir, 'docs/EXPERIENCE.md', '# Experience\n\n[Expert edit](experience/edit-expert.md)\n')
+  write(dir, 'docs/experience/edit-expert.md', contract)
+}
+
+test('docs-check: distinct actor journeys and explicit unverified evidence are valid', () => {
+  withTmpRepo(dir => {
+    experienceRepo(dir)
+    write(dir, 'docs/experience/edit-assisted.md', EXPERIENCE
+      .replace('edit-order-expert', 'edit-order-assisted')
+      .replace('expert operator', 'occasional operator')
+      .replace('Open → edit inline → save → confirmation.', 'Open → guided steps → review → save → confirmation.'))
+    write(dir, 'docs/EXPERIENCE.md', '# Experience\n[Expert](experience/edit-expert.md)\n[Assisted](experience/edit-assisted.md)\n')
+    const r = run(DOCS_CHECK, ['--strict'], dir)
+    assert.equal(r.status, 0, r.out)
+  })
+})
+
+test('docs-check: legacy experience prose is preserved, but dangling new contract links fail', () => {
+  withTmpRepo(dir => {
+    write(dir, 'docs/EXPERIENCE.md', '# Existing UX\n## Flows\nA guided editor.\n')
+    assert.equal(run(DOCS_CHECK, [], dir).status, 0)
+    write(dir, 'docs/EXPERIENCE.md', '# Experience\n[Missing](experience/missing.md)\n')
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.out, /missing reference experience\/missing.md/)
+  })
+})
+
+test('docs-check: contracts must be indexed and IDs unique', () => {
+  withTmpRepo(dir => {
+    experienceRepo(dir)
+    write(dir, 'docs/experience/duplicate.md', EXPERIENCE)
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.out, /no link from/)
+    assert.match(r.out, /duplicate ID edit-order-expert/)
+  })
+})
+
+test('docs-check: invalid metadata, duplicate fields and empty behavior sections fail', () => {
+  const broken = [
+    [s => s.replace('- **Actor**: expert operator\n', ''), /missing Actor/],
+    [s => s.replace('**Status**: stable', '**Status**: accepted'), /Status must be/],
+    [s => s.replace('**Visual policy**: toolkit', '**Visual policy**: loose'), /Visual policy must be/],
+    [s => s.replace('## Outcome', '- **Status**: exploring\n\n## Outcome'), /duplicate field Status/],
+    [s => s.replace(/- \*\*Validation source\*\*:.*\n/, ''), /stable requires Validation source/],
+    [s => s.replace(/## Recovery\n[^\n]+/, '## Recovery\n'), /empty Recovery/],
+    [s => s.replace(/## Evidence\n[^\n]+/, '## Evidence\n'), /empty Evidence/],
+  ]
+  for (const [damage, message] of broken) withTmpRepo(dir => {
+    experienceRepo(dir, damage(EXPERIENCE))
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1, r.out)
+    assert.match(r.out, message)
+  })
+})
+
+test('docs-check: a quoted contract does not substitute for actual metadata or evidence', () => {
+  withTmpRepo(dir => {
+    experienceRepo(dir, '```markdown\n' + EXPERIENCE + '```\n')
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.out, /missing ID/)
+  })
+})
+
+test('docs-check: exploring may carry required visual specs without claiming validation', () => {
+  withTmpRepo(dir => {
+    const contract = EXPERIENCE.replace('**Status**: stable', '**Status**: exploring')
+      .replace(/- \*\*Validation source\*\*:.*\n/, '')
+      .replace('**Visual policy**: toolkit', '**Visual policy**: specified')
+    experienceRepo(dir, contract)
+    assert.match(run(DOCS_CHECK, [], dir).out, /specified requires links/)
+    write(dir, 'docs/specs/UX reference.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>')
+    experienceRepo(dir, contract.replace('None — toolkit only.', '[Edit, revision 2](<../specs/UX reference.svg>)'))
+    const r = run(DOCS_CHECK, ['--strict'], dir)
+    assert.equal(r.status, 0, r.out)
+  })
+})
+
+test('docs-check: visual references and evidence links resolve relative to the contract', () => {
+  withTmpRepo(dir => {
+    experienceRepo(dir, EXPERIENCE.replace('**Visual policy**: toolkit', '**Visual policy**: specified')
+      .replace('None — toolkit only.', '[Design](../missing.svg)'))
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.out, /missing reference ..\/missing.svg/)
+    experienceRepo(dir, EXPERIENCE.replace('None — toolkit only.', '[Source](https://example.com/spec/v2)')
+      .replace('Retry: unverified;', 'Retry: [test](../../tests/retry.test.ts);'))
+    assert.match(run(DOCS_CHECK, [], dir).out, /missing reference ..\/..\/tests\/retry.test.ts/)
+    write(dir, 'tests/retry.test.ts', '// Evidence target exists; docs-check does not claim it passed.\n')
+    assert.equal(run(DOCS_CHECK, [], dir).status, 0)
+  })
+})
+
+test('docs-check: nested contracts cannot hide a duplicate ID', () => {
+  withTmpRepo(dir => {
+    experienceRepo(dir)
+    write(dir, 'docs/experience/assisted/edit.md', EXPERIENCE)
+    write(dir, 'docs/EXPERIENCE.md', '# Experience\n[Expert](experience/edit-expert.md)\n[Assisted](experience/assisted/edit.md)\n')
+    const r = run(DOCS_CHECK, [], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.out, /duplicate ID edit-order-expert/)
+  })
+})
+
+test('experience eval inputs have valid contracts before an agent touches them', () => {
+  for (const name of ['experience-stabilize', 'reviewer-experience-profiles',
+    'reviewer-experience-exploring', 'reviewer-experience-recovery', 'reviewer-experience-specified']) {
+    const r = run(DOCS_CHECK, ['docs', '--strict'], join(REPO, 'eval/cases', name, 'files'))
+    assert.equal(r.status, 0, `${name}: ${r.out}`)
+  }
+})

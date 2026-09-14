@@ -15,6 +15,7 @@ a 900-line PRD does not.
 | Document | One unit is | The index is | Split into units at |
 |---|---|---|---|
 | Decisions | one decision — `docs/adr/NNNN-<slug>.md` | the decision log in `docs/ARCHITECTURE.md` | from the first one |
+| Experience | one screen/workflow for one actor — `docs/experience/<journey>-<actor>.md` | `docs/EXPERIENCE.md` | from the first new contract; legacy single-file docs remain valid |
 | PRD | one capability — `docs/prd/NN-<slug>.md` | `docs/PRD.md` — the spine + the capability table (with status) | more than ~8 capabilities, or 400 lines |
 
 **Neither the intent nor the plan is on this table.** `/interview`, `/plan` and
@@ -85,6 +86,12 @@ never writes `.docs-budgets.json`. The gate does not see a fact living in two
 documents, a shipped unit rewritten to match the code, or an index that answers
 the wrong three questions.
 
+Experience units are living contracts (`product/experience.md`), not frozen sprint
+history. The developer may revise a retained behavior with its checks. Their
+`exploring`/`stable` status and independent visual policy live in the unit, not the
+index. `docs-check` validates their fields and references; it cannot establish
+human approval, usability or conformance of the running screen.
+
 ## The unit
 
 - **One unit, one thing** — one decision, one phase, one capability. If it needs
@@ -128,7 +135,8 @@ document:
 | Is this capability done, full stop? | the PRD's capability table (status column) |
 | What does the system look like — boundaries, stack? | `ARCHITECTURE.md` |
 | What are the fields, types, schemas? | `DATA-MODEL.md` |
-| What does the screen do — states, wording, a11y? | `EXPERIENCE.md` |
+| What does this actor do — flow, states, recovery, a11y? | `docs/experience/`, indexed by `EXPERIENCE.md` |
+| Which toolkit and shared style apply? | `DESIGN.md` |
 | What does the project call this, and what should nobody call it instead? | `CONTEXT.md` (`product/vocabulary.md`) |
 
 A PRD that names a library, a plan that restates an ADR's reasoning, or an ADR that

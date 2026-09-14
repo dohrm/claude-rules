@@ -9,7 +9,7 @@
 #
 # The dev tooling belongs in a dev group, never in the runtime dependencies:
 #   uv add --dev ruff mypy pytest pytest-cov pip-audit deptry
-#   uv add --dev mutmut          # Tier 3 only, see python-mutate
+#   uv add --dev mutmut          # Tier 4 only, see python-mutate
 
 # ── Interpreter ────────────────────────────────────────────────────────────
 # In [project]. "Python 3" is not a version — pin the floor, and commit a
@@ -95,7 +95,7 @@ exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 # genuinely used in a way static analysis cannot see (a plugin, an entry point).
 ignore = []
 
-# ── mutmut — Tier 3, run per block, never in a hook ────────────────────────
+# ── mutmut — Tier 4, PR gate; optional locally, never a hook ────────────────────────
 # mutmut has no diff mode: scope it to the package you touched with
 # `--paths-to-mutate`, or narrow source_paths here. Doctrine: rules/testing/ratchet.md.
 [tool.mutmut]
