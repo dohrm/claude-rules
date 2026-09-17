@@ -36,7 +36,7 @@ outputs.
 - Agents stay thin: they inherit the consuming repo's `CLAUDE.md` (and its imported
   rules), so never restate conventions inside an agent prompt.
 - The installer never merges build config — kit wiring is manual and documented.
-- Artifacts (rules, agents, docs) are written in English; see `rules/language.md`.
+- Artifacts (rules, agents, docs) are written in English; see `rules/common/language.md`.
 - Adding an asset is not done until `npm test` passes: a new profile must appear in
   `/architect`'s gating table, a new rule/skill/kit dir must be reachable from
   `registry.json`, a skill's frontmatter `name` must equal its directory name.
