@@ -25,6 +25,23 @@ never for a **decision**.
   make a choice already implemented look authorised is the documentation equivalent
   of `--no-verify`.
 
+## Challenge a decision before changing it
+
+A request to challenge a design, a reported limitation, or dissatisfaction with
+its behavior is enough to explore alternatives. No special research mode is
+required. An accepted ADR records the current arbitration; its status is not
+evidence that the design still meets today's needs.
+
+Read the original rationale and constraints, check which still hold, and compare
+credible alternatives with keeping the current design. Include migration costs
+and recommend against change when the evidence supports that conclusion. Keep the
+exploration scoped to the reported problem; do not reopen unrelated decisions.
+
+Exploration does not authorize implementation. Complete the comparison before
+handing back; the manual status change and guard apply when adopting a different
+decision, not when examining it. Keep alternatives as proposals and the accepted
+record's decision intact until the human arbitrates.
+
 ## Which choices need an ADR
 
 Use an ADR for a durable project constraint: technology/architecture selection,

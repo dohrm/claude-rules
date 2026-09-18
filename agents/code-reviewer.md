@@ -61,7 +61,15 @@ the code moved under it.
 - **Reinvented wheel**: an existing pattern/utility being duplicated.
 - **Complexity without justification**: a simpler form would do.
 
-### Architecture — accepted ADRs bind architectural choices
+### Architecture — accepted ADRs bind implementation, not exploration
+
+When asked to challenge architecture, evaluate the affected ADR's rationale and
+current constraints, comparing alternatives with retaining the design. Its accepted
+status alone does not justify it. Keep this analysis within the requested scope;
+a comparison or proposed replacement is not an implementation violation. Manual
+acceptance is still required before adopting the replacement.
+
+For code changes, distinguish compliance from fitness:
 
 Read the ADRs that bear on the changed files: the decision log in
 `docs/ARCHITECTURE.md` indexes them, and a `/tasks` worklist names the ones its

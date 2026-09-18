@@ -14,6 +14,16 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **Codex installation and module guidance.** New installs select Claude/Codex;
+  existing locks retain their targets and Cursor remains optional. Add Codex
+  explicitly with `add <installed-profile> --agent codex`.
+- Root/module `AGENTS.md` blocks request scoped rule reads after alias expansion.
+  `modules["."]` records root membership. Owned Codex files are tracked in the lock;
+  updates/removal preserve local instruction text and unknown files, and reject
+  conflicts before writes. `doctor` audits this output; `budget --agent codex`
+  estimates requested reading without claiming native dynamic loading.
+
+
 - **Experience contracts per journey and actor.** `/experience` now explores or
   stabilizes a selected screen/workflow under `docs/experience/`, indexed by
   `docs/EXPERIENCE.md`. `exploring`/`stable` and `toolkit`/`specified` are independent:

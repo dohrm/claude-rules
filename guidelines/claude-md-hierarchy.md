@@ -121,10 +121,18 @@ starts every Claude session with no project map at all. The documented bridges a
 an `@AGENTS.md` import from `CLAUDE.md`, or a symlink; `/import` (and `/init` under
 `CLAUDE_CODE_NEW_INIT=1`) will also copy an `AGENTS.md` in once, as a one-shot.
 
-Do not reach for those bridges to dump Cursor's `.cursor/rules/` into Claude.
-Keep the channels separate: `CLAUDE.md` is the project map, `.claude/rules/`
-auto-loads, and Cursor reads `.cursor/rules/*.mdc`. A leftover Codex/OpenCode
-managed block in `AGENTS.md` is the same conventions twice — `update` strips it.
+Keep the project maps separate. Claude uses `CLAUDE.md` and `.claude/rules/`;
+Cursor uses `.cursor/rules/`. Codex uses generated root/module `AGENTS.md` blocks
+that link rules in `.agents/rules/`. Do not import the entire other tool's map.
+
+The root Codex block asks the agent to discover applicable ancestor guidance before
+editing or reviewing files, repeating discovery when the scope expands. Module
+links resolve actual registry assets after alias expansion. `AGENTS.override.md`
+can shadow a generated entry; `doctor` warns about it. This discovery is requested
+reading, not a guarantee of native dynamic loading. Delegation is optional.
+
+Updates replace only the managed block and owned Codex assets, preserving local
+text and unknown adjacent files. See [the sharing contract](../docs/agent-sharing.md).
 
 ## Other
 

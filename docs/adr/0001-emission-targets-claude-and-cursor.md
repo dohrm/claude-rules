@@ -11,6 +11,11 @@ rejected, and `doctor` reports leftover trees from those targets as drift. The
 prose has drifted the other way: the library is described as multi-agent, which
 reads as an open-ended list.
 
+Amendment 2026-09-17: current usage pairs Claude Code with Codex; Cursor is no
+longer the maintainer's daily tool. The measured need now exists. The proposed
+[ADR-0003](0003-claude-codex-sharing.md) revisits the target and routing contract.
+This record remains Proposed; this note does not accept either proposal.
+
 The distinction is not cosmetic. Every routing decision in this library optimises
 one specific capability: **path-scoped rule loading**. Claude reads `paths:` from
 `.claude/rules/`; the Cursor emitter renames it to `globs:` and falls back to
