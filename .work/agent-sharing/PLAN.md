@@ -1,9 +1,9 @@
 # Claude/Codex sharing — implementation plan
 
-- **Status**: Ready for review; implementation not started.
+- **Status**: Implemented and verified on 2026-09-18.
 - **Intent**: Use Claude Code and Codex on the same repository with consistent
   rules, discoverable module guidance and shared review gates.
-- **Decision**: [ADR-0003](../../docs/adr/0003-claude-codex-sharing.md), still Proposed.
+- **Decision**: [ADR-0003](../../docs/adr/0003-claude-codex-sharing.md), manually accepted and committed in `62d3b46`.
 - **Contract**: [Agent sharing](../../docs/agent-sharing.md).
 - **Baseline**: `e053907`; branch `codex/prompt-discipline-readme-cleanup`.
 - **Acceptance boundary**: the maintainer manually accepts and commits ADR-0003
@@ -165,3 +165,27 @@ No live consumer migration and no claim of guaranteed model adherence.
 - Existing consumers retain their chosen targets and effective scopes.
 - Tests pass; behavioral evidence or any unavailable runtime check is stated.
 - Human-only ADR acceptance, document gates and mutation policy are unchanged.
+
+
+## Verification record — 2026-09-18
+
+- `npm test`: 336 tests, 329 passed, 7 toolchain-dependent skips, zero failures.
+- Strict `adr-check` and `docs-check`: passed. Migration/onboarding skill validators:
+  passed. `git diff --check`: passed.
+- Added Codex lifecycle coverage, including aliases/cycles, old locks, identical
+  adoption, unknown files, conflicting content/types/markers, path escapes and
+  symlinks, multiple targets, shared TypeScript sources, nested modules, scope
+  diagnostics, and removal after a language disappears.
+- Actual runtime: Codex CLI `0.154.0`, ephemeral read-only sessions in a disposable
+  Git repository, once launched at root and once at `apps/api`. Both reviews
+  covered `apps/api/src/lib.rs` and `apps/web/src/index.ts`.
+- The recorded commands read root/ancestor/module instruction files and linked
+  Rust/API and TypeScript/web rules before completing the review. Both final
+  reports included the root and respective module sentinel and distinguished API
+  guidance from web guidance. No files were edited. This is two observed runs,
+  not proof of universal adherence, automatic glob loading, or subagent inheritance.
+- Runtime logs were kept under `/tmp/codex-sharing-{root,module}.jsonl` during
+  verification; no runtime logs, credentials, or disposable project enter the repo.
+- `temper-altern`, mutation policy, manual ADR acceptance and the pre-existing
+  untracked root `AGENTS.md` were not changed. Implementation remains uncommitted
+  for review.

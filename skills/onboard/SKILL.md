@@ -27,6 +27,12 @@ to `/migrate`.
 
 ### 1. See what is already there
 
+Discover applicable ancestor `AGENTS.md` (or `AGENTS.override.md`) before reviewing
+or editing each subtree; repeat when scope expands. Preserve local instruction text.
+New installations default to Claude/Codex; ask only if the user's target choice is
+unknown and matters. Aliases expand through the registry, never guessed folders.
+Unbound profiles are recorded under `modules["."]`; `agent` and `product` stay there.
+
 Explore, do not interview first. Tree, manifests (`Cargo.toml`, `go.mod`,
 `package.json`, `pyproject.toml`, `*.csproj`), existing `CLAUDE.md` /
 `AGENTS.md`, `docs/`, CI, deploy. Use the Explore subagent for a wide search.

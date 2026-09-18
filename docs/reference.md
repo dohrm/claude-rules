@@ -161,7 +161,7 @@ npx github:dohrm/claude-rules init                     # assemble justfile + lef
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that file, and what it costs
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
-npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (default: both)
+npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (new installs: claude,codex)
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
 npx github:dohrm/claude-rules remove cqrs              # delete a profile's files, update the lock
 npx github:dohrm/claude-rules remove all               # full uninstall
@@ -228,7 +228,7 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
   shared repo-root docs tree (`docs/adr/`, `docs/**`), not one per module, so
   `--root` is silently dropped for them (`doctor` fails if a lock is hand-edited
   into anchoring them anyway). A bare `add` on an existing install keeps its
-  agent set rather than widening to both; pass `--agent` to add a target.
+  agent set rather than widening to the defaults; pass `--agent` to add a target.
   Narrowing is `remove`'s job, never a side effect of `add`.
 - `remove` is the exact inverse: it deletes what each profile emitted and updates
   the lock. It never touches your `justfile`/`lefthook` wiring — delete those
@@ -262,6 +262,7 @@ It lands in the lock, so `update` replays it:
 
 ```json
 "modules": {
+  ".":            ["agent", "product"],
   "apps/api":     ["rust", "hexagonal", "api", "backend"],
   "apps/web":     ["ts-web", "react", "portal-flat", "portal-http"],
   "apps/desktop": ["ts-tauri", "react", "portal-flat", "tauri"]
@@ -269,7 +270,7 @@ It lands in the lock, so `update` replays it:
 ```
 
 and emission rewrites the globs — `**/*.ts` becomes `apps/api/**/*.ts` for Claude's
-`paths:` and Cursor's `globs:` alike. A profile no module claims stays repo-wide, and
+`paths:`, Codex rule conditions and Cursor's `globs:` alike. A profile no module claims stays repo-wide, and
 a lock with **no** `modules` behaves exactly as before: the installer only rewrites
 what it is asked to. Destinations do not change — a rule shared by two modules is
 still **one file**, carrying both prefixes.
@@ -281,9 +282,10 @@ repo with no Go. The filter works at the *rule* level, never at the glob level: 
 that also covers a locked language keeps its dead globs, because they cost nothing and
 start working the day that language arrives.
 
-Because both of those can drop a file the previous install wrote, **rule directories
-are cleared before they are rewritten** — they are library-owned and never
-hand-edited. `kit/` is deliberately not: it is the copy-and-own surface.
+Claude/Cursor rule directories are cleared before rewriting. Codex instead tracks
+individual owned files and hashes in the lock, preserving unknown adjacent files
+and refusing conflicting edits. Keep local conventions outside generated rules.
+The kit remains the copy-and-own surface.
 
 ### `doctor` — is the install still true?
 
@@ -308,7 +310,9 @@ judgments**:
 | The lock names an unknown profile or agent | **fail** | `update` cannot replay it |
 | A path-scoped rule whose globs match **no file** here | warn | it can never fire — dead weight, or the repo lost that code |
 | Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` ([why, and why not to bridge it](../guidelines/claude-md-hierarchy.md#agentsmd)) — the project map is missing |
-| Leftover `.dev/rules/`, `.opencode/`, `.agents/rules/`, or a managed `AGENTS.md` block | **fail** | retired Codex / OpenCode / Antigravity trees still on disk — run `update` |
+| Leftover `.dev/rules/` or `.opencode/` | **fail** | retired OpenCode / Antigravity trees — run `update` |
+| Missing/stale Codex entries or modified owned assets | **fail** | reconcile conflicts, then `update` |
+| `AGENTS.override.md` shadows a generated entry | warn | inspect the effective instruction chain |
 | The lock still lists a retired agent | **fail** | `update` drops it and rewrites the lock |
 | A `lefthook.yml` git was never told about | **fail** | it looks installed and every hook in it is inert (`lefthook install`) |
 | A hook wired to a guard script that is not on disk | **fail** | the hook fires, finds nothing, and guards exactly as much as no hook at all |
@@ -423,35 +427,30 @@ rot on a model bump.
 
 ## Targets
 
-Claude is the canonical source; each asset is emitted (copied or transformed) for
-Cursor too. Both load a rule because a glob matched.
+Claude-compatible Markdown remains the authoring source. New installations select
+Claude and Codex; existing locks keep their chosen agents. Explicit `--agent`
+selections extend existing installations. Cursor is still supported.
+[ADR-0003](adr/0003-claude-codex-sharing.md) amends the original target restriction.
 
-**Two targets, deliberately** — `KNOWN_AGENTS = ['claude', 'cursor']`. Path-scoped
-rule loading is the contract a target has to support, and it is what every glob in
-`rules/` is tuned for: Claude reads `paths:`, Cursor reads the emitted `globs:`. A
-tool with no path scoping (Windsurf, Copilot, Aider) would import the whole corpus
-on every turn, so narrowing a glob for it would achieve nothing. Adding a target is
-an ADR, not a patch — see `docs/adr/0001-emission-targets-claude-and-cursor.md`.
-`skills/` is portable anyway (the open `SKILL.md` standard) and `kit/` is
-agent-independent, but neither is path-scoped.
+| Asset | Claude | Codex | Cursor |
+|---|---|---|---|
+| Skills | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` |
+| Kit | `.dev/kit/` | Same | Same |
+| Rules | `.claude/rules/` with `paths:` | `.agents/rules/`, linked from `AGENTS.md` | `.cursor/rules/` with `globs:` |
+| Native agents emitted | `.claude/agents/` | None | None |
 
-| Asset | Claude (canonical) | Cursor |
-|-------|--------------------|--------|
-| **skill** | `.claude/skills/` | `.agents/skills/` |
-| **kit** | `.dev/kit/` | `.dev/kit/` |
-| **rule** (path-scoped) | `.claude/rules/` (`paths:`) | `.cursor/rules/*.mdc` (`globs:`) |
-| **rule** (cross-cutting) | `.claude/rules/` | `.cursor/rules/*.mdc` (`alwaysApply`) |
-| **agent** (subagent) | `.claude/agents/` | — (no file subagents) |
+Codex gets a short root `AGENTS.md` and one in every declared module. Aliases are
+expanded via the registry; `modules["."]` records profiles with no non-root binding.
+Root guidance includes shared rules, document conditions and discovery instructions:
+read applicable ancestor instruction files before edits/review, and repeat when
+entering another directory. This is advisory progressive reading, not native
+dynamic glob loading or a requirement to spawn subagents.
 
-`skills/` is the open [`SKILL.md` standard](https://www.agensi.io/learn/agent-skills-open-standard)
-— read verbatim by 30+ tools — so it is a straight copy. `kit/` is tool config,
-agent-independent by construction.
-
-Nested `CLAUDE.md` / `AGENTS.md` (one per module root) is now possible: the
-Codex-concatenates / OpenCode-replaces conflict that blocked it is gone. The
-installer does not emit those files yet — `--module` still rewrites globs at
-emit-time. A repo can write `apps/api/CLAUDE.md` by hand today; `init` will not
-overwrite it.
+The installer owns only its marked instruction blocks and inventoried Codex files.
+Outside text and unknown neighboring files survive updates/removal. Conflicting
+assets, malformed markers and symlinked destinations fail before writes.
+`budget --agent codex <file>` estimates entry files and requested rule reads;
+it cannot measure the model's actual context. See [the full contract](agent-sharing.md).
 
 ### The gate layer, per tool
 
@@ -461,7 +460,7 @@ enforcement is the one part of the kit that is **not** agent-independent, so it 
 in two layers:
 
 - **The git floor** — `lefthook` (`kit/common/lefthook.snippet.yml`): `no-commit-on-trunk`
-  plus the pre-push `review-guard`. Portable across both targets and CI. This is
+  plus the pre-push `review-guard`. Portable across all targets and CI. This is
   where a guarantee belongs.
 - **The harness layer** — one snippet per tool, opt-in: Claude Code `PreToolUse` hooks
   (deny + ask, the reference implementation) and Cursor `beforeShellExecution`
@@ -517,7 +516,7 @@ syntax GitHub rejects.
 `eval/` covers the two subagents and five skills (`/architect`, `/plan`, `/runbook`,
 `/postmortem`, `/experience`), judged where possible by the kit's own gates — `adr-check --strict`
 and `docs-check --strict` are the oracle, so the assertion stays deterministic while
-the prose varies. It runs against the two remaining targets (`claude`, `cursor`)
+the prose varies. It runs against the harness targets (`claude`, `cursor`)
 and anything else through `--cmd`. The remaining skills are evaluable but not
 evaluated; the ones that are pure dialogue or pure judgment deliberately never will be.
 
