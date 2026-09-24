@@ -53,6 +53,38 @@ no LLM) reads it. Marker rules: `.dev/kit/common/review-guard.mjs`.
 A green gate is permission for **code**. An agent or review opinion is a proposal.
 A green gate never settles a **decision** — that line is `agent/decisions.md`.
 
+## Levels
+
+How often the agent stops to ask is a per-run choice, declared once in the state
+file header — `.work/<slug>/PLAN.md`, the worklist, or `loop.md`:
+`**Autonomy**: L1 | L2 | L3`.
+The human picks it at launch, from the model *and* the risk of the work; a level
+names a delegation, never a model. **Absent or unreadable → L1.**
+A level passed at launch is written into that header before the first turn: the
+state file is the source of truth, so a level that lives only in the prompt is lost
+at the next one. A skill that runs another passes its resolved level as the argument
+(`/tasks L3`) — the callee's own lookup would fall back to an older header or to L1.
+
+| Level | The human validates | The agent settles alone |
+|---|---|---|
+| **L1 — guided** | every checkpoint a skill marks, before the next step | nothing a skill marks as a checkpoint |
+| **L2 — delegated** | each skill's written output, once | the open questions the code answers, each one recorded |
+| **L3 — autonomous** | only the hard checkpoints below | the cut, the loop's caps, chaining `/plan` → `/tasks` → `/loop-setup` → launching the loop, sub-agents |
+
+**Hard checkpoints — identical at every level:** an ADR status (`agent/decisions.md`);
+a new acceptance criterion, User Story or scope change; a sprint's `Shipped` and its
+merge; a hard bypass (below); a tree that contradicts the state file.
+
+A level moves *when* the human is asked, never *what* counts as done. The gate, the
+caps, the divergence guard, the escalation channel and one-tree-one-writer hold at
+L3 exactly as at L1 — at L3 the agent sets the caps' values itself, but writes them
+in the state file before the first turn, where the human can read or lower them. Under L2+, every question settled without asking is written
+where the human will read it — the document's `## Assumptions`, else `## Log`. An
+unrecorded assumption is a silent scope change.
+
+**Only the human raises a level.** An agent may always drop one: an L3 run facing an
+ambiguity the code cannot settle asks, which is escalation, not failure.
+
 ## One tree, one writer
 
 `.work/` (review report, worklist) is per-tree. Two sessions in one checkout

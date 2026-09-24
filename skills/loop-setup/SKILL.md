@@ -1,17 +1,23 @@
 ---
 name: loop-setup
-description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist). Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Does not start it. Not for one-off tasks."
+description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist). Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Starts it only at autonomy L3. Not for one-off tasks."
 ---
 
-You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. You do not start the loop; you produce the prompt and the state file, then hand the exact command to run.
+You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. Below L3 you do not start the loop; you produce the prompt and the state file, then hand the exact command to run. At L3 you launch it yourself (phase 5).
 
 ## Process
 
-Run these phases in order. Stop at the end of each and wait for validation before the next — a loop set up on a vague objective burns tokens for hours.
+Run these phases in order. The level (`agent/autonomy.md` § Levels — from the argument, else the state file's header, else **L1**) sets the checkpoints:
+
+- *L1* — stop at the end of each phase and wait for validation before the next. A loop set up on a vague objective burns tokens for hours.
+- *L2* — run phases 1–4 in one pass, then present the diagnosis, the done-command and the guardrails **once**.
+- *L3* — run phases 1–5 without stopping. The diagnosis is yours to act on: set the guardrails' values from it yourself — tighter for an open loop, a token budget either way — write them, then launch.
+
+The stops below that say "stop and say so" (one-shot work, no measurable objective) still stop at every level: L3 launches a bounded loop, never a wandering one.
 
 ### 1. Diagnose — is a loop the right tool?
 
-Walk the **4 preconditions**, one at a time, and get a concrete answer for each:
+Walk the **4 preconditions** and get a concrete answer for each — from the user, one at a time, at L1; from the repo at L2/L3, asking only what it cannot tell you:
 
 1. **Repetition** — is the task the same gesture over N targets / N turns? (One-shot work does not need a loop — say so and stop.)
 2. **Auto-detectable failure** — can a machine signal tell success from failure, without a human judging?
@@ -38,6 +44,16 @@ Every loop carries all four:
 - **Escalation point** — on cap/budget exhaustion → STOP and surface state to the human, **never** silent failure or fake-green.
 - **Divergence guard** — "if N consecutive turns pass with no measurable progress (done-command no closer), STOP and escalate." This is the loop analog of the *three-strikes rule* in `skills/investigate` (if present).
 
+The level sets how much one turn covers, and so the unit the cap is counted in — never whether the four exist:
+
+| Level | Turn scope | Cap counted in |
+|---|---|---|
+| *L1* | one item | turns — tight |
+| *L2* | the next item and the ones sharing its anchor | turns |
+| *L3* | every remaining item, until the Done-check or a hard checkpoint; sub-agents allowed for exploration and review | tokens and wall-time — a turn is no longer a unit of cost |
+
+At *L3*, count the divergence guard in **done-command runs**, not turns: one turn may cover the whole sprint, so a turn-based guard would never fire.
+
 ### 4. Write the state file
 
 The loop's state is **one file under `.work/<capability-slug>/`** — committed
@@ -46,7 +62,8 @@ working memory, deleted once the capability ships, never under `docs/`
 
 **First, look for a file that already exists:**
 
-- **`.work/<slug>/tasks/NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3. Everything else is `/tasks`' and stays untouched.
+- **`.work/<slug>/tasks/NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3 — plus its `**Autonomy**` header line when the human passed a level for this run, so the file the next turn reads agrees with the prompt. Everything else is `/tasks`' and stays untouched.
+- **Nothing there, but a `.work/<slug>/PLAN.md` sprint is the objective, at *L3*** — run `/tasks L3` on it first, passing the level explicitly — the plan header may still say L1, and `/tasks` would then stop to ask. It writes L3 into the worklist header without waiting; then add Guardrails to the worklist it produced, and continue to phase 5.
 - **Nothing there** — write `.work/<slug>/loop.md` from `<loop-file-template>`.
 - **A file exists from an earlier run** — read it and fill only the deltas; don't clobber validated content.
 
@@ -54,9 +71,9 @@ Build the **loop prompt** from `<loop-prompt-template>`, pointing at whichever f
 
 Confirm *"✓ `.work/<slug>/<file>` written (guardrails added); loop prompt ready"*.
 
-### 5. Hand off — per host
+### 5. Hand off — or launch at L3
 
-Emit the invocation for the user's host (ask which if unclear). Same cadre, different launcher:
+Below L3, emit the invocation for the user's host (ask which if unclear). At *L3*, launch it yourself, from the state file you just wrote: through the host's loop mechanism when you can invoke it (Claude Code: its built-in `loop` skill, the loop prompt as argument), else by running the loop prompt's turns in the current session. Either way, report the state file, the caps you set and how to interrupt — that report replaces the question. Same cadre, different launcher:
 
 | Host | Launch | Note |
 |------|--------|------|
@@ -84,10 +101,12 @@ If this happens often, that is a signal about the **cut**, not about the agent: 
 - **Objective (bounded)**: <finite, checkable end state>
 - **Done-command**: `<command that exits green when the objective is met>`
 - **Type**: closed | open (missing precondition: <which>)
+- **Autonomy**: L1 | L2 | L3 — absent means L1
 
 ## Guardrails
 
-- **Iteration cap**: <N turns>
+- **Turn scope**: <one item | the items sharing the next anchor | every remaining item until the Done-check or a hard checkpoint>
+- **Iteration cap**: <N turns, or a token / wall-time bound at L3>
 - **Token budget**: <budget, or "n/a (closed)">
 - **Escalate when**: cap/budget hit, or <M> turns with no measurable progress
 - **Out of scope**: <bounds that prevent drift — the loop touches nothing else>
@@ -120,9 +139,10 @@ You are running one turn of a bounded loop toward a fixed objective. Work only f
 
 **Objective:** <bounded objective>
 **State file:** `<.work/<slug>/loop.md or .work/<slug>/tasks/NN-slug.md>` — remaining work, guardrails, and what already failed.
+**Autonomy:** <L1 | L2 | L3> — turn scope: <one item | the items sharing the next anchor | every remaining item until the Done-check or a hard checkpoint>.
 
 This turn:
-1. Read the state file. Pick the **first unchecked item**. If none remain, go to Done-check.
+1. Read the state file. Pick the **first unchecked item** — and, within the turn scope, the ones after it; repeat steps 2–5 for each. If none remain, go to Done-check.
 2. **Re-read the code you are about to touch.** You are not the only writer: between two turns a human edits from outside the loop — to unblock you, or because the item turned out to need exploration. A `human:` line in `## Log` records it when they remembered to; the tree is authoritative either way. **Never revert a change you cannot explain.** If the tree contradicts your memory or the state file, treat that as the escalation it is: stop and write it under `## Blocked on the human`.
 3. Do exactly that item — nothing outside its "Out of scope" bounds.
 4. Run the done-command: `<done-command>`. Read its exit code — do not trust a prior run's claim.
@@ -133,7 +153,9 @@ This turn:
 **Stop & escalate (never fake green) if:**
 - the iteration cap (<N>) or token budget is reached, or
 - <M> consecutive turns made no measurable progress toward the done-command, or
-- an item needs a decision, an access, or a scope change you don't have.
+- an item needs a decision, an access, or a scope change you don't have — at every autonomy level, this includes an ADR status, a new acceptance criterion, and anything that would bypass a gate.
+
+At L2/L3, a question you settled without asking gets its own `## Log` line: `assumed: <question> → <answer>`.
 
 On any of these: stop, write the reason and current state under `## Blocked on the human`, and surface it.
 
@@ -142,7 +164,8 @@ On any of these: stop, write the reason and current state under `## Blocked on t
 
 ## Rules
 
-- Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point.
+- Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point — at every autonomy level.
+- The level is the human's call. Never raise it on your own; dropping to asking is always allowed.
 - One state file under `.work/<slug>/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
 - `.work/<slug>/SUMMARY.md` (if `just publish-summary` is wired) is a terminal snapshot, not a second state file — the loop stops and escalates from `loop.md`/the worklist alone, with or without it.
 - Plan mode: writing `.work/*` is allowed.

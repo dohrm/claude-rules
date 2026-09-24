@@ -16,6 +16,11 @@ What you produce is **working memory, not truth.** The sprint's promise lives in
 it is deleted once the capability it belongs to ships (`product/documents.md`) —
 committed until then, so a PR can point at it, not gitignored scratch.
 
+**Autonomy** (`agent/autonomy.md` § Levels): take the level from the argument, else
+from the `.work/<slug>/PLAN.md` header, else **L1**. It changes the checkpoints and
+the depth of the worklist marked *L1 / L2 / L3* below — never the refusals of step 1,
+T0, or the green boundary.
+
 ## Process
 
 ### 1. Get the sprint — and refuse it if it isn't ready
@@ -33,7 +38,8 @@ Stop and hand back, rather than cutting, when:
   green/red on the whole tree. Then the green boundary of step 4 does not exist and
   there is nothing to size tasks against. Set the gate up first (`kit/common`).
 
-Both are cheap to say now and expensive to discover at task 6.
+Both are cheap to say now and expensive to discover at task 6 — and both hold at
+every level: autonomy without a gate is not autonomy, it is an unchecked guess.
 
 ### 2. Explore the code once — produce anchors, not descriptions
 
@@ -101,13 +107,26 @@ Apply it mechanically:
 - A task stays in **one anchor's neighbourhood**. Spanning three anchors is the
   reliable signal that it is really three tasks.
 
-Present the cut to the user — numbered, one line each, with its done-command — and
-ask whether the granularity holds before writing anything.
+- *L1* — present the cut to the user — numbered, one line each, with its
+  done-command — and ask whether the granularity holds before writing anything.
+- *L2* — write the worklist, then present the cut once and apply the corrections.
+- *L3* — write it and hand off. The cut is rewritable at any turn; a task that turns
+  out to need a new acceptance criterion is the hard checkpoint, not the cut itself.
 
 ### 5. Write the worklist
 
-Write `.work/<slug>/tasks/NN-<sprint-slug>.md` from `<worklist-template>`, one
-`<task-unit>` per task — `NN` is the sprint's number in `.work/<slug>/PLAN.md`.
+Write `.work/<slug>/tasks/NN-<sprint-slug>.md` from `<worklist-template>`, at the
+depth the level sets below — `NN` is the sprint's number in `.work/<slug>/PLAN.md`.
+
+The depth follows the implementer, because the task units exist to spare a cold
+context from re-deriving the anchors:
+
+- *L1* — one `<task-unit>` per task.
+- *L2 / L3* — the Anchors table carries the exploration; each checkbox line, T0
+  included, takes the template's L2/L3 form (`· Done: … · Constrained by: …`).
+  Write a `<task-unit>` only for a task whose anchor, experience contract or
+  consumed contract element the table does not make obvious.
+
 Commit it, and never put it under `docs/`: **`.work/<slug>/` is committed working
 memory — one home per fact, deleted in one piece once the whole capability ships,
 not file by file as each sprint lands** (budgets and freeze-on-ship:
@@ -132,7 +151,7 @@ of its worklists, so a tree per sprint would split one work unit across trees
 sprints of one — two vertical slices of the same capability traverse the same
 layers.
 
-Then hand off, and stop:
+Then hand off — and stop, unless this is an L3 chain (below):
 
 - **`/loop-setup`** — it wraps this worklist in the guardrails you do not own:
   iteration cap, token budget, divergence guard, escalation point.
@@ -141,7 +160,12 @@ Then hand off, and stop:
   reviewer judges design; **the gate judges correctness** and is the only authority
   on it (`agent/autonomy.md`).
 
-You do not run the loop, and you never flip a sprint to `Shipped` — that is the
+At *L3*, `/plan` or `/loop-setup` may run this skill themselves when the human asked
+for the chain — the output is the same file, written before any code, so the cut
+stays reviewable and the loop resumable. Reached from `/plan`, do not stop at the
+hand-off: run `/loop-setup L3` on this worklist. Reached from `/loop-setup`, return to it.
+
+You do not run the loop yourself — at L3, `/loop-setup` does — and you never flip a sprint to `Shipped` — that is the
 human's act, on the sprint's acceptance criteria, not on ticked boxes. When the
 merge that ships the sprint lands, delete its `tasks/NN-*.md` in the same commit;
 once every sprint under the capability is gone, delete `.work/<slug>/` entirely
@@ -154,6 +178,7 @@ and re-run `/prd` (`product/documents.md`).
 
 - **Sprint**: `.work/<slug>/PLAN.md` § Sprint NN · **Branch**: `sprint/<slug>-NN`
 - **Gate**: `<the command that must be green — e.g. just check>`
+- **Autonomy**: L1 | L2 | L3 — absent means L1
 - **Out of scope**: <what this branch must not touch — the drift bound>
 
 ## Acceptance criteria (from the sprint — the real definition of done)
@@ -168,14 +193,22 @@ and re-run `/prd` (`product/documents.md`).
 
 ## Tasks
 
+<!-- L1: bare lines, one `<task-unit>` per task below them.
+     L2/L3: every line carries its done-command and its constraint — task units
+     are the exception, so these two fields cannot live only there. -->
 - [ ] **T0 — freeze the contract** · leaves stubs: <list, or none>
 - [ ] **T1 — <title>**
 - [ ] …
 
+<!-- L2/L3 form of the same lines: -->
+- [ ] **T0 — freeze the contract** · leaves stubs: <list, or none> · Done: `<cmd>` · Constrained by: <ADR-NNNN § section | none>
+- [ ] **T1 — <title>** · Done: `<cmd>` · Constrained by: <ADR-NNNN § section | none>
+
 ## Log
 
 <!-- One line per turn, appended: what landed, or what failed and why. Never retry a
-     recorded dead end. -->
+     recorded dead end. At L2/L3, a question settled without asking is logged too,
+     as `assumed: <question> → <answer>`. -->
 - <turn>: <win or dead end>
 
 ## Blocked on the human
