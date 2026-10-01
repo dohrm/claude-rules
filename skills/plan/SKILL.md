@@ -11,6 +11,12 @@ point at it, deleted once every sprint under this capability has shipped
 worked yet stays a stub; elaborating it now would be as speculative as `/tasks`
 naming a file before its phase starts.
 
+**Autonomy** (`agent/autonomy.md` § Levels): take the level from the argument, else
+from an existing `.work/<slug>/PLAN.md` header, else **L1**. It changes only the
+checkpoints marked *L1 / L2 / L3* below; every other step runs identically. A level
+passed as an argument is written into the plan header — the header is what the next
+run reads.
+
 ## Process
 
 ### 1. Get the capability
@@ -28,10 +34,8 @@ judgment call — that's the whole point of pinning it here.
 
 If the capability's `## User Stories` is only the one or two stories `/prd` left
 as a cadre, elaborate the full set now, against the **real code** — this is
-brownfield work, not `/interview`'s greenfield framing. Use the same round /
-frontier mechanic `/interview` documents (map the open questions as a tree, ask
-the whole frontier in one round, a recommendation on each, recompute and repeat
-until the frontier is empty) — but dispatch to explore the codebase and
+brownfield work, not `/interview`'s greenfield framing. Map the open questions as a
+tree, as `/interview` documents — but dispatch to explore the codebase and
 `CONTEXT.md` for facts rather than asking the user for anything findable.
 
 Write the resolved stories back into the **same** capability-unit file — never a
@@ -41,6 +45,15 @@ separate spec file; the capability unit is the one home for this fact
 
 If the stories are already complete (a re-open, or `/prd` wrote them in full),
 skip this step.
+
+The stories are scope, so the human validates them **at every level** — only the
+rhythm changes:
+
+- *L1* — `/interview`'s round / frontier mechanic: ask the whole frontier in one
+  round, a recommendation on each, recompute and repeat until the frontier is empty.
+- *L2 / L3* — settle every question the code or `CONTEXT.md` answers by taking your
+  own recommendation, and record each one under the plan's `## Assumptions`. Ask the
+  remaining ones — and validation of the whole set — in **one** round, no repeat.
 
 ### 3. Extension mode if this capability's plan already exists
 
@@ -80,21 +93,26 @@ Break the capability into **tracer-bullet** sprints. Each sprint is a thin slice
 If the capability is already sprint-sized — the whole thing fits one `/tasks` +
 `/loop-setup` pass — one sprint is correct. Don't invent a second for ceremony.
 
-### 7. Quiz the user
+### 7. Validate the breakdown — when depends on the level
 
-Present the breakdown as a numbered list. For each sprint:
+The breakdown is a numbered list. For each sprint:
 
 - **Title**: short descriptive name
 - **Blocked by**: other sprints that must finish first
 - **User stories covered**: the capability's US-n numbers
 
-Then ask:
+The questions are always the same — is the granularity right (too coarse / too
+fine)? are the dependencies correct? any sprints to merge or split further? Only
+*when* they are asked changes:
 
-- Is the granularity right? (too coarse / too fine)
-- Are the dependencies correct?
-- Any sprints to merge or split further?
-
-Iterate until validated.
+- *L1* — present the breakdown and ask **before writing anything**. Iterate until
+  validated, then go to step 8.
+- *L2* — write the plan first (step 8), then present the breakdown and ask **once**.
+  Apply the corrections to the written plan; no second round.
+- *L3* — write the plan (step 8) and **do not ask**: the cut is working memory,
+  amendable at any turn. Record the granularity and dependency calls you made under
+  `## Assumptions`. A sprint that needs an acceptance criterion no validated story
+  supports is a hard checkpoint — stop there.
 
 ### 8. Write the plan
 
@@ -110,7 +128,9 @@ In extension mode, add sprints; never touch a shipped one. Confirm what was writ
 A sprint is a promise, which is why nothing here names a file or a symbol. Turning ONE
 sprint into something an agent can execute — anchors in the real code, tasks cut at the
 green boundary, a branch — is `/tasks`, at the moment that sprint starts. Not now, and
-not for every sprint at once: the code will have moved.
+not for every sprint at once: the code will have moved. At *L3*, when the human asked
+for the chain, run `/tasks L3` on the first startable sprint yourself instead of stopping;
+it continues through `/loop-setup`, which launches the loop.
 
 Once every sprint under this capability ships, delete `.work/<slug>/` and
 re-run `/prd` to flip the capability's status to `Shipped` — the plan's job is
@@ -122,6 +142,8 @@ built" from then on.
 # Plan: <capability name>
 
 > Source: `docs/prd/NN-<slug>.md` · Architecture: `docs/ARCHITECTURE.md`
+
+- **Autonomy**: L1 | L2 | L3
 
 ## Where we are
 
@@ -145,6 +167,13 @@ One line each, with the ADR link — **pointers, never copies**:
 
 What was considered and deliberately left out, one line each — this capability's
 Out of Scope items that keep coming back as questions.
+
+## Assumptions
+
+<!-- L2/L3 only — omit at L1. One line per question settled without asking: the
+     question, the answer taken, what it was read from. The human reads this list
+     instead of being asked; an unrecorded assumption is a silent scope change. -->
+- <question> → <answer taken> (<source: code path, CONTEXT.md, ADR>)
 </plan-template>
 
 <sprint-unit>

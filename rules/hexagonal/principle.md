@@ -3,6 +3,7 @@ paths:
   - "**/*.rs"
   - "**/*.go"
   - "**/*.py"
+  - "**/*.ts"
 title: "Hexagonal Architecture"
 ---
 

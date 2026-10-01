@@ -136,11 +136,15 @@ mode — do not bootstrap a second pipeline.
 - Root `CLAUDE.md` missing and Claude is a target → scaffold a **project
   map** only (`init` writes one iff the file is absent). Do not dump rules
   into it.
-- `AGENTS.md` that is entirely a `<!-- claude-rules:start -->` dump pointing
-  at `.dev/rules` → delete the block (or the file if nothing else remains).
-  `doctor` fails while it stays. Claude reads `CLAUDE.md`, never `AGENTS.md`.
-- Purge after the lock is true: `.claude/kit/`, `.dev/rules/`, `.opencode/`,
-  leftover `.agents/rules/`.
+- Preserve `AGENTS.md` and `.agents/rules/`, including manual bridges. To select
+  Codex explicitly, repeat an installed profile with `add <profile> --agent codex`.
+  The installer adopts identical assets and a single valid historical block,
+  preserving outside text. Reconcile conflicting assets or malformed markers;
+  do not delete local guidance to make the installation pass.
+- Preserve locked targets unless the user requests another. Normalize aliases to
+  elementary profiles; `modules["."]` is the complement of non-root assignments.
+- Retired cleanup covers `.dev/rules/` and `.opencode/`; legacy kit cleanup covers
+  known `.claude/kit/` assets, preserving unrelated neighbors.
 - Preserve nested `CLAUDE.md`, local rules/skills/agents not in the
   registry, `.claude/settings.json`.
 

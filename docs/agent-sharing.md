@@ -1,12 +1,11 @@
-# Claude Code and Codex sharing — implementation proposal
+# Claude Code and Codex sharing — installation contract
 
-Pending manual acceptance of [ADR-0003](adr/0003-claude-codex-sharing.md).
-This describes intended behavior; the current CLI still supports only Claude and
-Cursor. No consuming repository has been migrated.
+Implemented under accepted [ADR-0003](adr/0003-claude-codex-sharing.md).
+No consuming repository has been migrated.
 
 ## User-facing behavior
 
-For a new installation, the proposed default is Claude and Codex. Explicit
+For a new installation, the default is Claude and Codex. Explicit
 `--agent claude`, `--agent codex`, `--agent cursor` and comma-separated selections
 remain available. Interactive installation displays that choice plainly.
 
@@ -85,8 +84,8 @@ This is explicit progressive reading, not native file-glob enforcement.
 
 ## Safe migration and ownership
 
-The existing `purgeRetired()` removes `.agents/rules` recursively and strips the
-historical managed block. That path must leave unconditional retirement cleanup.
+`purgeRetired()` no longer removes `.agents/rules` or historical instruction blocks.
+Unselected Codex bridges are preserved until explicitly adopted.
 
 Before writes, inspect destination ownership, marker structure and file types
 for every root/module instruction file and asset. Validate module paths stay
@@ -126,24 +125,16 @@ whole `AGENTS.md` file.
 The executable work breakdown and acceptance criteria live in
 [the plan](../.work/agent-sharing/PLAN.md).
 
-Update the emitter, destination mapping, cleanup, lock handling, interactive
-defaults, `init`, `doctor` and `budget` together. Keep the registry's profile
-contents unchanged. Update the README, target reference and instruction-layout
-guide to distinguish supported behavior from advisory routing.
+Verification on 2026-09-18: `npm test` passed (329 passes, 7 toolchain skips,
+zero failures); strict ADR/document checks passed. Tests cover individual and
+combined targets, aliases and shared source assets, nested modules, legacy locks,
+ownership conflicts, preservation, diagnostics, updates and removal.
 
-Black-box installer checks must cover:
-
-- Fresh Claude/Codex, each alone, Cursor alone, and all three together.
-- Byte-identical skill outputs and one shared kit; deterministic repeated updates.
-- Module-scoped globs, multiple roots, language filtering and unscoped guidance.
-- Existing Claude/Cursor locks unchanged until Codex is explicitly selected.
-- Pane/user text preservation, malformed markers, conflicting files and symlinks.
-- Update and removal preserving unowned files and remaining shared destinations.
-- Missing/stale index entries, override diagnostics and honest budget labels.
-
-Run `npm test` after implementation. Separately exercise a disposable monorepo
-with Codex to inspect which instructions and rules it actually reads from the
-root and a module. Static output checks cannot establish model adherence.
+Two read-only evaluations using Codex CLI 0.154.0 in a disposable monorepo started
+at the root and at `apps/api`. Both read the module instruction files and applicable
+linked rules before completing a review spanning API and web files. The reports
+distinguished the two scopes. These observations support the discovery wording;
+they do not establish native dynamic loading or guaranteed model adherence.
 
 ## Deferred
 

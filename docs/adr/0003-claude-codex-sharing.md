@@ -38,7 +38,7 @@ target-specific outputs.
 - Keep one `.dev/kit`; retain manual ADR acceptance and existing gates. Native
   subagent conversion and per-user configuration changes are outside this work.
 
-The [implementation proposal](../agent-sharing.md) specifies migration and checks.
+The [installation contract](../agent-sharing.md) specifies migration and checks.
 
 ## Consequences
 

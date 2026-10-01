@@ -12,9 +12,9 @@ import { REPO, registry, runCli, runCliBare, withTmpRepo, read, has } from './he
 const lockOf = dir => JSON.parse(read(dir, '.claude-rules.lock'))
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
 
-test('experience contracts ship for both targets and the installed document gate runs', () => {
+test('experience contracts ship for all targets and the installed document gate runs', () => {
   withTmpRepo(dir => {
-    ok(runCli(['add', 'product', 'agent', '--level', 'gates'], dir))
+    ok(runCli(['add', 'product', 'agent', '--level', 'gates', '--agent', 'claude,codex,cursor'], dir))
     assert.ok(has(dir, '.claude/rules/product/experience.md'))
     assert.ok(has(dir, '.cursor/rules/product/experience.mdc'))
     assert.ok(has(dir, '.claude/skills/experience/SKILL.md'))
@@ -81,14 +81,14 @@ test('add --agent cursor: path-scoped rules get globs, agent rules alwaysApply',
     assert.doesNotMatch(crossCutting, /globs:/)
 
     assert.ok(!has(dir, '.cursor/agents'))
-    assert.match(r.stdout, /no file-based subagents/)
+    assert.match(r.stdout, /native subagent definitions are not emitted/)
     assert.ok(has(dir, '.dev/kit/rust/deny.toml'))
   })
 })
 
 test('retired --agent names fail loudly', () => {
   withTmpRepo(dir => {
-    for (const name of ['codex', 'opencode', 'antigravity']) {
+    for (const name of ['opencode', 'antigravity']) {
       const r = runCli(['add', 'rust', '--agent', name], dir)
       assert.equal(r.status, 1)
       assert.match(r.stderr, /Retired agent/)
@@ -107,15 +107,15 @@ test('add product: skills land as <name>/SKILL.md directories', () => {
   })
 })
 
-test('no --agent installs both remaining agents', () => {
+test('no --agent installs Claude and Codex', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust'], dir))
-    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'codex'])
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
-    assert.ok(has(dir, '.cursor/rules/rust/code-style.mdc'))
-    assert.ok(!has(dir, '.agents/rules'))
+    assert.ok(has(dir, '.agents/rules/rust/code-style.md'))
+    assert.ok(!has(dir, '.cursor/rules'))
     assert.ok(!has(dir, '.dev/rules'))
-    assert.ok(!has(dir, 'AGENTS.md'))
+    assert.ok(has(dir, 'AGENTS.md'))
     assert.ok(!has(dir, '.opencode'))
   })
 })
@@ -233,8 +233,8 @@ test('add/update purge leftover trees from retired agent targets', () => {
     const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     assert.ok(!has(dir, '.dev/rules'), 'Codex/opencode rule copies must go')
     assert.ok(!has(dir, '.opencode'), 'the opencode tree must go')
-    assert.ok(!has(dir, '.agents/rules'), 'Antigravity rules must go')
-    assert.equal(read(dir, 'AGENTS.md').trim(), '# Mine', 'user AGENTS.md content must survive the strip')
+    assert.ok(has(dir, '.agents/rules'), 'unowned Codex bridge must survive')
+    assert.match(read(dir, 'AGENTS.md'), /retired block/, 'unselected bridge is preserved')
     assert.match(r.stdout, /retired/)
   })
 })
@@ -247,7 +247,7 @@ test('update drops retired agents from an old lock', () => {
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
 
     const r = ok(runCli(['update'], dir))
-    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor'])
+    assert.deepEqual(lockOf(dir).agents, ['claude', 'cursor', 'codex'])
     assert.match(r.stdout, /Dropped retired agent/)
     assert.ok(!has(dir, '.dev/rules'))
     assert.ok(!has(dir, '.opencode'))
@@ -566,7 +566,7 @@ test('--module anchors the profile globs, for Claude and Cursor alike', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'api', '--agent', 'claude,cursor', '--module', 'apps/api'], dir))
 
-    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust', 'api'] })
+    assert.deepEqual(lockOf(dir).modules, { '.': [], 'apps/api': ['rust', 'api'] })
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /paths:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
     assert.match(read(dir, '.cursor/rules/api/rust.mdc'), /globs:\n {2}- "apps\/api\/\*\*\/\*\.rs"/)
   })
@@ -595,10 +595,10 @@ test('a rule whose every glob targets an unlocked language is not emitted', () =
   })
 })
 
-test('an install with no --module writes a lock with no modules key', () => {
+test('an install with no --module records explicit root membership', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
-    assert.ok(!('modules' in lockOf(dir)), 'an unscoped install must stay byte-compatible with older locks')
+    assert.deepEqual(lockOf(dir).modules, { '.': ['agent', 'rust'] })
   })
 })
 
@@ -607,7 +607,7 @@ test('--module extends the map instead of replacing it', () => {
     ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCli(['add', 'ts', '--module', 'apps/web'], dir))
 
-    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'], 'apps/web': ['ts'] })
+    assert.deepEqual(lockOf(dir).modules, { '.': [], 'apps/api': ['rust'], 'apps/web': ['ts'] })
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/, 'the first module must survive')
     assert.match(read(dir, '.claude/rules/ts/code-style.md'), /- "apps\/web\/\*\*\/\*\.ts"/)
   })
@@ -618,7 +618,7 @@ test('--root never anchors agent or product: their docs are one shared repo-root
     const r = ok(runCli(['add', 'rust', 'agent', 'product', '--level', 'gates', '--agent', 'claude', '--root', 'apps/portal'], dir))
 
     assert.match(r.stdout, /agent, product stay repo-wide/)
-    assert.deepEqual(lockOf(dir).modules, { 'apps/portal': ['rust'] })
+    assert.deepEqual(lockOf(dir).modules, { '.': ['agent', 'product'], 'apps/portal': ['rust'] })
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/portal\/\*\*\/\*\.rs"/)
     // Both spellings survive: the unprefixed one is what guarantees a repo-root
     // docs/adr/ matches on a loader that does not treat `**/` as zero segments.
@@ -655,6 +655,7 @@ test('doctor fails when a lock has agent or product wrongly anchored to a module
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', 'agent', '--level', 'gates', '--agent', 'claude', '--module', 'apps/portal'], dir))
     const lock = lockOf(dir)
+    lock.modules['.'] = lock.modules['.'].filter(p => p !== 'agent')
     lock.modules['apps/portal'].push('agent')          // simulate the pre-fix bug directly in the lock
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2))
 
@@ -669,7 +670,7 @@ test('remove drops the module bindings of the profiles it removes', () => {
     ok(runCli(['add', 'rust', 'api', '--agent', 'claude', '--module', 'apps/api'], dir))
     ok(runCliBare(['remove', 'api'], dir))
 
-    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'] })
+    assert.deepEqual(lockOf(dir).modules, { '.': [], 'apps/api': ['rust'] })
   })
 })
 
@@ -868,7 +869,7 @@ test('budget without an install exits 1', () => {
   })
 })
 
-test('doctor fails on a leftover AGENTS.md managed block', () => {
+test('doctor warns about an unselected AGENTS.md bridge without removing it', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
     writeFileSync(join(dir, 'CLAUDE.md'), '# p\n')
@@ -880,8 +881,8 @@ test('doctor fails on a leftover AGENTS.md managed block', () => {
     ].join('\n'))
 
     const r = runCliBare(['doctor'], dir)
-    assert.equal(r.status, 1)
-    assert.match(r.stdout, /AGENTS\.md still has a claude-rules managed block/)
+    assert.equal(r.status, 0)
+    assert.match(r.stdout, /AGENTS\.md has a managed block outside the selected targets/)
   })
 })
 
@@ -898,7 +899,7 @@ test('react is its own profile, so it can be anchored where portal-flat is not',
     const portal = read(dir, '.claude/rules/portal-flat/principle.md')
     assert.doesNotMatch(portal, /apps\/mobile/, 'a React Native app is not a flat-domain portal')
     assert.deepEqual(lockOf(dir).modules,
-      { 'apps/web': ['ts', 'react', 'portal-flat', 'portal-http'], 'apps/mobile': ['ts', 'react'] })
+      { '.': [], 'apps/web': ['ts', 'react', 'portal-flat', 'portal-http'], 'apps/mobile': ['ts', 'react'] })
   })
 })
 
@@ -951,7 +952,7 @@ test('--root is the same lever as --module', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude', '--root', 'apps/api'], dir))
     assert.match(read(dir, '.claude/rules/rust/code-style.md'), /- "apps\/api\/\*\*\/\*\.rs"/)
-    assert.deepEqual(lockOf(dir).modules, { 'apps/api': ['rust'] })
+    assert.deepEqual(lockOf(dir).modules, { '.': [], 'apps/api': ['rust'] })
   })
 })
 

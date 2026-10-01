@@ -4,12 +4,11 @@
 // truth is registry.json. It NEVER merges build config (lefthook/eslint) — kit
 // entries are scaffolded and their wiring is printed for you to do once.
 //
-// Two targets: Claude is the canonical source format; the installer emits/
-// transforms each asset for Cursor too. Skills (SKILL.md) and kit are
-// portable as-is; rules and agents are transformed per target.
+// Claude Markdown is the source format; Codex uses explicit rule references,
+// Cursor uses transformed native rules. Skills and kit remain portable.
 //
 // Usage:
-//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
+//   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,codex,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
 //   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
@@ -17,17 +16,19 @@
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
+import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 // giget is imported lazily (only add/update without --local need it) so init/list run with no deps.
 
 const registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
-const KNOWN_AGENTS = ['claude', 'cursor']
-const RETIRED_AGENTS = ['antigravity', 'codex', 'opencode']
-const RETIRED_DIRS = ['.dev/rules', '.opencode', '.agents/rules']
+const KNOWN_AGENTS = ['claude', 'codex', 'cursor']
+const DEFAULT_AGENTS = ['claude', 'codex']
+const RETIRED_AGENTS = ['antigravity', 'opencode']
+const RETIRED_DIRS = ['.dev/rules', '.opencode']
 
 // ---------------------------------------------------------------- arg parsing
 const argv = process.argv.slice(2)
@@ -67,16 +68,20 @@ const ROOT_HINT = new Set(['rust', 'ts', 'ts-web', 'ts-node', 'ts-tauri', 'go', 
 // what else was requested in the same `add` call.
 const ROOT_FORBID = new Set(['agent', 'product'])
 
-function unpackNames(names) {
+function unpackNames(names, quiet = false) {
   const aliases = registry.aliases || {}
   const out = []
   const seen = new Set()
+  const active = new Set()
   const walk = n => {
+    if (active.has(n)) throw new Error(`Alias cycle at ${n}`)
     if (aliases[n]) {
       if (!seen.has(n)) {
         seen.add(n)
-        console.log(`  unpack ${n} → ${aliases[n].join(' ')}`)
+        if (!quiet) console.log(`  unpack ${n} → ${aliases[n].join(' ')}`)
+        active.add(n)
         aliases[n].forEach(walk)
+        active.delete(n)
       }
       return
     }
@@ -95,15 +100,15 @@ function parseLevel() {
   return levelFlag
 }
 
-// Default is both targets — narrowing is a deliberate --agent choice.
-// `update` falls back to the locked set (or, for legacy locks with none, both).
+// New installations default to Claude and Codex; explicit targets select otherwise.
+// Existing installations retain their targets; explicit selections extend them.
 function parseAgents(fallback) {
-  const raw = agentFlag || fallback || KNOWN_AGENTS.join(',')
+  const raw = agentFlag || fallback || DEFAULT_AGENTS.join(',')
   const list = raw.split(',').map(s => s.trim()).filter(Boolean)
   const retired = list.filter(a => RETIRED_AGENTS.includes(a))
   const bad = list.filter(a => !KNOWN_AGENTS.includes(a) && !RETIRED_AGENTS.includes(a))
   if (retired.length) {
-    console.error(`Retired agent(s): ${retired.join(', ')}. Targets are ${KNOWN_AGENTS.join(', ')} (Codex, OpenCode and Antigravity were dropped).`)
+    console.error(`Retired agent(s): ${retired.join(', ')}. Targets are ${KNOWN_AGENTS.join(', ')} (OpenCode and Antigravity were dropped).`)
     process.exit(1)
   }
   if (bad.length) { console.error(`Unknown agent(s): ${bad.join(', ')}. Known: ${KNOWN_AGENTS.join(', ')}`); process.exit(1) }
@@ -127,7 +132,7 @@ function agentsFromLock(lock) {
 // agent. Nothing reads it the way Claude auto-reads .claude/rules/ — its only
 // consumers name the path themselves (the justfile, lefthook, settings.json).
 // ONE home, agent-neutral.
-const SKILL_DIR = { claude: '.claude/skills', cursor: '.agents/skills' }
+const SKILL_DIR = { claude: '.claude/skills', codex: '.agents/skills', cursor: '.agents/skills' }
 const KIT_DIR = '.dev/kit'
 const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put it
 
@@ -137,7 +142,7 @@ function walk(dir) {
   const out = []
   for (const name of readdirSync(dir)) {
     const abs = join(dir, name)
-    if (statSync(abs).isDirectory()) out.push(...walk(abs).map(f => ({ abs: f.abs, rel: join(name, f.rel) })))
+    if (lstatSync(abs).isDirectory()) out.push(...walk(abs).map(f => ({ abs: f.abs, rel: join(name, f.rel) })))
     else out.push({ abs, rel: name })
   }
   return out
@@ -184,7 +189,7 @@ function dumpFm(obj) {
 // A profile named by no module stays repo-wide, and a lock with no `modules` at all
 // behaves exactly as before — the installer only rewrites what it is asked to.
 const prefixesFor = (profile, modules) =>
-  Object.entries(modules || {}).filter(([, ps]) => ps.includes(profile)).map(([dir]) => dir.replace(/\/+$/, ''))
+  Object.entries(modules || {}).filter(([dir, ps]) => dir !== '.' && ps.includes(profile)).map(([dir]) => dir)
 // One exception, and it is the same one ROOT_FORBID makes at profile granularity:
 // a glob naming the shared `docs/` tree is never anchored. `docs/` is one tree for
 // the whole repo, never one per module, so prefixing it would silently stop matching
@@ -261,7 +266,8 @@ async function makeStaged(ref, entry) {
   }
   const { downloadTemplate } = await import('giget')   // cached after first call
   const dir = mkdtempSync(join(tmpdir(), 'claude-rules-'))
-  await downloadTemplate(`github:${registry.repo}/${entry.from}#${ref}`, { dir, force: true })
+  try { await downloadTemplate(`github:${registry.repo}/${entry.from}#${ref}`, { dir, force: true }) }
+  catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
   return { dir, isFile, name, temp: true }
 }
 const stagedFiles = s => s.isFile ? [{ abs: join(s.dir, s.name), rel: s.name }] : walk(s.dir)
@@ -269,8 +275,10 @@ const mdFiles = s => stagedFiles(s).filter(f => f.rel.endsWith('.md'))
 
 // -------------------------------------------------------------------- emitters
 // Signature: (staged, entry, agent, ctx) => note | null
-function emitSkill(s, entry, agent) {
+function emitSkill(s, entry, agent, ctx) {
   const dest = join(SKILL_DIR[agent], basename(entry.from))
+  if (ctx.skills.has(dest)) return null
+  ctx.skills.add(dest)
   for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return null
 }
@@ -313,17 +321,16 @@ function emitCursorRule(s, entry, agent, ctx) {
   logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
 }
 const emitSkip = (s, entry, agent) =>
-  `  • ${agent}: no file-based subagents — skipped "${entry.from}" (use ${agent}'s runtime agent feature instead).`
+  `  • ${agent}: native subagent definitions are not emitted — skipped "${entry.from}" (use ${agent}'s runtime agent feature instead).`
 
 const EMITTERS = {
   claude: { skill: emitSkill, kit: emitKit, rule: emitClaudeRaw,  agent: emitClaudeRaw },
   cursor: { skill: emitSkill, kit: emitKit, rule: emitCursorRule, agent: emitSkip },
+  codex: { skill: () => null, kit: emitKit, rule: () => null, agent: emitSkip },
 }
 
-// Leftover from Codex / OpenCode: a managed AGENTS.md block this installer used
-// to write. `update` strips it and leaves whatever the repo wrote around it.
+// Historical marker retained for safe Codex adoption.
 const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
-const AGENTS_END = '<!-- claude-rules:end -->'
 
 // --------------------------------------------------------------------- remove
 // Inverse of add: delete the destinations each emitter produced, per locked
@@ -339,6 +346,7 @@ function destsFor(entry, agent) {
     case 'kit':   return [join(KIT_DIR, name)]
     case 'rule':
       if (agent === 'claude') return [entry.to]
+      if (agent === 'codex') return [join('.agents/rules', name)]
       if (agent === 'cursor') return [isFileFrom(entry.from) ? join('.cursor/rules', name.replace(/\.md$/, '.mdc')) : join('.cursor/rules', name)]
       return []
     case 'agent':
@@ -375,26 +383,14 @@ function purgeLegacyKit() {
   if (rest.length) console.log(`  • ${LEGACY_KIT_DIR}/ kept: ${rest.join(', ')} — not ours.`)
 }
 
-function stripAgentsBlock() {
-  const file = 'AGENTS.md'
-  if (!existsSync(file)) return
-  const content = readFileSync(file, 'utf8')
-  const re = new RegExp(`\\n*${reEsc(AGENTS_START)}[\\s\\S]*?${reEsc(AGENTS_END)}\\n*`)
-  if (!re.test(content)) return
-  writeFileSync(file, content.replace(re, '\n').trimStart())
-  console.log('  ✓ AGENTS.md  (retired managed block removed)')
-}
-
-// Codex / OpenCode / Antigravity left trees and an AGENTS.md block behind.
-// add/update purge them the way they purge the legacy kit: by name, so a file
-// the repo put next to them survives. Cursor skills stay in `.agents/skills/`.
+// Only retired OpenCode and Antigravity outputs are cleaned here.
 function purgeRetired() {
   for (const dir of RETIRED_DIRS) {
     if (!existsSync(dir)) continue
     rmSync(dir, { recursive: true, force: true })
     console.log(`  ✗ ${dir}  (retired agent target — run git status before committing)`)
   }
-  stripAgentsBlock()
+  // Codex-owned and manually bridged AGENTS.md blocks are never retired cleanup.
 }
 
 function remove(profilesArg) {
@@ -403,6 +399,7 @@ function remove(profilesArg) {
   const { kept, dropped } = agentsFromLock(lock)
   if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
   const agents = kept.length ? kept : ['claude']
+  if (agents.includes('codex') && !lock.codex) throw new Error('Codex ownership inventory missing; update to adopt files before removing profiles')
   const full = profilesArg.length === 1 && profilesArg[0] === 'all'
   const targets = full ? lock.profiles.slice() : profilesArg
   const notInLock = targets.filter(p => !lock.profiles.includes(p))
@@ -413,6 +410,45 @@ function remove(profilesArg) {
   const fullUninstall = full || remaining.length === 0
   const levels = { ...(lock.levels || {}) }
   for (const p of toRemove) delete levels[p]
+  const modules = normalizeModules(remaining, Object.fromEntries(Object.entries(lock.modules || {})
+    .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false)
+  const stillNeeded = new Set([
+    ...remaining.flatMap(p => entriesAt(p, levels[p] || 'rules')),
+    ...(fullUninstall ? [] : registry.shared),
+  ].flatMap(e => agents.flatMap(a => destsFor(e, a))))
+  let codex
+  if (lock.codex) {
+    const files = {}
+    for (const [path, asset] of Object.entries(lock.codex.files)) {
+      const owners = asset.profiles.filter(p => remaining.includes(p))
+      if (fullUninstall || (asset.profiles.length && !owners.length)) continue
+      safePath(path)
+      if (!existsSync(path)) throw new Error(`Missing Codex asset: ${path}; update before removing profiles`)
+      const content = readFileSync(path)
+      if (hash(content) !== asset.hash) throw new Error(`Modified owned file: ${path}; reconcile before removing profiles`)
+      files[path] = { ...asset, profiles: owners, content }
+    }
+    for (const rule of lock.codex.rules)
+      if (isLanguageDead(rule.rawGlobs, remaining.filter(p => LANG_EXT[p]))) delete files[rule.path]
+    const rules = lock.codex.rules.filter(r => files[r.path]).map(r => {
+      const owners = files[r.path].profiles
+      const prefixes = owners.some(p => !prefixesFor(p, modules).length) ? [] : [...new Set(owners.flatMap(p => prefixesFor(p, modules)))]
+      const globs = scopeGlobs(r.rawGlobs, prefixes)
+      if (JSON.stringify(globs) !== JSON.stringify(r.globs)) {
+        const { fm, body } = splitFm(files[r.path].content.toString())
+        files[r.path].content = Buffer.from(`---\n${dumpFm({ ...fm, paths: globs })}\n---\n${body}`)
+      }
+      return { ...r, profiles: owners, globs }
+    })
+    codex = prepareCodex(files, rules, fullUninstall ? {} : modules, lock.codex)
+  }
+  // Preflight every removal before deleting anything.
+  for (const entry of [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])])
+    for (const agent of agents) for (const dest of destsFor(entry, agent)) {
+      safePath(dest)
+      if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
+    }
+  safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
   const entries = [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])]
@@ -421,10 +457,12 @@ function remove(profilesArg) {
     if (entry.kind === 'kit') removedKit = true
     for (const agent of agents) {
       for (const dest of destsFor(entry, agent)) {
+        if (stillNeeded.has(dest) || (codex && (agent === 'codex' && entry.kind !== 'kit' || dest.startsWith('.agents/skills/')))) continue
         if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
       }
     }
   }
+  if (codex) applyCodex(codex)
   if (fullUninstall) {
     purgeRetired()
     purgeLegacyKit()
@@ -433,10 +471,7 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    const modules = Object.fromEntries(Object.entries(lock.modules || {})
-      .map(([dir, ps]) => [dir, ps.filter(p => remaining.includes(p))])
-      .filter(([, ps]) => ps.length))
-    writeLock(lock.ref, remaining, agents, modules, levels)
+    writeLock(lock.ref, remaining, agents, modules, levels, codex?.inventory)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
@@ -444,13 +479,38 @@ function remove(profilesArg) {
 }
 
 // -------------------------------------------------------------------- install
-function readLock() { return existsSync(LOCK) ? JSON.parse(readFileSync(LOCK, 'utf8')) : null }
-function writeLock(ref, profiles, agents, modules, levels) {
-  const lock = { repo: registry.repo, ref, profiles, agents }
-  // Absent rather than empty: a lock with no modules must stay byte-identical to
-  // what earlier versions wrote, so an unscoped install never grows a field.
-  if (modules && Object.keys(modules).length) lock.modules = modules
+function normalizeModules(profiles, modules = {}, validateRoot = true) {
+  const out = {}
+  for (const [raw, names] of Object.entries(modules)) {
+    const dir = modulePath(raw)
+    const expanded = unpackNames(names, true)
+    if (expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
+    out[dir] = [...new Set([...(out[dir] || []), ...expanded])]
+  }
+  const bound = new Set(Object.entries(out).filter(([d]) => d !== '.').flatMap(([, ps]) => ps))
+  if (validateRoot && out['.']?.some(p => bound.has(p)))
+    throw new Error('Conflicting root membership: a profile cannot be assigned to both . and a module')
+  out['.'] = profiles.filter(p => !bound.has(p))
+  return { '.': out['.'], ...Object.fromEntries(Object.entries(out).filter(([d, ps]) => d !== '.' && ps.length)) }
+}
+function readLock() {
+  if (!existsSync(LOCK)) return null
+  safePath(LOCK)
+  const lock = JSON.parse(readFileSync(LOCK, 'utf8'))
+  lock.profiles = unpackNames(lock.profiles, true)
+  lock.modules = normalizeModules(lock.profiles, lock.modules)
+  if (lock.levels) {
+    const levels = {}
+    for (const [name, level] of Object.entries(lock.levels))
+      for (const p of unpackNames([name], true)) levels[p] = maxLevel(levels[p] || 'rules', level)
+    lock.levels = levels
+  }
+  return lock
+}
+function writeLock(ref, profiles, agents, modules, levels, codex) {
+  const lock = { repo: registry.repo, ref, profiles, agents, modules: normalizeModules(profiles, modules, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
+  if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
 
@@ -466,10 +526,18 @@ function migrateLegacyLock(lock) {
 
 const FINAL_MSG = {
   claude: 'Claude: .claude/rules/ auto-load (language rules path-scoped via `paths:`); .claude/agents/ + .claude/skills/ auto-discovered.',
+  codex: 'Codex: root/module AGENTS.md guide explicit reads of .agents/rules; skills in .agents/skills. Routing is advisory, not native glob loading.',
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
 async function install(profiles, ref, agents, modules, levels) {
+  modules = normalizeModules(profiles, modules, false)
+  safePath(LOCK)
+  for (const [dir, ps] of Object.entries(modules)) {
+    safePath(dir)
+    if (ps.some(p => !profiles.includes(p))) throw new Error(`Module ${dir} references an uninstalled profile`)
+    if (dir !== '.' && ps.some(p => ROOT_FORBID.has(p))) throw new Error(`Module ${dir}: agent/product must stay at root`)
+  }
   const unknown = profiles.filter(p => !registry.profiles[p])
   if (unknown.length) {
     const aliasNames = Object.keys(registry.aliases || {})
@@ -482,28 +550,76 @@ async function install(profiles, ref, agents, modules, levels) {
     ...registry.shared.map(e => ({ e, profile: null })),
     ...profiles.flatMap(p => entriesAt(p, levels[p] || 'rules').map(e => ({ e, profile: p }))),
   ]
+  const ownersFor = entry => owned.filter(({ e }) => e.kind === entry.kind && e.from === entry.from).map(({ profile }) => profile).filter(Boolean)
+  const prefixesOf = owners => owners.some(p => !prefixesFor(p, modules).length) ? [] : [...new Set(owners.flatMap(p => prefixesFor(p, modules)))]
   const scopes = Object.entries(modules || {}).map(([d, ps]) => `${d} → ${ps.join(', ')}`)
   const lv = profiles.map(p => `${p}@${levels[p] || 'rules'}`).join(', ')
   console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { kit: new Set(), scope: { prefixes: [], langProfiles } }
+  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
-  for (const { e: entry, profile } of owned) {
-    const s = await makeStaged(ref, entry)
-    ctx.scope = { prefixes: profile ? prefixesFor(profile, modules) : [], langProfiles }
-    for (const agent of agents) {
-      const emit = EMITTERS[agent][entry.kind]
-      if (!emit) { console.error(`  ! no emitter for kind "${entry.kind}" (${entry.from})`); continue }
-      const note = emit(s, entry, agent, ctx)
-      if (note) notes.push(note)
+  const staged = []
+  let codex
+  try {
+    // Fetch every source before changing any destination.
+    const stagedKeys = new Set()
+    for (const item of owned) {
+      const key = JSON.stringify(item.e)
+      if (stagedKeys.has(key)) continue
+      stagedKeys.add(key)
+      staged.push({ ...item, s: await makeStaged(ref, item.e) })
     }
-    if (s.temp) rmSync(s.dir, { recursive: true, force: true })
+    for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
+    for (const { e, s } of staged) for (const agent of agents) {
+      for (const dest of destsFor(e, agent)) {
+        safePath(dest)
+        if (existsSync(dest) && statSync(dest).isFile() !== s.isFile) throw new Error(`Conflicting destination: ${dest}`)
+        if (existsSync(dest) && statSync(dest).isDirectory())
+          for (const f of walk(dest)) safePath(f.abs)
+      }
+      if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
+        const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
+        safePath(path)
+        if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
+      }
+    }
+    if (agents.includes('codex')) {
+      const files = {}, rules = new Map()
+      for (const { e, s } of staged) {
+        if (!['rule', 'skill'].includes(e.kind)) continue
+        for (const f of stagedFiles(s)) {
+          if (e.kind === 'rule' && !f.rel.endsWith('.md')) continue
+          let content = readFileSync(f.abs)
+          const fm = e.kind === 'rule' ? splitFm(content.toString()).fm : {}
+          if (e.kind === 'rule' && isLanguageDead(fm.paths, langProfiles)) continue
+          const owners = ownersFor(e)
+          const prefixes = prefixesOf(owners)
+          if (e.kind === 'rule') content = Buffer.from(toScopedRuleText(content.toString(), prefixes) || content)
+          const path = join('.agents', e.kind === 'rule' ? 'rules' : 'skills', ...(s.isFile ? [] : [basename(e.from)]), f.rel)
+          files[path] = { content, profiles: owners, kind: e.kind }
+          if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
+        }
+      }
+      codex = prepareCodex(files, [...rules.values()], modules, readLock()?.codex)
+    }
+    for (const { e: entry, s } of staged) {
+      ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
+      for (const agent of agents) {
+        // Shared skills are written once by the ownership-aware Codex adapter.
+        if (codex && agent === 'cursor' && entry.kind === 'skill') continue
+        const note = EMITTERS[agent][entry.kind](s, entry, agent, ctx)
+        if (note) notes.push(note)
+      }
+    }
+    if (codex) applyCodex(codex)
+    purgeRetired()
+    purgeLegacyKit()
+    writeLock(ref, profiles, agents, modules, levels, codex?.inventory)
+  } finally {
+    for (const { s } of staged) if (s.temp) rmSync(s.dir, { recursive: true, force: true })
   }
-  purgeRetired()
-  purgeLegacyKit()
-  writeLock(ref, profiles, agents, modules, levels)
   console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
@@ -836,7 +952,7 @@ function initRepo() {
   if (!existsSync('.git')) console.log('• not a git repo — run `lefthook install` after `git init`.')
   else { const r = spawnSync('lefthook', ['install'], { stdio: 'inherit' }); if (r.error) console.log('• lefthook not found — install it, then run: lefthook install') }
 
-  console.log(`\nStill manual (repo-specific): move rustfmt.toml+deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\`/\`dup-check\` in the justfile \`check\` recipe (the locked techs are already wired) and uncomment \`mutate-diff\` once the mutation tools are installed. The gate SCRIPTS need no move any more — the recipes call them in ${KIT_DIR}/common/ directly, so an update refreshes gate and implementation together; \`just code-review\` still needs \`review_cmd\` set to this repo's agent CLI, \`.work/\` gitignored, and its pre-push trigger merged from common/lefthook.snippet.yml. Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the cursor snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
+  console.log(`\nStill manual (repo-specific): move rustfmt.toml+deny.toml→<rust_dir>, mutants.toml→<rust_dir>/.cargo/, golangci.base.yml→.golangci.yml, merge pyproject.snippet.toml→<python_dir>/pyproject.toml, mutation-ci.yaml→.gitea/workflows/; adapt eslint globalIgnores; enable \`adr-check\`/\`docs-check\`/\`rules-check\`/\`dup-check\` in the justfile \`check\` recipe (the locked techs are already wired) and uncomment \`mutate-diff\` once the mutation tools are installed. The gate SCRIPTS need no move any more — the recipes call them in ${KIT_DIR}/common/ directly, so an update refreshes gate and implementation together; \`just code-review\` still needs \`reviewer\` set to the chosen review agent, \`.work/\` gitignored, and its pre-push trigger merged from common/lefthook.snippet.yml. Harness layer (optional, one snippet per tool): merge common/hooks/settings.snippet.json into .claude/settings.json — or the cursor snippet next to it — see common/hooks/README.md for what it does and does not guarantee.`)
 }
 
 // --------------------------------------------------------------------- doctor
@@ -898,6 +1014,7 @@ function repoFiles() {
 const RULE_TREE = {
   claude: { root: '.claude/rules', key: 'paths', complete: true },
   cursor: { root: '.cursor/rules', key: 'globs', complete: true },
+  codex: { root: '.agents/rules', key: 'paths', complete: true },
 }
 // `agent` null = "whatever is installed", Claude first. Naming a target is how
 // `budget --agent cursor` becomes measurable at all: without it the Claude tree
@@ -942,6 +1059,7 @@ const sum = xs => xs.reduce((n, x) => n + x, 0)
 // unscoped rules on `alwaysApply: true`), so a routing change has to be checked
 // on both or it is only half verified.
 function budget(target, agent = null) {
+  if (agent === 'codex' || (!agent && installedRules().agent === 'codex')) return codexBudget(readLock(), target, globToRe)
   const { root, complete, rules, agent: measured } = installedRules(agent)
   if (!root) {
     console.error(agent
@@ -1106,7 +1224,7 @@ function doctor() {
     if (!existsSync(dir)) bad.push(`module "${dir}" does not exist — [${ps.join(', ')}] are anchored to a path that is not there`)
     else console.log(`  ✓ module ${dir}: ${ps.join(', ')}`)
     for (const p of ps.filter(p => !lock.profiles.includes(p))) bad.push(`module "${dir}" claims "${p}", which is not in the lock's profiles`)
-    for (const p of ps.filter(p => ROOT_FORBID.has(p))) bad.push(`module "${dir}" claims "${p}", whose rules anchor to one shared repo-root docs tree — remove it from that module's list in ${LOCK} (run \`update\` after); ${p} stays repo-wide regardless of --root`)
+    for (const p of ps.filter(p => dir !== '.' && ROOT_FORBID.has(p))) bad.push(`module "${dir}" claims "${p}", whose rules anchor to one shared repo-root docs tree — remove it from that module's list in ${LOCK} (run \`update\` after); ${p} stays repo-wide regardless of --root`)
   }
 
   // ---- 2. what the lock promises vs what is on disk
@@ -1114,19 +1232,28 @@ function doctor() {
   const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
-      for (const d of destsFor(e, a)) expected.set(d, { profile, agent: a })
+      for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
 
   for (const [dest, meta] of expected)
     if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
 
   for (const dir of RETIRED_DIRS)
-    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (Codex / OpenCode / Antigravity). Run \`update\` to purge it.`)
-  if (existsSync('AGENTS.md') && new RegExp(reEsc(AGENTS_START)).test(readFileSync('AGENTS.md', 'utf8')))
-    bad.push('AGENTS.md still has a claude-rules managed block (Codex / OpenCode leftover). Run `update` to strip it.')
+    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Run \`update\` to purge it.`)
+  if (agents.includes('codex')) {
+    for (const rule of lock.codex?.rules || []) {
+      const owners = rule.profiles.filter(p => lock.profiles.includes(p))
+      const prefixes = owners.some(p => !prefixesFor(p, lock.modules).length) ? [] : [...new Set(owners.flatMap(p => prefixesFor(p, lock.modules)))]
+      if (owners.length !== rule.profiles.length || JSON.stringify(scopeGlobs(rule.rawGlobs, prefixes)) !== JSON.stringify(rule.globs))
+        bad.push(`${rule.path} — stale Codex membership/scope; run update`)
+    }
+    auditCodex(lock, bad, warn)
+  }
+  else if (existsSync('AGENTS.md') && readFileSync('AGENTS.md', 'utf8').includes(AGENTS_START))
+    warn.push('AGENTS.md has a managed block outside the selected targets; preserved. Select codex to adopt it explicitly.')
 
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
-    for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) known.add(d)
+    for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind === 'kit') known.add(d)
   for (const d of known)
     if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
 
@@ -1214,14 +1341,16 @@ async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
   // had, and re-running with a second path adds it rather than moving it.
   const modules = { ...(lock && lock.modules ? lock.modules : {}) }
   if (rootDirRaw) {
-    const dir = rootDirRaw.replace(/\/+$/, '')
-    const forbidden = requested.filter(p => ROOT_FORBID.has(p))
+    const dir = modulePath(rootDirRaw)
+    const forbidden = dir === '.' ? [] : requested.filter(p => ROOT_FORBID.has(p))
     if (forbidden.length) console.log(`  ! ${forbidden.join(', ')} stay repo-wide — their rules anchor to one shared docs tree, not a module. --root ${dir} was not applied to them.\n`)
-    const scopable = requested.filter(p => !ROOT_FORBID.has(p))
+    const scopable = requested.filter(p => dir === '.' || !ROOT_FORBID.has(p))
+    if (dir === '.' && scopable.some(p => prefixesFor(p, modules).length))
+      throw new Error('Conflicting root membership: remove existing module bindings before assigning to .')
     modules[dir] = [...new Set([...(modules[dir] || []), ...scopable])]
     if (!modules[dir].length) delete modules[dir]
   }
-  const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.values(modules).some(ps => ps.includes(p)))
+  const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.entries(modules).some(([d, ps]) => d !== '.' && ps.includes(p)))
   if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
   if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
   await install(profiles, ref, agents, modules, levels)
@@ -1261,8 +1390,10 @@ async function promptAdd() {
       requested = valid
     }
 
-    const agentAns = (await rl.question('Agents — claude, cursor, or both [both]: ')).trim().toLowerCase()
-    const agentsRaw = !agentAns || agentAns === 'both' ? KNOWN_AGENTS.join(',') : agentAns
+    const currentAgents = agentsFromLock(readLock()).kept
+    const suggested = currentAgents.length ? currentAgents : DEFAULT_AGENTS
+    const agentAns = (await rl.question(`Agents — claude, codex, cursor (comma-separated) [${suggested.join(',')}]: `)).trim().toLowerCase()
+    const agentsRaw = !agentAns ? suggested.join(',') : agentAns
 
     const rootDirRaw = (await rl.question('Root directory to scope these profiles to (blank = repo-wide): ')).trim() || null
 
@@ -1286,7 +1417,7 @@ async function main() {
         await runAdd({ ...answers, ref: registry.defaultRef })
         break
       }
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
+      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
       await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag, ref: refFlag || registry.defaultRef })
       break
     }
@@ -1296,7 +1427,7 @@ async function main() {
       const { kept, dropped } = agentsFromLock(lock)
       if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
       const migrated = migrateLegacyLock(lock)
-      await install(migrated.profiles, refFlag || registry.defaultRef, parseAgents(kept.join(',') || 'claude'), lock.modules, migrated.levels)
+      await install(migrated.profiles, refFlag || registry.defaultRef, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
       break
     }
     case 'remove': {
@@ -1320,15 +1451,15 @@ async function main() {
         console.log('\nAliases (unpack on add/remove):')
         for (const [name, ps] of Object.entries(registry.aliases)) console.log(`  ${name}  → ${ps.join(' ')}`)
       }
-      console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (default: both; narrow with --agent)`)
+      console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (new installs: claude,codex; select with --agent)`)
       console.log(`Levels: ${LEVELS.join(' | ')} (default on add: rules; never ratchet)`)
       console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
       break
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
-        + '                                   install/pin profiles (default: both agents, --level rules)\n'
+        + '  add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
+        + '                                   install/pin profiles (default: claude,codex, --level rules)\n'
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
@@ -1337,7 +1468,7 @@ async function main() {
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
-        + '                                   --agent picks the measured target (default: claude, then cursor)\n'
+        + '                                   --agent picks the measured target (default: claude, then codex, then cursor)\n'
         + '  list                             show available & installed profiles')
   }
 }
