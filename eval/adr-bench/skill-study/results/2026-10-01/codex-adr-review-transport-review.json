@@ -1,0 +1,54 @@
+{
+  "runner": "codex",
+  "binary": "codex",
+  "modelRequested": null,
+  "skill": "adr-review",
+  "topic": "transport",
+  "phase": "review",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 98480,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".agents/skills/adr-review/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 228404,
+        "cached_input_tokens": 187136,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3874,
+        "reasoning_output_tokens": 736
+      },
+      "costUsd": null
+    }
+  ],
+  "response": "I’ll use the installed adr-review skill, read the full ADR set and index, then check the suspected drift against the four source files. I’ll leave the files unchanged.\nThe main inconsistencies are visible: the Rig records point to ADR-0015, but AGENTS.source.md still describes Rig; ADR-0014/0016 specify local history and iroh exchange, while the architecture excerpt still allows a shared git remote. I’m checking every other record before ranking the fixes.\nI reviewed the [ADR index](/tmp/adr-skill-study-Rn0Qhv/docs/adr/README.md), all 16 numbered records, and the two [decision](/tmp/adr-skill-study-Rn0Qhv/agent/decisions.md) [rules](/tmp/adr-skill-study-Rn0Qhv/agent/decision-records.md). **Fourteen records are marked Accepted; ADR-0002 and ADR-0003 are marked replaced by ADR-0015.** None is Proposed, Rejected, or Deprecated. I made no edits or status changes.\n\n### Status and dependency map\n\n| Records | Current decision and dependency |\n|---|---|\n| [0001](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0001-local-first-campaign-tool.md) → [0014](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0014-federated-local-first-exchange.md) → [0016](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0016-p2p-transport-iroh.md) | **Accepted, with amended scope.** Separate local workspaces and no shared campaign server, real-time sync, or runtime spoiler ACL remain binding. ADR-0014 adds bidirectional, filtered exchange, local history, and typed packets; ADR-0016 chooses iroh for P2P delivery alongside offline bundles. A shared git remote is explicitly rejected by 0014. |\n| [0002](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0002-agent-runtime-rig.md), [0003](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0003-model-backend-abstraction.md) → [0015](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0015-llm-client-rust-genai.md) | **0002–0003 replaced; 0015 Accepted.** Genai replaces Rig and its provider-specific backend machinery. The in-process agent, optional MCP path, thin testable `ModelBackend`, and model roles survive. |\n| [0004](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0004-tools-core-single-source.md), [0008](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0008-deprecate-claude-channel.md), [0011](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0011-agent-architecture-react-tiers.md) | **Accepted.** Business writes go through `tools/core`; the desktop agent replaces the Claude channel as the primary runtime; the main tool loop uses tools and bounded tasks, without a v1 swarm. ADR-0015 preserves 0011’s tiers while changing their Rig implementation. |\n| [0005](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0005-gm-player-profiles.md), [0009](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0009-temporal-facts-and-scopes.md) | **Accepted.** GM/player profiles govern corpus and truth posture. Markdown entities and session events carry temporal and visibility data; 0014 uses that scope data for projection before sending player packets. The detailed projection policy remains open in 0014. |\n| [0006](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0006-phase-ordering.md) | **Accepted.** Minimal shell, agent notes, and synthesis precede full portal depth; later retrieval amendments affect the older Phase 5 wording. |\n| [0007](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0007-agentic-rag-v0-bm25.md) → [0012](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0012-memory-search-retrieval-orchestrator.md) ↔ [0010](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0010-rejected-technical-scope.md) | **Accepted, with amendments.** BM25 becomes a lane of deterministic `memory_search`; 0012 reopens local dense retrieval while 0010 continues to reject a vector-server daemon, Neo4j, and a required GPU. The later amendment atop 0012 removes the dense-lane evaluation gate, but older body text still says it is required. |\n| [0013](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0013-wikilinks-backlinks-obsidian-vault.md) | **Accepted.** Wikilinks resolve to entity IDs and backlinks use an in-memory index, consistent with 0010’s rejection of a graph database. |\n\n### Prioritized actions\n\n| Priority | Finding and evidence | Affected ADRs | Action | Human decision? |\n|---|---|---|---|---|\n| 1 | [AGENTS.source.md](/tmp/adr-skill-study-Rn0Qhv/AGENTS.source.md:3) still instructs agents to use Rig. [CLAUDE.source.md](/tmp/adr-skill-study-Rn0Qhv/CLAUDE.source.md:3), [Cargo.toml](/tmp/adr-skill-study-Rn0Qhv/crates/agent/Cargo.toml:21), and [0015](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0015-llm-client-rust-genai.md:24) instead specify genai. Cargo confirms the declared dependency, not completion of every runtime behavior. | 0002, 0003, 0015; stale Rig wording in 0004, 0007, 0009–0011 | Correct the operational guide first. Add clear successor pointers where accepted records describe Rig as current, preserving their historical decisions. | **No** for factual corrections; **yes** for a changed runtime choice. |\n| 2 | [ARCHITECTURE.md](/tmp/adr-skill-study-Rn0Qhv/docs/ARCHITECTURE.md:6) allows an optional shared git remote for co-GMs, contradicting its own [local-history entry](/tmp/adr-skill-study-Rn0Qhv/docs/ARCHITECTURE.md:5) and [0014’s explicit rejection](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0014-federated-local-first-exchange.md:71). [0016](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0016-p2p-transport-iroh.md:44) specifies remote-free delivery. [0001’s amendment](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0001-local-first-campaign-tool.md:7) also calls git the “primary substrate,” which can mislead readers about exchange. | 0001, 0014, 0016 | Remove the remote allowance from the descriptive architecture text; clarify in cross-links that git history is local and packets travel by transport or bundle. | **No** to align with accepted decisions; **yes** to reinstate remote exchange. |\n| 3 | [0012’s later amendment](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0012-memory-search-retrieval-orchestrator.md:7) says dense/rerank lanes are decided and evaluation follows, while its [lane table and sequence](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0012-memory-search-retrieval-orchestrator.md:37) still gate them on evaluation. [0010](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0010-rejected-technical-scope.md:19) repeats that gate and treats BGE-M3 as optional, whereas the 0012 amendment names a CPU quantized BGE-M3 choice. | 0007, 0010, 0012; sequencing in 0006 | Reconcile the later amendment with the older guidance using short dated corrections or successor links. Retain evaluation as measurement if that is the accepted intent. | **No** if recording the stated amendment; **yes** if the gate or model choice is being reopened. |\n| 4 | [0012’s migration ticket link](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0012-memory-search-retrieval-orchestrator.md:5) points to a missing `backlog/migration/README.md`. The [index](/tmp/adr-skill-study-Rn0Qhv/docs/adr/README.md:37) says the next number is `0009` and gives creation rules that differ from [decision-records.md](/tmp/adr-skill-study-Rn0Qhv/agent/decision-records.md). All 16 index links themselves resolve. | 0012, index | Repair or remove the missing ticket link; make the index a slimmer status/dependency guide and point authoring instructions to the canonical rule file. | **No**. |\n\n**Consolidation:** No new ADR is needed to authorize the factual documentation corrections above. If the project wants to change accepted choices, a single consolidating *Proposed* ADR would **not** express one coherent decision: the LLM runtime, exchange transport, and retrieval gate can each be accepted independently. They need separate proposals scoped to the choice being reopened. Until a human accepts a replacement, [0015](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0015-llm-client-rust-genai.md), [0014](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0014-federated-local-first-exchange.md), [0016](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0016-p2p-transport-iroh.md), and the later amendment in [0012](/tmp/adr-skill-study-Rn0Qhv/docs/adr/0012-memory-search-retrieval-orchestrator.md:7) remain the recorded decisions."
+}

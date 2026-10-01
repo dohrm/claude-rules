@@ -1,0 +1,106 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "model": null,
+  "topic": "runtime",
+  "task": "current",
+  "mode": "full",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "A contributor follows the Rig instruction in AGENTS.source.md while updating crates/agent. What architecture and import boundary should the change follow today? Identify which parts of ADR-0002/0003 survive and which are replaced, and list concrete documentation or code impacts.",
+  "expectedEvidence": [
+    "ADR-0002",
+    "ADR-0003",
+    "ADR-0015",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "crates/agent/Cargo.toml"
+  ],
+  "durationMs": 64244,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "crates/agent/Cargo.toml",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 12,
+        "cache_creation_input_tokens": 41869,
+        "cache_read_input_tokens": 159820,
+        "output_tokens": 5516,
+        "output_tokens_details": {
+          "thinking_tokens": 1382
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 41869,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 4813,
+            "cache_read_input_tokens": 47110,
+            "cache_creation_input_tokens": 8501,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 8501
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.477284
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "I've read all 16 ADRs, the index, both instruction extracts and `crates/agent/Cargo.toml`. Here is the assessment. I edited no files.\n\n## Decision in force\n\n**ADR-0015 (Accepted, 2026-07-24) applies, not Rig.** The Rig instruction in `AGENTS.source.md` is out of date and should not be followed.\n\nWhat a change to `crates/agent` should look like today:\n\n- **LLM client:** `genai`, pinned exactly (`genai = \"=0.6.5\"` in `crates/agent/Cargo.toml`). No `rig`/`rig-core` dependency anywhere.\n- **Thin seam:** a small `ModelBackend` trait (completion + stream) with one implementation, `GenaiBackend` (~40–60 lines). Its job is to let tests fake the model without HTTP.\n- **Tool loop:** written in-house as a multi-turn tool-calling loop on `exec_chat_stream`, in `runtime/mod.rs` plus the tool adapter (formerly `rig_adapter.rs`). Reasoning comes from native tool-calling, with no hand-written `Thought/Action` scratchpad (ADR-0011, which ADR-0015 explicitly keeps).\n- **Prompt caching:** use it for the fixed prefix (tool definitions + system preamble).\n- **Import boundary:**\n  - `quill-agent` is the only crate allowed to depend on `genai`.\n  - Inside it, `genai::` may appear only in `crates/agent/src/backend/`. Runtime, tool adapter and everything else call the `ModelBackend` trait. ADR-0015 calls this the \"direct successor\" of the old \"no `rig::` outside agent\" rule.\n  - `tools/core`, `core`, `desktop` and `mcp` stay free of any LLM framework (ADR-0015 Neutral consequences).\n- **Business logic:** every campaign write still goes through `quill-tools-core` (ADR-0004, ADR-0011 invariants). The agent only adapts those functions as tools.\n\n## Evidence and supersession\n\n**Sources that say Rig (stale):**\n- `AGENTS.source.md` L12: \"Rig uniquement dans `crates/agent`\".\n- L16: \"agent Rig … en cours\".\n- L23: \"seul crate Rig (MIG-201+)\".\n- These match the old ADR-0002/0003 wording and contradict the accepted ADR.\n\n**Sources that say genai (current):**\n- `CLAUDE.source.md` L12, L16, L23 already state the ADR-0015 rule.\n- `crates/agent/Cargo.toml` matches it: its description cites ADR-0015, `genai` is pinned, and there is no Rig dependency or per-provider Cargo feature.\n- `docs/adr/README.md` index marks 0002 and 0003 as \"Remplacé par 0015\" and 0015 as \"Accepté\".\n\n**Which document wins:** the README says ADRs win over the vision and the legacy backlog. `AGENTS.source.md` L12 itself says to read the ticket's ADR before coding. Both point to ADR-0015.\n\n**ADR-0002**\n\n| Still true (per its own supersession note + ADR-0015) | Replaced |\n|---|---|\n| Agent runs in-process, one desktop binary | Rig as tool-loop/streaming/provider framework |\n| Desktop calls it through Tauri `agent_chat` (also ADR-0008) | \"Dependency on Rig, pin the version\" → becomes the same risk with `genai` (pre-1.0); pinning continues |\n| `quill mcp` stays optional for power users (also ADR-0004) | |\n| Single config file `~/.config/quill/config.yaml`; default model is user config | |\n| Remove `crates/llm` (MIG-213) — not repealed | |\n\n**ADR-0003**\n\n| Still true | Replaced / removed |\n|---|---|\n| A **minimal** `ModelBackend` trait (completion + stream) | `enum RigBackend { OpenAiCompat, OpenAi, Gemini }` |\n| Model roles `chat` / `extract` (+ `compose`, from ADR-0011) | `BackendCapabilities` (fail fast) |\n| YAML `providers` / `agent.*` config, living in `quill-core` | The `kind` discriminant used by the factory → replaced by genai's model-string resolution |\n| Confinement rule, carried over as \"`genai::` only in `agent/backend/`\" | Per-provider Cargo features `openai` / `gemini` / `openai-compat` |\n| No second `quill-llm` crate (not restated, but nothing in ADR-0015 conflicts) | Files `backend/{openai,openai_compat,gemini,client}.rs`; \"new provider = new enum variant + feature\" becomes \"new provider = model string\" |\n| `AgentRuntime` as the product layer (preamble, tool registry, sandbox, multi-turn) — its code is rewritten, its role stays | |\n\nADR-0015 also confirms that ADR-0003's confinement worked: on 2026-07-24, `rig::` appeared in only 6 files, all in `crates/agent`.\n\n## Alternative assessment\n\n- **Follow `AGENTS.source.md` literally (keep or add Rig in `crates/agent`).** Rejected by ADR-0015 (\"Rester sur Rig\"): provider and tool agnosticism and prompt caching are structurally weaker, and the ADR-0003 seam is a permanent maintenance cost.\n- **Use `genai::Client` directly everywhere in the agent, with no trait.** Also rejected by ADR-0015: the ~50-line seam pays for itself in testability and import discipline.\n- **async-openai or hand-written HTTP.** Rejected: not multi-provider, and it would rebuild the seam ADR-0015 removes.\n- **Python agent framework (LangGraph/LlamaIndex).** Still rejected by ADR-0010. Only its stated reason (\"Rig is already in place\", ADR-0002) is outdated; the single-language Rust argument still holds.\n- **Recommendation:** implement against ADR-0015 and treat the Rig line as documentation debt to fix.\n\n## Impacts\n\n**Documentation (for maintainers; no ADR status changes implied):**\n1. **`AGENTS.md` L12/L16/L23:** realign with `CLAUDE.md`. The rule should read \"no `genai::` outside `crates/agent/src/backend`\", the description \"genai client + in-house tool loop\", and the table \"only crate depending on `genai`\" (ADR-0015).\n2. **Accepted ADRs whose body text still mentions Rig.** Their decisions stand; only the wording is stale. A maintainer could add amendment notes, as already done for 0001, 0002 and 0003:\n   - ADR-0004: \"signatures adaptées pour Rig tools\".\n   - ADR-0007: \"Rig fastembed\" as a RAG v2 option. ADR-0012's amendment already chose fastembed-rs.\n   - ADR-0009: \"Pas de Rig hors `crates/agent`\" → would read \"pas de `genai`\".\n   - ADR-0010: the LangGraph row's reason, and \"ossature markdown + Rust + Rig + Tantivy\".\n   - ADR-0011: \"tool-calling natif Rig\", \"boucle Rig actuelle\", \"AgentRuntime (Rig)\", and \"Étend ADR-0003\" (the roles now live on through ADR-0015).\n   - ADR-0012: \"sans Rig\" (the intent, no LLM framework in `tools/core`, still holds).\n3. **`docs/adr/README.md`:** \"Numéro suivant : `0009-...`\" is stale; the next number is 0017.\n4. **Path wording:** ADR-0015 says `crates/agent/backend/`, while `CLAUDE.md` says `crates/agent/src/backend`. These are probably the same directory under Rust's `src/` layout, but the wording should be made consistent.\n\n**Code (in `crates/agent`):**\n5. **Expected end state:**\n   - No `rig::` imports remain.\n   - `backend/` contains only the `ModelBackend` trait and `GenaiBackend`.\n   - `RigBackend`, `BackendCapabilities`, the per-provider backend files and `rig_adapter.rs` are deleted or rewritten.\n   - `runtime/mod.rs` holds the in-house loop with streaming, cancellation and error handling. ADR-0015 flags a regression window here, so tests should cover it.\n   - Tests use a fake `ModelBackend`.\n6. **Config:** keep the `providers` / `agent.{chat,extract,compose}` schema and the `compose` → `chat` fallback (ADR-0011). Provider selection becomes genai model strings.\n7. **Dependencies:** no Rig, and no per-provider features in `Cargo.toml`. Keep the exact `genai` pin, and bump it only on purpose.\n8. **Other crates:** `tools/core`, `core`, `desktop` and `mcp` need no change and must not gain a `genai` dependency.\n\n## Uncertainties\n\n- **No Rust source in the fixture.** It contains only `crates/agent/Cargo.toml`, so I can't check that `rig::` is actually gone or that `genai::` is confined to `src/backend/`. Only the dependencies confirm the migration.\n- **Partial instruction files.** `AGENTS.source.md` and `CLAUDE.source.md` are extracts. I can't see whether other lines in the full files conflict, or which file a given tool actually loads.\n- **YAML `kind` field.** ADR-0015 says the `kind`/factory discriminant is \"replaced by genai resolution\" but doesn't say whether the field is removed or ignored.\n- **Open ADR-0002 items.** Whether `crates/llm` (MIG-213) has been deleted can't be determined from the fixture. The `quill-llm` ban isn't restated in ADR-0015, though nothing there contradicts it.\n- **No ticket.** The ticket's own ADRs (per L12) weren't provided, so ticket-specific rules may apply that I couldn't see.",
+  "modelResolved": "claude-opus-5-5",
+  "modelResolution": "CLI message events",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/claude-runtime-current-full.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

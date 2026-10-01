@@ -38,12 +38,25 @@ test('goal-setup installs as a standalone Codex skill', () => withTmpRepo(dir =>
   assert.ok(!has(dir, '.claude/skills/goal-setup/SKILL.md'))
 }))
 
+test('product-only install supplies self-contained decision skills without agent rules', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'product', '--agent', 'codex'], dir))
+  for (const skill of ['solution-exploration', 'adr-review']) {
+    assert.equal(read(dir, `.agents/skills/${skill}/SKILL.md`), read(REPO, `skills/${skill}/SKILL.md`))
+  }
+  assert.ok(!has(dir, '.agents/rules/agent/decisions.md'))
+  assert.ok(!has(dir, '.agents/rules/agent/decision-records.md'))
+}))
+
 test('each target and combined targets remain usable with identical skills', () => {
   for (const agents of ['claude', 'codex', 'cursor', 'claude,codex,cursor']) withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', 'product', '--agent', agents, '--level', 'gates'], dir))
     assert.ok(has(dir, '.dev/kit/common/gate.just'))
     if (agents.includes('claude')) assert.equal(read(dir, '.claude/skills/architect/SKILL.md'), read(REPO, 'skills/architect/SKILL.md'))
     if (agents.includes('codex') || agents.includes('cursor')) assert.equal(read(dir, '.agents/skills/architect/SKILL.md'), read(REPO, 'skills/architect/SKILL.md'))
+    for (const skill of ['solution-exploration', 'adr-review']) {
+      if (agents.includes('claude')) assert.equal(read(dir, `.claude/skills/${skill}/SKILL.md`), read(REPO, `skills/${skill}/SKILL.md`))
+      if (agents.includes('codex') || agents.includes('cursor')) assert.equal(read(dir, `.agents/skills/${skill}/SKILL.md`), read(REPO, `skills/${skill}/SKILL.md`))
+    }
     if (agents === 'codex') { ok(runCliBare(['init'], dir)); assert.ok(!has(dir, 'CLAUDE.md')) }
   })
 })

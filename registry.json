@@ -118,6 +118,8 @@
       { "from": "skills/migrate", "to": ".claude/skills/migrate", "kind": "skill", "_note": "Upgrade an existing claude-rules install: gap table in .work/migrate.md, then lock --root, imported just library, leftover-tree purge, CI callers. Not /onboard (no lock yet) and not /ci-setup (pipeline only)." },
       { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
       { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },
+      { "from": "skills/solution-exploration", "to": ".claude/skills/solution-exploration", "kind": "skill" },
+      { "from": "skills/adr-review", "to": ".claude/skills/adr-review", "kind": "skill" },
       { "from": "skills/design-system", "to": ".claude/skills/design-system", "kind": "skill" },
       { "from": "skills/experience", "to": ".claude/skills/experience", "kind": "skill" },
       { "from": "skills/ui-prompt", "to": ".claude/skills/ui-prompt", "kind": "skill" },

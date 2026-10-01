@@ -1,0 +1,150 @@
+{
+  "sourceRepository": "/home/michael/devs/quill (provenance only; runtime does not access it)",
+  "branch": "feat/fiches-personnage",
+  "commit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "files": [
+    {
+      "snapshot": "snapshot/docs/adr/0001-local-first-campaign-tool.md",
+      "source": "docs/adr/0001-local-first-campaign-tool.md",
+      "sha256": "585875d6c205ceb46c7c6c411e2e6350200ff1faa4880c354a8e8ec4e8cb5114",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0002-agent-runtime-rig.md",
+      "source": "docs/adr/0002-agent-runtime-rig.md",
+      "sha256": "a4c973ce859b0d7bec74c90d797000b48c9e44c96de0a650f55a7414adeccc12",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0003-model-backend-abstraction.md",
+      "source": "docs/adr/0003-model-backend-abstraction.md",
+      "sha256": "885fac408aedefeec0c14f5111ec147cfcc726a30eb5361bfdfb7476a5e0140a",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0004-tools-core-single-source.md",
+      "source": "docs/adr/0004-tools-core-single-source.md",
+      "sha256": "3564866a9fd3d18aeebee9d7630bc0c9585fff0a300e5f07e498cf252d0e07c5",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0005-gm-player-profiles.md",
+      "source": "docs/adr/0005-gm-player-profiles.md",
+      "sha256": "b606fd632a4f68746781dda23c6de9a4fd0afdf5a32b6dcb45e621f011d80dae",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0006-phase-ordering.md",
+      "source": "docs/adr/0006-phase-ordering.md",
+      "sha256": "acbc1041bc6f20c6852d2946f2218d5eae69d865de16301336a2e748cc995667",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0007-agentic-rag-v0-bm25.md",
+      "source": "docs/adr/0007-agentic-rag-v0-bm25.md",
+      "sha256": "026b44fdf43059638a5bcdb653ab3120bae17a774d6c6d50052f969eb99cade4",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0008-deprecate-claude-channel.md",
+      "source": "docs/adr/0008-deprecate-claude-channel.md",
+      "sha256": "243fc460a2e58b75c4277703c07e432219ad3a8dac4ce5152d59035c1f055b74",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0009-temporal-facts-and-scopes.md",
+      "source": "docs/adr/0009-temporal-facts-and-scopes.md",
+      "sha256": "8ab0ea20ddd97a7e246d0b09a1b8e5ef75a1b32b4f0b544a378cbb3866eb3b21",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0010-rejected-technical-scope.md",
+      "source": "docs/adr/0010-rejected-technical-scope.md",
+      "sha256": "7d5caf2f89542aac69751859dc4a3bfdd8a17ebb44d7ea9d3427160b7553fec0",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0011-agent-architecture-react-tiers.md",
+      "source": "docs/adr/0011-agent-architecture-react-tiers.md",
+      "sha256": "0d23ed63c20608193e6c3191bfcd7168ad6c37d7b972353570a5065c9a8c3dd2",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0012-memory-search-retrieval-orchestrator.md",
+      "source": "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+      "sha256": "81d3ce1f9897353d3343325c5219a1f5c2c79cdef8e6015ae05ff47289874705",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+      "source": "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+      "sha256": "35464c031c4ad522a3772b81cccbf3e2e8c0bfb574f9fc2ef9bf74243182f877",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0014-federated-local-first-exchange.md",
+      "source": "docs/adr/0014-federated-local-first-exchange.md",
+      "sha256": "db8f82919e85a9d2c7b9834e0482d26815613fa83f5d2ff0b7543353a1741585",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0015-llm-client-rust-genai.md",
+      "source": "docs/adr/0015-llm-client-rust-genai.md",
+      "sha256": "10e8a168319a58a6125211d34d9de225ac2c293c845a06f8c2817193c3804369",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/0016-p2p-transport-iroh.md",
+      "source": "docs/adr/0016-p2p-transport-iroh.md",
+      "sha256": "8fe902e4b461697dc5b6e3cbd3dc3d654adb2dfd99bb0223be86659e67622223",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "snapshot/docs/adr/README.md",
+      "source": "docs/adr/README.md",
+      "sha256": "208928936c528f33e6e6b8492967e957999f07d27cc90e3dc564380b31a7dee6",
+      "exactCopy": true
+    },
+    {
+      "snapshot": "fixtures/runtime/AGENTS.source.md",
+      "source": "AGENTS.md",
+      "sha256": "59ddba0a3a45c67bae8cdb6e114dc7ea00624e160cfde745975d882984d91a4c",
+      "exactCopy": false,
+      "sourceLines": [
+        12,
+        16,
+        23
+      ]
+    },
+    {
+      "snapshot": "fixtures/runtime/CLAUDE.source.md",
+      "source": "CLAUDE.md",
+      "sha256": "be24cb28e64dcc887f369b89897361e4e086cb20af72a9fb6a56e5884e1b17ca",
+      "exactCopy": false,
+      "sourceLines": [
+        12,
+        16,
+        23
+      ]
+    },
+    {
+      "snapshot": "fixtures/runtime/crates/agent/Cargo.toml",
+      "source": "crates/agent/Cargo.toml",
+      "sha256": "9c34674796af878bdfae73479e3b1e0707c010b61e56baa0eacbadfb3ddd1938",
+      "exactCopy": true,
+      "sourceLines": null
+    },
+    {
+      "snapshot": "fixtures/transport/docs/ARCHITECTURE.md",
+      "source": "docs/ARCHITECTURE.md",
+      "sha256": "8fbd6e5d5f96904379728196563653a044ca8f297f69a9c0229c0ba627a98841",
+      "exactCopy": false,
+      "sourceLines": [
+        67,
+        68,
+        69,
+        84
+      ]
+    }
+  ]
+}

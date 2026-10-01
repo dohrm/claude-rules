@@ -1,0 +1,27 @@
+[package]
+name = "quill-agent"
+version.workspace = true
+edition.workspace = true
+publish = false  # internal workspace crate, never goes to crates.io
+description = "Quill integrated agent runtime — genai LLM client + custom tool-loop (ADR-0015)"
+
+[dependencies]
+quill-core.workspace = true
+quill-tools-core.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "fs", "io-util"] }
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+chrono.workspace = true
+futures = "0.3"
+tokio-stream = "0.1"
+specta = { version = "2.0.0-rc.22", features = ["derive"] }
+# LLM client (ADR-0015). Pinned exactly: genai is pre-1.0 and 0.7 is still in
+# beta, so `=0.6.5` avoids surprise breakage on `cargo update`.
+genai = "=0.6.5"
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,83 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "search-option-a",
+  "phase": "reconcile",
+  "prompt": "Continue the installed /solution-exploration skill, pass 2 only. Read .claude/skills/solution-exploration/SKILL.md and provisional.md, then use the newly available decision records and other evidence relevant to the proposal. A synthetic decision history is now available. Reconcile the provisional recommendation with decisions in force and current evidence; explain whether it changes, identify concrete code/docs/migration impacts and decisions a human would need to reopen. Give a sourced final recommendation without editing files or changing ADR status.",
+  "modelObserved": "claude-opus-5-5[1m]",
+  "claudeCodeVersion": "2.1.283",
+  "skillRevision": "current",
+  "skillSha256": "b5a53403940700daddffd0afd822a2c71f5e744bb886deed21719e361b2dde9e",
+  "rulesRevision": "current",
+  "ruleFiles": [
+    {
+      "path": "rules/agent/decision-records.md",
+      "sha256": "e51c3981c8507a65ffb27adb6bf719d3579e5498549a603f4784f118a4f36a5c"
+    },
+    {
+      "path": "rules/agent/decisions.md",
+      "sha256": "8fc8a1716608ff415225d560303d98418d8ae6774c42d2bfb6cd6c6fd10f8c42"
+    }
+  ],
+  "sourceCommit": null,
+  "durationMs": 61484,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".claude/skills/solution-exploration/SKILL.md",
+    "docs/adr/0001-local-lexical-search.md",
+    "docs/adr/0002-hosted-vector-search.md",
+    "docs/adr/README.md",
+    "problem.md",
+    "provisional.md",
+    "rules/agent/decision-records.md",
+    "rules/agent/decisions.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-lexical-search.md",
+    "docs/adr/0002-hosted-vector-search.md"
+  ],
+  "readMeasurement": "paths inferred from visible tool events and shell globs; these are read attempts, not proof that every file was fully read",
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 8,
+        "cache_creation_input_tokens": 21658,
+        "cache_read_input_tokens": 96766,
+        "output_tokens": 5060,
+        "output_tokens_details": {
+          "thinking_tokens": 1398
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 21658,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 4502,
+            "cache_read_input_tokens": 29709,
+            "cache_creation_input_tokens": 5691,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 5691
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.2938492
+    }
+  ],
+  "response": "# Solution exploration, pass 2: how the provisional recommendation fits the decision record\n\n**Scope:** I read `rules/agent/decisions.md`, `rules/agent/decision-records.md`, `docs/adr/README.md`, ADR-0001 and ADR-0002, plus `problem.md` and `provisional.md` from pass 1. I edited no files and changed no statuses. There is no application code and no `ARCHITECTURE.md`, `DATA-MODEL.md` or `EXPERIENCE.md` in the workspace, so the code and docs impacts below describe what would be needed rather than citing existing files. The directory is also not a git repository (`git log` failed), so I could not check who committed which status. `docs/adr/README.md:8` says these are synthetic records.\n\n## 1. Decisions in force\n\nI classified each record by its explicit status line, not its title.\n\n| Record | Status line | What it decides | What it refused |\n|---|---|---|---|\n| ADR-0001 | `Statut : Accepté` (`0001-local-lexical-search.md:3`) | \"Use a local lexical index for the first release. Revisit search quality when real synonym and recall failures can be measured.\" (`:11`) | A dedicated Qdrant daemon, because of \"operating another process and its estimated 2 GB resident memory exceeded the laptop budget\" (`:19`) |\n| ADR-0002 | `Statut : Rejeté` (`0002-hosted-vector-search.md:3`) | Hosted embedding and vector search is refused: \"must search offline and campaign text must not leave the device\" (`:11`) | n/a. The record itself is the refusal. |\n\nADR-0001's context also says \"No evaluation yet shows that semantic retrieval materially improves campaign tasks\" (`:7`). Its consequences admit that \"semantic matches may be missed\" (`:15`). So the synonym gap was a known and accepted cost, not an oversight.\n\n## 2. Each pass-1 option against the record\n\n**A. Keep current lexical search.** This is what ADR-0001 currently enforces. But that ADR is limited to the first release and has its own revisit trigger, so it doesn't argue for leaving things as they are forever.\n\n**B. Better lexical (stemming, field boosts, fuzzy matching, alias glossary).** This fits inside ADR-0001: it is still \"a local lexical index\". Under `decisions.md:57-66` it counts as a local, reversible implementer choice, so it needs no ADR. The alias glossary would need a `DATA-MODEL.md` entry once that document exists.\n\n**C/D. In-process semantic index, with or without hybrid fusion.**\n- **Has this been refused before?** No record refuses it.\n  - ADR-0002 refused a *hosted* service. The contributor's proposal is a different solution: it runs offline, embeds on the device and makes no network call. ADR-0002's two objections don't apply, so nothing in ADR-0002 needs reopening.\n  - ADR-0001 refused a *separate Qdrant daemon*. The proposal deliberately avoids its first objection (no extra process).\n  - ADR-0001's second objection was about 2 GB of resident memory. That figure was for Qdrant, not for a small in-process model plus a flat index. My pass-1 estimate (very roughly 300–600 MB peak) has never been measured. So the memory objection is avoided only on paper until a benchmark shows peak RSS within 1.5 GB, including during indexing.\n- **Does it conflict with ADR-0001?** Turning semantic search on by default changes ADR-0001's decision, which is lexical-only. Keeping lexical as the base in a hybrid doesn't change that. It needs a new arbitration (`decisions.md:57-59`: \"technology/architecture selection… or a change to an Accepted decision\"). It also matches ADR-0001's own reopening condition, but only once failures are *measured*. Today the synonym misses are reported, not measured (`problem.md:3`).\n\n**E. Separate local service.** This is essentially the solution ADR-0001 refused. The \"another process\" objection still holds in full. The memory objection could change with a smaller sidecar, but nothing shows that. Pass 1 already ranked E last; the record backs that up. Reopening it would need a new reason, such as a crash-isolation requirement or several local AI features sharing one runtime, plus a measured memory figure.\n\n**Cloud embeddings or hosted search.** ADR-0002 rejects this, and the product constraints that drove the rejection still apply (`problem.md:3`). I'm not reopening it.\n\n## 3. Does the recommendation change?\n\n**No change of direction. Three refinements:**\n\n1. **The benchmark becomes the trigger written into ADR-0001, not just good practice.** Measuring real synonym and recall failures is exactly the revisit condition at `0001:11`. So step 1 is how the project legitimately reopens the search decision.\n2. **Peak memory becomes a gating criterion in its own right.** The only objection on record that could apply to the in-process design is memory. The benchmark must report peak RSS on the slowest supported laptop during a full index and during queries, compared with the 1.5 GB budget. It should also show how the result differs from the Qdrant 2 GB figure.\n3. **Option E moves from \"weaker\" to \"previously refused, objection still valid\".**\n\n## 4. Final recommendation\n\n**D, in stages, staying within the human decision boundary:**\n\n1. **Now, within ADR-0001, no ADR needed:**\n   - Build the benchmark: 100–200 labelled queries covering synonym, paraphrase, exact and invented-name, and misspelling cases. Report recall@10, nDCG, p95 query latency, indexing time and peak RSS.\n   - Ship the lexical improvements from B. They also serve as the baseline the semantic index must beat.\n2. **Prototype the in-process semantic index behind a feature flag, off by default.** It produces the evidence ADR-0001 asks for and doesn't change shipped behaviour. Because `decisions.md:50-53` says exploration doesn't authorise implementation, a human should approve this spike explicitly.\n3. **If the benchmark passes, draft a `Proposed` ADR for human arbitration.** Passing means it clearly improves synonym and paraphrase queries, doesn't regress exact-name queries, and peak RSS stays comfortably under 1.5 GB.\n   - The ADR would cover hybrid lexical-plus-semantic retrieval on the device, enabled by default.\n   - It would extend ADR-0001 (lexical stays the base and the fallback) or supersede it, depending on how the human wants to word it.\n   - A model or runtime choice that becomes a durable constraint (for example a redistributable licence or a native runtime per platform) should get its own record, because of the one-record-one-decision rule (`decision-records.md:145-154`).\n   - **If the human declines:** ADR-0001 stays in force unchanged, B's improvements remain, and the flag and prototype are removed.\n\n## 5. Impacts if D is adopted\n\n**Code (expected components; no code exists to cite):**\n- Embedding runtime and model packaged per OS and CPU architecture.\n- Chunker, vector store (flat index is enough for about 50k vectors), rank-fusion layer and lexical fallback path.\n- Incremental re-embedding on note edits, and a model-version field that triggers a full re-embed.\n- Memory guards on indexing batch size.\n\n**Docs:**\n- New ADR(s) as `Proposed`, and a row in `docs/adr/README.md`.\n- `DATA-MODEL.md`: chunk and vector schema, model version, glossary.\n- `EXPERIENCE.md`: indexing progress state, fallback behaviour, \"why this matched\" wording.\n- `ARCHITECTURE.md`: search component boundary and decision index.\n- If adopted, an `Implemented` section later, naming the benchmark test that shows the memory and quality claims (`decision-records.md:191-206`).\n\n**Migration:**\n- A one-time full embedding of existing notes on upgrade: minutes of CPU, so it needs a progress indicator and must stay interruptible.\n- A full re-embed whenever the model changes.\n- A bigger installer, and a licence check on the model.\n- Rollback is cheap: delete the vector index and turn off the flag. The lexical index is untouched.\n\n## 6. Questions for a human\n\n1. **Supersede or extend?** Should the semantic layer supersede ADR-0001 or extend it? Either way, only a human can set the status.\n2. **First release:** has the \"first release\" scope of ADR-0001 ended? If not, does the benchmark evidence justify revisiting it early?\n3. **The spike:** do you approve the flagged prototype?\n4. **E is not reopened.** It should only be reopened if crash isolation or a shared local AI runtime becomes a real requirement. ADR-0002 stays closed unless the offline and privacy constraints themselves change.\n\n**Remaining uncertainty:**\n- All quality, latency and memory figures are estimates.\n- How small models handle non-English text and invented names is unknown.\n- How painful per-platform packaging of the native runtime will be is unknown.\n\nThe benchmark answers the first two directly and should be run before anyone commits to a status change."
+}

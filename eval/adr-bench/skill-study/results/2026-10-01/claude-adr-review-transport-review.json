@@ -1,0 +1,95 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "adr-review",
+  "topic": "transport",
+  "phase": "review",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 142269,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 14,
+        "cache_creation_input_tokens": 48602,
+        "cache_read_input_tokens": 192440,
+        "output_tokens": 13557,
+        "output_tokens_details": {
+          "thinking_tokens": 6180
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 48602,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 10857,
+            "cache_read_input_tokens": 42421,
+            "cache_creation_input_tokens": 19923,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 19923
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.6985000000000001
+    }
+  ],
+  "response": "I've read all of `docs/adr/` (16 ADRs plus `README.md`), the two guidance files and the four sources you named. I edited nothing and changed no status.\n\nThe directory isn't a git repository, so I couldn't check who changed which status line or when. I could only verify things against the files.\n\n## Bottom line\n\n- **Rig → genai is a clean handoff at the decision level.** ADR-0015 replaces 0002 and 0003, and those two records point back to it. `crates/agent/Cargo.toml` matches 0015: it pins `genai = \"=0.6.5\"`, has no `rig` dependency, and its description cites ADR-0015. `CLAUDE.source.md` matches too. The leftover problems are outdated Rig mentions: `AGENTS.source.md` still states the old Rig rule, and five Accepted ADRs still mention Rig in their text.\n- **Git remote / iroh has one real contradiction and one stale line.**\n  - ADR-0001's amendment note says ADR-0014 makes git the main way to exchange data. ADR-0014 does the opposite: it rejects a git remote and keeps git only as local history.\n  - `ARCHITECTURE.md` still allows network traffic to \"le remote git partagé (co-MJ)\". That contradicts ADR-0014, ADR-0016 and its own row L69.\n- **No single consolidating Proposed ADR would be one coherent decision.** Details are in the last section.\n\n## Status and dependency map\n\n| ADR | Status (as recorded) | Depends on → | Still binding in practice | Drift found |\n|---|---|---|---|---|\n| [0001](docs/adr/0001-local-first-campaign-tool.md) | Accepted, scope amended by 0014 | — | No shared server, no real-time sync, no runtime access control (ACL) | Amendment note at :7 contradicts 0014 (git as main exchange). \"Export (git, …)\" at :17 is ambiguous |\n| [0002](docs/adr/0002-agent-runtime-rig.md) | Superseded by 0015 | — | Nothing (it's history). The \"in-process agent, MCP optional\" idea lives on through 0008 and 0004 | — |\n| [0003](docs/adr/0003-model-backend-abstraction.md) | Superseded by 0015 | 0011 | Nothing. The `chat`/`extract`/`compose` model roles and the YAML config are carried forward by 0015:32 | The \"no second `quill-llm` crate\" rule (:58) is no longer stated anywhere binding |\n| [0004](docs/adr/0004-tools-core-single-source.md) | Accepted | — | All writes go through `tools/core`; MCP is a thin wrapper | :15 \"adapted for Rig tools\" is stale |\n| [0005](docs/adr/0005-gm-player-profiles.md) | Accepted | 0001 | `gm`/`player` profiles, scope per profile | :49 says the player opens a pack *as* their workspace; 0014:38–40 says the player has their own workspace and the pack is a separate artifact *(needs checking)* |\n| [0006](docs/adr/0006-phase-ordering.md) | Accepted | 0007 | Phase order | :20 \"Phase 5 RAG v2 if needed\" was overtaken by the 0012 amendment. This is sequencing, which `decision-records.md:74` puts in `PLAN.md`, not an ADR |\n| [0007](docs/adr/0007-agentic-rag-v0-bm25.md) | Accepted, amended by 0012 | 0009 | Weighting results by source; the \"search before you assert\" prompt rule | :19 and :34–42 (Phase-5 dense search, \"Rig fastembed\") are overtaken |\n| [0008](docs/adr/0008-deprecate-claude-channel.md) | Accepted | 0004 | `agent_chat` runs in-process; channel-server removed | — |\n| [0009](docs/adr/0009-temporal-facts-and-scopes.md) | Accepted | 0001, 0007, 0010 | Events are the time axis; `scope ∈ public\\|gm_only\\|player:<id>` | :83 \"no Rig outside `crates/agent`\" is stale. :47 \"single GM workspace\" predates co-GM replicas. 0014:40 writes `scope: public\\|player`, not `player:<id>` |\n| [0010](docs/adr/0010-rejected-technical-scope.md) | Accepted, amended by 0012 | 0002 (premise) | No Qdrant server, Neo4j or LangGraph; no GPU required | :21 justifies rejecting LangGraph with \"Rig is already in place\"; :35 \"markdown + Rust + Rig + Tantivy\". Dense rows :19/:23/:30 are still \"eval-gated\" although the 0012 amendment lifted that gate |\n| [0011](docs/adr/0011-agent-architecture-react-tiers.md) | Accepted | **0003 (superseded)** | Native ReAct loop + tools/tasks; no sub-agents in v1 | :6 \"extends ADR-0003\"; :14, :34, :40, :80 describe a Rig loop. 0015:6/:49 declares 0011 preserved, but 0011 has no link back |\n| [0012](docs/adr/0012-memory-search-retrieval-orchestrator.md) | Accepted (+ amendment 2026-07-13) | 0007, 0009, 0010, 0011 | `memory_search` as a deterministic orchestrator; pluggable search lanes | The amendment at :7 is far over the 5-line limit and makes new technology choices (fastembed-rs, bge-m3, reranker, brute-force vector sidecar, no ANN index). It also contradicts the record's own :72 and :78 (\"only if the eval confirms\") |\n| [0013](docs/adr/0013-wikilinks-backlinks-obsidian-vault.md) | Accepted | 0010 (reopening condition) | `[[semantic_id]]` links, backlinks built in memory | Consistent |\n| [0014](docs/adr/0014-federated-local-first-exchange.md) | Accepted, amends 0001 | 0001, 0005, 0009, 0016 | Offline-first; local history with no remote; filtering done on the GM side; transport behind a port | :49 promises a separate ADR for the rights/projection model. None exists |\n| [0015](docs/adr/0015-llm-client-rust-genai.md) | Accepted, replaces 0002 and 0003 | 0011 | genai client, home-made tool loop, thin `ModelBackend` interface, `genai::` only under backend | :27 says `crates/agent/backend/`; CLAUDE.md says `crates/agent/src/backend` (wording only) |\n| [0016](docs/adr/0016-p2p-transport-iroh.md) | Accepted | 0014, 0001 | iroh/QUIC, Ed25519 `NodeId`, rendezvous holds no data, mDNS on LAN, bundle fallback | :51 makes adoption depend on a proof of concept. The always-on rendezvous and relay are missing from the egress line in ARCHITECTURE |\n\n**Index (`docs/adr/README.md`):** all 16 links and statuses match the files. Three problems:\n- :37 says the next number is `0009` (it should be `0017`).\n- :28–33 describes a section format (with \"Tickets liés\") that contradicts `agent/decision-records.md:77`.\n- It duplicates the decision table in `docs/ARCHITECTURE.md`, which `decision-records.md:73` names as the home of the index.\n\n## Prioritized actions\n\n| # | Finding | Evidence | ADRs | Proposed action | Human decision? |\n|---|---|---|---|---|---|\n| 1 | ARCHITECTURE allows a shared git remote for co-GMs; no Accepted ADR does | `ARCHITECTURE.md:6` (L84) vs :5 (L69), 0014:30/:55/:71, 0016:44 | 0014, 0016 | If no remote was intended: fix L84 as a normal doc edit. If a co-GM remote *is* wanted: write a separate Proposed ADR that amends 0014; until then 0014 stays binding | **Yes**: which is true |\n| 2 | ADR-0001's amendment note misstates ADR-0014 | 0001:7 vs 0014:71 | 0001, 0014 | Add a dated correction of 5 lines or fewer to the note; don't rewrite it | Yes (it's prose in an Accepted record) |\n| 3 | `AGENTS.md` still says \"Rig only in `crates/agent`\" and \"the only Rig crate\" | `AGENTS.source.md:3–5` vs `CLAUDE.source.md:3–5`, `Cargo.toml:6,23` | 0015 | Normal doc edit to match CLAUDE.md. Agents load this file, so it has the most effect | No |\n| 4 | Network egress line leaves out the iroh rendezvous/relay (and probably model downloads) | `ARCHITECTURE.md:6`; 0016:32/:53; 0012:7 | 0012, 0016 | Rewrite L84 as one line along with #1 | No (#1 decides the remote part) |\n| 5 | The 0012 amendment is really a new decision (dense-lane technology) and contradicts the gates in 0010 and 0012 | 0012:7 vs :72/:78; 0010:19/:23/:30 | 0010, 0012 | A separate Proposed ADR for the dense-search stack, amending 0010's rows and 0012's eval gate | **Yes** |\n| 6 | The rights/projection model ADR-0014 promised doesn't exist; scope values diverge | 0014:49, 0014:40 vs 0009:40 | 0005, 0009, 0014 | A separate Proposed ADR when that work starts (filtering is \"critical\", 0014:63) | Yes |\n| 7 | Accepted records still describe Rig | 0004:15, 0009:83, 0010:21/:35, 0011:6/14/40/80, 0007:42 | 0004, 0007, 0009, 0010, 0011 | Dated notes of 5 lines or fewer pointing to 0015. 0010's rejection still holds on Rust-native grounds | No (allowed as prose amendments) |\n| 8 | ADR-0011 depends on a superseded record | 0011:6, 0015:6 | 0011, 0015 | Add a cross-link \"role set now carried by 0015\" | No |\n| 9 | Index fixes | README:37, :28–33; duplicated in ARCHITECTURE | all | Fix the next number and point the format section to `decision-records.md`. Keep a single index, with the other linking to it | Choosing which index is canonical: light |\n| 10 | Phase ordering is planning, not a decision, and is out of date | 0006:20; `decision-records.md:74` | 0006, 0007 | If the migration phases are finished, consider Deprecated *(needs checking: I can't see the backlog)* | **Yes** |\n| 11 | Pack-as-workspace vs player-owned workspace | 0005:49 vs 0014:38–40 | 0005, 0014 | *Needs checking* against the PRD; settle it inside #6 if it's real | Maybe |\n| 12 | Old-format records: French status words, extra headings | `decision-records.md:22–33/:77` vs e.g. 0003:53, 0006:41, 0012:57 | most | Leave the old records as they are. *Needs checking:* whether `just adr-check` accepts `Accepté`/`Remplacé par` | Maybe |\n| 13 | 0016 is Accepted but adoption depends on a proof of concept | 0016:51 | 0016 | Optionally add a qualifier (\"Accepted — POC pending\") | Yes (status line) |\n\n## Consolidation verdict\n\nNo single consolidating Proposed ADR would express one coherent decision. Separate proposals are needed:\n\n- **Rig/genai:** no new ADR. 0015 is already the consolidation; the remaining work is the documentation clean-up in #3, #7 and #8.\n- **git remote / iroh:** don't merge. 0014 (what gets exchanged, and how it's filtered) and 0016 (the transport choice) can be accepted or replaced independently, which is exactly the separation 0014 argues for. A co-GM git remote, if you want one, is its own amendment to 0014.\n- **Retrieval (0007, 0010, 0012):** at most one narrow proposal for the dense-search technology (#5). 0012's orchestrator and 0007's source weighting are separate choices that still stand.\n- **Rights/projection:** its own proposal, already promised by 0014:49.\n\n## Constraints in force today\n\n- Local-first; no campaign server, real-time sync or runtime ACL (0001, 0014).\n- The app works fully offline; history is local with no remote. Nodes exchange typed packets, filtered on the GM side before sending (0014).\n- Transport is iroh with Ed25519 node identity. The rendezvous holds no data, LAN uses mDNS, and a portable bundle is the offline fallback (0016).\n- `genai` only in `crates/agent`, and `genai::` only under its backend module. Thin `ModelBackend` interface, home-made tool loop (0015).\n- All business logic and writes go through `tools/core`; MCP is an optional thin wrapper. The agent runs in-process (0004, 0008).\n- ReAct loop with tools and tasks, no sub-agents in v1; model roles `chat`/`extract`/`compose` (0011, carried by 0015).\n- One `memory_search` tool with lexical, entity, events and dense lanes. Results are merged by rank fusion (RRF). No GPU and no daemon (0012, 0010).\n- Facts live in time-stamped session events with scope metadata; source-weighted scoring (0009, 0007).\n- Obsidian-style `[[semantic_id]]` links with backlinks built in memory (0013).\n\nEverything in the Accepted, Superseded and Amended statuses above stays exactly as recorded."
+}

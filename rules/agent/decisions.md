@@ -32,9 +32,14 @@ its behavior is enough to explore alternatives. No special research mode is
 required. An accepted ADR records the current arbitration; its status is not
 evidence that the design still meets today's needs.
 
-Read the original rationale and constraints, check which still hold, and compare
-credible alternatives with keeping the current design. Include migration costs
-and recommend against change when the evidence supports that conclusion. Keep the
+For a focused challenge, use `/solution-exploration` when installed. If the skill
+is absent (for example in an agent-only installation), follow this procedure
+directly: compare credible options from the problem and current non-decision
+evidence first, and make a provisional recommendation visible before reading
+ADRs or decision-log sections of
+`docs/ARCHITECTURE.md`. Then read the original rationale, including rejected
+options, check which constraints still hold, and map impacts and migration costs.
+Recommend against change when the evidence supports that conclusion. Keep the
 exploration scoped to the reported problem; do not reopen unrelated decisions.
 
 Exploration does not authorize implementation. Complete the comparison before

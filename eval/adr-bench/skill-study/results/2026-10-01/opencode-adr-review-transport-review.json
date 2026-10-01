@@ -1,0 +1,120 @@
+{
+  "runner": "opencode",
+  "binary": "opencode2",
+  "modelRequested": null,
+  "skill": "adr-review",
+  "topic": "transport",
+  "phase": "review",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 160084,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".agents/skills/adr-review/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input": 3968,
+        "output": 18,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 668,
+        "output": 21,
+        "reasoning": 0,
+        "cache": {
+          "read": 5888,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 216,
+        "output": 166,
+        "reasoning": 0,
+        "cache": {
+          "read": 6400,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 5306,
+        "output": 444,
+        "reasoning": 0,
+        "cache": {
+          "read": 6528,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 19294,
+        "output": 243,
+        "reasoning": 13,
+        "cache": {
+          "read": 11648,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    }
+  ],
+  "response": "The corpus already records the Rig → genai replacement and the local-history/iroh exchange model as accepted. The clearest drift is in stale instructions and amendments; retrieval also has conflicting guidance about whether evaluation is a prerequisite. I’ll distinguish documentation repairs from choices that need human arbitration.\n## Outcome\n\nReviewed all **16 ADRs and the index**, using the installed skill and both governance files. **No files or statuses changed.**\n\nThe recorded set is **14 Accepted, 2 Superseded, no Proposed/Rejected/Deprecated records**. ADR-0010 is an **accepted decision to reject particular technologies**, not a Rejected ADR.\n\nThe main findings are:\n- **Rig → genai succession is explicit and supported by the manifest**; older instructions still mandate Rig.\n- **Git is local history, not the exchange transport**; older amendment/egress text conflicts with accepted federation and iroh decisions.\n- **Retrieval evaluation gating is internally inconsistent**, including within ADR-0012.\n- **Separate proposals are needed for independently decidable changes**—not one omnibus “current architecture” ADR.\n\nAcceptance is reported from the frozen status lines; this snapshot has no Git history to verify acceptance commits or implementation beyond the supplied manifest.\n\n## Status and dependency map\n\n**A** = Accepted; **S** = Superseded. Dependencies below include explicit extensions and architectural relationships.\n\n| ADR | Status | Current constraint and dependency |\n|---|---|---|\n| [0001](docs/adr/0001-local-first-campaign-tool.md) | A, amended by 0014 | Separate workspaces; no shared campaign server, real-time sync, or runtime anti-spoiler ACL. **0014 extends the single-user scope**, not these protections. Its amendment’s “git primary exchange” wording is stale. |\n| [0002](docs/adr/0002-agent-runtime-rig.md) | S → 0015 | Rig selection replaced. Its successor note preserves integrated, in-process desktop operation and optional MCP. |\n| [0003](docs/adr/0003-model-backend-abstraction.md) | S → 0015 | Typed Rig backends/capabilities replaced. Thin `ModelBackend` and model roles survive through **0015/0011**. |\n| [0004](docs/adr/0004-tools-core-single-source.md) | A | All campaign mutations through `tools/core`; MCP/agent/Tauri are adapters. Rig-specific adapter wording needs correction, not reversal of the boundary. |\n| [0005](docs/adr/0005-gm-player-profiles.md) | A | GM/player profiles govern corpus and truth posture, not network security. Depends on **0001**; publication is expanded by **0014**, with scope semantics from **0009**. Player note destination remains explicitly unresolved. |\n| [0006](docs/adr/0006-phase-ordering.md) | A | Minimal shell → notes agent → synthesis/retrieval → full portal. **0012** changes dense-retrieval timing, but no evidence establishes completion or obsolescence of the overall sequencing constraint. |\n| [0007](docs/adr/0007-agentic-rag-v0-bm25.md) | A, amended by 0012 | Tantivy lexical retrieval, source-aware ranking, sourced answers, no product wiki-build. `corpus_query` becomes a **0012** lane; ranking relates to **0009**. Dense timing text is stale/conflicting. |\n| [0008](docs/adr/0008-deprecate-claude-channel.md) | A | Replace Claude channel runtime with in-process `agent_chat`; external MCP remains optional under **0004**. Compatible with **0015**; deletion/completion unverified. |\n| [0009](docs/adr/0009-temporal-facts-and-scopes.md) | A | Markdown current-state entities plus temporal session events; query-time perspective/time filtering. Depends on **0001/0007/0010**; supplies **0012 retrieval** and **0014 projection**. No database or entity-ledger replacement. |\n| [0010](docs/adr/0010-rejected-technical-scope.md) | A, amended by 0012 | Reject server Qdrant, Neo4j/Graphiti, Python orchestration frameworks, mandatory GPU, memory-tier framework; defer some capture/extraction choices. **0013** activates the in-memory graph option without accepting a graph DB. Rig rationale and dense gate need reconciliation. |\n| [0011](docs/adr/0011-agent-architecture-react-tiers.md) | A, preserved by 0015 | Native tool-calling ReAct; bounded tools/tasks; `chat/extract/compose`; no autonomous swarm v1. Extends historical **0003**, uses **0004/0009**, frames **0012**. Rig-specific decision wording conflicts with **0015’s custom loop**, but tier taxonomy survives. |\n| [0012](docs/adr/0012-memory-search-retrieval-orchestrator.md) | A | Deterministic multi-lane `memory_search`, RRF, compact sourced results, scope/time filtering; no internal LLM. Extends **0007/0009**, amends **0010**, follows **0011**. Amendment removes dense evaluation prerequisite and selects CPU models/sidecar; body still requires the gate. |\n| [0013](docs/adr/0013-wikilinks-backlinks-obsidian-vault.md) | A | Obsidian-compatible wikilinks; exact ID/alias resolution; in-memory backlinks; YAML sidecar retained; entity-body authoring outside Quill. Builds on **0010**. “Non-ambiguous” links versus best-score handling of duplicate IDs needs clarification. |\n| [0014](docs/adr/0014-federated-local-first-exchange.md) | A | Federated separate workspaces; typed packets; GM-side projection; trusted full replicas; local history; pluggable transport and offline bundles. Amends **0001**, uses **0005/0009**; implemented architecturally by **0016**. Detailed projection policy explicitly awaits a dedicated ADR. |\n| [0015](docs/adr/0015-llm-client-rust-genai.md) | A | genai client, custom native tool loop, thin test seam, confined imports, pinned version, caching. Supersedes **0002/0003**, preserves **0011** and model roles. Manifest supports client selection/pinning, not all implementation claims. |\n| [0016](docs/adr/0016-p2p-transport-iroh.md) | A | iroh/QUIC, Ed25519 identity, invitation/GM allow-list, relay fallback, LAN discovery, offline degradation. Implements **0014’s port**, preserves **0001’s no-campaign-server principle**. Acceptance includes implementation risk and a POC requirement. |\n\n### Key dependency chains\n\n- **Runtime:** `0002 + 0003 → superseded by 0015`; `0011 → preserved by 0015`; `0004 + 0008 → continuing integration constraints`.\n- **Memory:** `0009 + 0007 → 0012`; `0010 → amended by 0012`; `0011 → deterministic-tool boundary`; `0010 → 0013’s in-memory backlinks`.\n- **Exchange:** `0001 + 0005 + 0009 → 0014 → 0016`. Projection policy is still open; transport selection does not settle it.\n\n## Prioritized action table\n\n| Priority | Finding and evidence | Affected ADRs | Proposed action | Human decision needed? |\n|---|---|---|---|---|\n| **P1** | Rig instructions contradict accepted succession: [AGENTS.source.md](AGENTS.source.md) still specifies Rig; [CLAUDE.source.md](CLAUDE.source.md) specifies confined genai imports; [Cargo.toml](crates/agent/Cargo.toml) pins `genai = \"=0.6.5\"` and has no Rig dependency. | 0002–0004, 0009–0011, 0015 | Align current instructions with 0015; add short dated successor clarifications to active records. Preserve historical Rig rationale in superseded records. Verify import confinement and runtime behavior in the full repository. | **No** for factual repairs; **yes** for changing 0015’s architecture. |\n| **P1** | Exchange drift: [0001’s amendment](docs/adr/0001-local-first-campaign-tool.md) calls git the primary exchange substrate; [0014](docs/adr/0014-federated-local-first-exchange.md) rejects remote-based exchange and keeps git local. [ARCHITECTURE.md](docs/ARCHITECTURE.md) agrees in its stack rows but still allows shared-remote egress and omits iroh traffic. | 0001, 0014, 0016 | Correct amendment and descriptive egress guidance to local history + typed packets via iroh/bundles. Document discovery/relay/peer traffic, including encrypted relay payloads. | **No** to reflect accepted decisions; **yes** to authorize remote-git exchange again. |\n| **P1** | Dense evaluation gate conflicts: [0012 amendment](docs/adr/0012-memory-search-retrieval-orchestrator.md) removes the prerequisite; its lane table, consequences and sequencing retain it. [0007](docs/adr/0007-agentic-rag-v0-bm25.md), [0010](docs/adr/0010-rejected-technical-scope.md) retain evaluation-gated guidance. | 0006, 0007, 0010, 0012 | Treat the explicit dated amendment as the recorded update, while flagging contradictory instructions. Verify its decision provenance in full history, then align cross-links/body guidance. If the gate is being reconsidered, use a separate Proposed ADR. | **Verification first**; **yes** for new arbitration, not wording alignment. |\n| **P1** | Projection policy is deliberately unfinished: [0014, “Question laissée ouverte”](docs/adr/0014-federated-local-first-exchange.md). [0016](docs/adr/0016-p2p-transport-iroh.md) adds peer authorization but does not specify payload projection rules. | 0005, 0009, 0014, 0016 | Dedicated Proposed ADR for recipient-specific projection: metadata, granularity, provenance handling and leakage validation. Keep peer trust separate from anti-spoiler filtering. | **Yes**. |\n| **P2** | Index creation instructions conflict with [decision-records.md](agent/decision-records.md): [README](docs/adr/README.md) suggests next number `0009`, localized statuses, and noncanonical sections; omits alternatives and Deprecated. | Index; future records | Update creation guidance to next number **0017**, canonical statuses/sections, and agent-writes-Proposed/human-commits-status rule. Do not normalize existing frozen statuses automatically. | **No** architectural decision; edit authorization required. |\n| **P2** | “No runtime ACL” versus [0016’s GM allow-list](docs/adr/0016-p2p-transport-iroh.md) can look contradictory. Relay wording also says “no campaign data” while acknowledging encrypted payload transit. | 0001, 0014, 0016 | Clarify: peer admission is not an anti-spoiler filesystem ACL; transport infrastructure is not a campaign server. Distinguish plaintext possession/persistence from encrypted transit. | **No** if clarifying existing meaning. |\n| **P2** | [0013](docs/adr/0013-wikilinks-backlinks-obsidian-vault.md) promises non-ambiguous exact links but accepts best-score resolution for duplicate semantic IDs. | 0013; 0012 resolution interface | Verify collision behavior/tests and distinguish search from link resolution. If selecting uniqueness or refusal-on-ambiguity, propose that policy separately. | **Yes** for changing accepted collision behavior. |\n| **P2** | Relative backlog link in [0012](docs/adr/0012-memory-search-retrieval-orchestrator.md) targets absent `backlog/migration/README.md`. PRD, vision and migration-plan references are also unavailable in this frozen snapshot. | 0012, 0014, index | Verify against the full repository before calling them broken upstream; repair factual paths if necessary. All ADR-to-ADR links resolve locally. | **No**. |\n| **P3** | Length/shape drift against [record budgets](agent/decision-records.md): simple whitespace counts exceed 600 for **0009, 0011, 0012, 0014–0016**; many records have extra sections. No canonical checker/budget override is supplied. | Those records; broader corpus | Verify with the actual checker. Move descriptive overflow to linked data-model/architecture/experience documents when authorized; preserve arbitration and history. Avoid wholesale rewrites merely to meet today’s format. | **No** for faithful documentation cleanup; **yes** for splitting/replacing decisions. |\n| **P3** | Phase completion, dormant `compose`, profile routing, event persistence and iroh POC cannot be independently verified here. | 0005, 0006, 0008, 0011, 0012, 0016 | Check full code/tests/backlog. Use evidence-backed `Implemented` notes where appropriate; do not infer Deprecated from age or completion. | **Only if retiring/changing a constraint**. |\n\n## Consolidation recommendation\n\n**Do not create one Proposed ADR combining runtime succession, federation/transport, retrieval gating and projection policy.** These choices can be accepted independently, so such consolidation would violate [one record, one decision](agent/decision-records.md).\n\n- **Rig/genai and remote-git/iroh drift need documentation reconciliation, not new arbitration:** 0015 and 0014/0016 already record the decisions.\n- **Detailed projection policy needs its own Proposed ADR.**\n- **Reopening retrieval gating or link-collision policy requires separate proposals.**\n- A narrowly scoped replacement could consolidate multiple older records only around **one coherent choice**, explicitly identifying what is superseded and what survives. Do not supersede an entire multi-topic record to retire one clause.\n\nUntil human acceptance and committed status changes, **all Accepted constraints remain binding**.\n\nFor a slimmer index, retain one row per ADR with **status, governing successor/amendment, and a one-line constraint**, grouped into runtime, memory, exchange and historical records. Link contributors to 0015 rather than reloading superseded Rig designs, and cross-link 0014/0016 while preserving the semantic/transport boundary."
+}

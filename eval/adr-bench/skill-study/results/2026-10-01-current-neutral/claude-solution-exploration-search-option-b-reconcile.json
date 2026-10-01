@@ -1,0 +1,83 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "search-option-b",
+  "phase": "reconcile",
+  "prompt": "Continue the installed /solution-exploration skill, pass 2 only. Read .claude/skills/solution-exploration/SKILL.md and provisional.md, then use the newly available decision records and other evidence relevant to the proposal. A synthetic decision history is now available. Reconcile the provisional recommendation with decisions in force and current evidence; explain whether it changes, identify concrete code/docs/migration impacts and decisions a human would need to reopen. Give a sourced final recommendation without editing files or changing ADR status.",
+  "modelObserved": "claude-opus-5-5[1m]",
+  "claudeCodeVersion": "2.1.283",
+  "skillRevision": "current",
+  "skillSha256": "b5a53403940700daddffd0afd822a2c71f5e744bb886deed21719e361b2dde9e",
+  "rulesRevision": "current",
+  "ruleFiles": [
+    {
+      "path": "rules/agent/decision-records.md",
+      "sha256": "e51c3981c8507a65ffb27adb6bf719d3579e5498549a603f4784f118a4f36a5c"
+    },
+    {
+      "path": "rules/agent/decisions.md",
+      "sha256": "8fc8a1716608ff415225d560303d98418d8ae6774c42d2bfb6cd6c6fd10f8c42"
+    }
+  ],
+  "sourceCommit": null,
+  "durationMs": 58430,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".claude/skills/solution-exploration/SKILL.md",
+    "docs/adr/0001-local-lexical-search.md",
+    "docs/adr/0002-hosted-vector-search.md",
+    "docs/adr/README.md",
+    "problem.md",
+    "provisional.md",
+    "rules/agent/decision-records.md",
+    "rules/agent/decisions.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-lexical-search.md",
+    "docs/adr/0002-hosted-vector-search.md"
+  ],
+  "readMeasurement": "paths inferred from visible tool events and shell globs; these are read attempts, not proof that every file was fully read",
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 22618,
+        "cache_read_input_tokens": 126125,
+        "output_tokens": 4665,
+        "output_tokens_details": {
+          "thinking_tokens": 1280
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 22618,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 3693,
+            "cache_read_input_tokens": 30576,
+            "cache_creation_input_tokens": 5784,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 5784
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.299509
+    }
+  ],
+  "response": "# Pass 2: checking the search recommendation against the decision records\n\n**Result:** the recommendation stays the same, with two corrections. The contributor's proposal is the same one ADR-0002 already rejected, and the reasons for that rejection still hold. Local work fits within ADR-0001. Adding semantic retrieval would need a new ADR that a human approves. I didn't edit any files or change any ADR status.\n\n## Sources read in this pass\nI read these only after the pass-1 recommendation was written down in `provisional.md`:\n- `rules/agent/decisions.md` and `rules/agent/decision-records.md`: the decision rules.\n- `docs/adr/README.md`: the decision index.\n- `docs/adr/0001-local-lexical-search.md`: status line `Statut : Accepté`, so it is in force.\n- `docs/adr/0002-hosted-vector-search.md`: status line `Statut : Rejeté`, so it is a recorded refusal.\n\nThere is no code and no `docs/ARCHITECTURE.md` in the workspace, so the code impacts below are about future work, not existing files.\n\n## What the records add to pass 1\n\n| Pass-1 unknown | What the records say |\n|---|---|\n| Availability policy | \"The product must work offline\" (ADR-0001, Context). \"The product must search offline\" (ADR-0002, Decision). |\n| Data-handling policy | \"campaign text must not leave the device\" (ADR-0002, Decision). |\n| Memory and process limits | A Qdrant daemon was refused because it adds another process and needs about 2 GB resident memory, which exceeds the 1.5 GB budget (ADR-0001, Alternatives). |\n| When to revisit search | \"Revisit search quality when real synonym and recall failures can be measured\" (ADR-0001, Decision). |\n\n`problem.md` says no *current* policy was supplied. A missing policy is not a changed policy. The constraints recorded in the ADRs stay in force until a human changes them. ADR-0002 says this itself: the constraints change \"through a new decision.\"\n\n## The rejected proposal compared with today's proposal\n- **Option D (hosted embeddings and vector queries)** is the same solution ADR-0002 rejected: send note text to a hosted service and query it over the network. The reasons for the rejection (offline search, text stays on the device) are still in force, and there is no new evidence against them: no benchmark and no policy change. **D stays rejected.**\n- **Option E (hosted embedding API, local index)** is a different design, because offline queries could still work. But it still sends campaign text off the device, so the data-handling objection applies directly. New notes also couldn't get semantic search while offline. **E is excluded by the same reasoning.** It isn't a way around ADR-0002.\n\n## How each local option fits the decisions in force\n- **Option B (better lexical search: BM25, stemming, aliases)** stays within ADR-0001, since it is still a local lexical index. These are local, reversible implementation choices, and `decisions.md` says those don't need an ADR.\n- **Option C (local embeddings merged with BM25)** doesn't conflict with any recorded constraint. It does change the retrieval technology chosen in ADR-0001, which covered only \"the first release.\" Under `decisions.md` (\"technology/architecture selection\"), that needs a new ADR, written as `Proposed`, for a human to decide. ADR-0001 also adds a constraint pass 1 had only estimated: **no separate vector daemon**. The model and index must run inside the app, and total resident memory must be measured against the 1.5 GB budget. My pass-1 figure of \"a few hundred MB\" is an estimate, not a measurement. At about 25k chunks, a simple in-process search over roughly 38–77 MB of vectors is enough.\n\n## Changes from pass 1\n1. **Step 4 is narrowed.** Keep an interface around the embedding provider, but only so local models can be swapped (with model and version tags, and re-embedding on upgrade). Don't present it as preparation for D or E. Those are ruled out unless a human reopens ADR-0002.\n2. **Step 1 becomes required, not just good practice.** The evaluation set (recall@10, MRR, p95 latency, with synonym and exact-name cases) is exactly the evidence ADR-0001 says must exist before search quality is revisited. Without it, there is no case for C.\n\n## Impacts and migration costs\n- **B:** analyser and stemming settings, an alias layer built from note metadata, and an index rebuild. Low cost and easy to undo. No ADR needed. Describe it in the change summary.\n- **C:**\n  - A bundled model runtime, which increases installer size.\n  - Embedding the whole corpus on first run, then re-embedding notes incrementally as they're edited.\n  - Stored vectors tagged with the model version.\n  - Merging lexical and semantic results (for example with reciprocal rank fusion).\n  - Measuring memory and battery use on the slowest target laptop.\n  - Docs: a new `Proposed` ADR for local hybrid retrieval. It would extend or supersede ADR-0001 once a human decides. Overflow goes to `ARCHITECTURE.md` when that file exists.\n  - If the ADR is declined, ADR-0001 stays as it is and B is the ceiling.\n- **D or E:** these would need two decisions changed first (below). They would also bring sync and conflict handling, accounts and auth, a vendor contract, a privacy statement, and an offline fallback that keeps two search paths to maintain. This is the highest cost and the hardest to reverse.\n\n## Decisions a human would need to reopen\n- **To adopt D or E:** an explicit product decision to drop the offline-search requirement (ADR-0001 Context, ADR-0002), the on-device data rule (ADR-0002), or both. It would be recorded as a new ADR that reverses ADR-0002. Good reasons to reopen it would be:\n  - a committed roadmap for sync or collaboration;\n  - consent to send notes to a named vendor;\n  - benchmark results showing local models fall short by a margin users would notice.\n- **To adopt C:** a new ADR on retrieval technology. Nothing has to be reopened, because it fits all recorded constraints.\n- **Nothing to reopen for B.**\n\n## Final recommendation\n1. Build the evaluation set and measure a baseline, which is ADR-0001's trigger for revisiting search.\n2. Ship B under ADR-0001.\n3. Prototype C in-process. Keep it only if it clearly beats B on the evaluation set within 1.5 GB and the latency limits. If it does, draft a `Proposed` ADR for a human to decide.\n4. Decline the hosted proposal. It repeats the option ADR-0002 rejected, and those reasons still hold.\n\n## Remaining uncertainty\n- **Are the recorded constraints still current?** The ADRs aren't dated, and the brief doesn't confirm them. This is the main question to ask the product team. It is not grounds to treat the constraints as lapsed.\n- **Unmeasured:** C's memory use, model quality on campaign vocabulary, and the languages notes are written in.\n- **How large the miss problem is:** if most misses are aliases, B alone may be enough."
+}

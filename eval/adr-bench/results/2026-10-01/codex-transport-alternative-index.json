@@ -1,0 +1,53 @@
+{
+  "runner": "codex",
+  "binary": "codex",
+  "model": null,
+  "topic": "transport",
+  "task": "alternative",
+  "mode": "index",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+  "expectedEvidence": [
+    "ADR-0014",
+    "ADR-0016",
+    "docs/ARCHITECTURE.md"
+  ],
+  "durationMs": 147684,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 165684,
+        "cached_input_tokens": 142336,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2506,
+        "reasoning_output_tokens": 637
+      },
+      "costUsd": null
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "I’ll start with the ADR index, then follow the transport and co-GM references needed to assess the proposal. I’ll keep the accepted decisions separate from any older documentation.\nADR-0014 explicitly rejects a shared git remote for exchange, while ADR-0016 selects iroh for the packet transport. I’m checking the referenced profile and scope decisions and the current docs for concrete impacts and stale guidance.\n## Decision in force\n\nADR-0014 chooses local history and **typed packets** delivered through a transport port. A trusted co-GM receives a full workspace replica, with conflicts reconciled through the history layer; players receive only MJ-filtered projections. It explicitly rejects a shared git remote as the exchange substrate and retains git only for local history. ADR-0016 selects iroh for online packet delivery, alongside the portable bundle for offline exchange. These are accepted decisions, not statuses to change in this review. [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [ADR-0016](<snapshot/docs/adr/0016-p2p-transport-iroh.md>).\n\n## Evidence and supersession\n\nADR-0001’s original one-way export model was amended by ADR-0014 to allow bidirectional, federated exchange. Its introductory amendment note says “git as primary substrate,” but that conflicts with ADR-0014’s explicit local-only history decision and rejection of remote/fork exchange. Likewise, the remote-git egress line in `docs/ARCHITECTURE.md` conflicts with that ADR and with the same document’s local-git summary. Neither line establishes the current transport choice. [ADR-0001](<snapshot/docs/adr/0001-local-first-campaign-tool.md>), [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [architecture extract](<fixtures/transport/docs/ARCHITECTURE.md>).\n\n## Alternative assessment\n\nThe strongest case is **specifically co-GM exchange**: co-GMs are trusted to hold the complete workspace, so a full git clone does not create the player spoiler exposure that defeats a shared player remote. Git also fits the chosen local commit history, offers familiar review and manual conflict workflows, and could avoid iroh’s substantial dependency and rendezvous operation for that flow. Those are plausible advantages, not ADR decisions. [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [ADR-0016](<snapshot/docs/adr/0016-p2p-transport-iroh.md>).\n\nThe tradeoff is that a shared remote stores campaign material and introduces hosting, availability, access, and credential management. That changes ADR-0014’s “no campaign server, no remote required” design. It does not remove manual conflict resolution, and it cannot safely become the player exchange path: a player clone exposes MJ content on disk, regardless of application scopes. Those scopes are export metadata, not runtime access control. A remote used only to carry typed packets would preserve more of the exchange model, but it would still be a new adapter and a departure from ADR-0014’s stated git-local-only choice. [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [ADR-0009](<snapshot/docs/adr/0009-temporal-facts-and-scopes.md>).\n\n## Impacts\n\nAdopting the proposal would require an explicit revision or new ADR defining whether the remote holds full co-GM replicas or packet artifacts, what campaign data the host may retain, and whether iroh remains the online transport for other participants. Implementation would need remote authentication and authorization, publication and import rules, base-version and conflict handling, and a clear boundary that prevents player access to campaign history. The MJ-side projection and portable player pack would still be required. Documentation should then reconcile ADR-0001’s amendment note and the contradictory egress line in `docs/ARCHITECTURE.md` with the revised decision. Until then, implementation guidance remains ADR-0014/0016. [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [ADR-0016](<snapshot/docs/adr/0016-p2p-transport-iroh.md>), [ADR-0005](<snapshot/docs/adr/0005-gm-player-profiles.md>).\n\n## Uncertainties\n\nThe fixture does not establish current code behavior or a remote-hosting design. ADR-0014 leaves detailed projection rights and leak checks open; ADR-0016 calls for an iroh proof of concept before industrialization. Results from that proof of concept, plus a concrete co-GM hosting and threat model, would determine whether reopening the transport choice is worthwhile. [ADR-0014](<snapshot/docs/adr/0014-federated-local-first-exchange.md>), [ADR-0016](<snapshot/docs/adr/0016-p2p-transport-iroh.md>).",
+  "modelResolved": "gpt-6-sol",
+  "modelResolution": "local Codex config.toml default",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/codex-transport-alternative-index.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

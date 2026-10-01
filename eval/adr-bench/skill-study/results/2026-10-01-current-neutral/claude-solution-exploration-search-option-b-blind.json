@@ -1,0 +1,65 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "search-option-b",
+  "phase": "blind",
+  "prompt": "Use the installed /solution-exploration skill: read .claude/skills/solution-exploration/SKILL.md and problem.md. Perform ONLY pass 1 of the skill. ADRs and architecture decision records are absent from this workspace. Compare credible options, giving the contributor's proposal its strongest case; state criteria, risks and unknowns. End with a clearly labeled Provisional recommendation and the evidence that could change it. Do not ask to reveal ADRs yet and do not edit files.",
+  "modelObserved": "claude-opus-5-5[1m]",
+  "claudeCodeVersion": "2.1.283",
+  "skillRevision": "current",
+  "skillSha256": "b5a53403940700daddffd0afd822a2c71f5e744bb886deed21719e361b2dde9e",
+  "rulesRevision": "current",
+  "ruleFiles": [],
+  "sourceCommit": null,
+  "durationMs": 75660,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".claude/skills/solution-exploration/SKILL.md",
+    "problem.md"
+  ],
+  "observedAdrReads": [],
+  "readMeasurement": "paths inferred from visible tool events and shell globs; these are read attempts, not proof that every file was fully read",
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 8,
+        "cache_creation_input_tokens": 12303,
+        "cache_read_input_tokens": 89063,
+        "output_tokens": 5452,
+        "output_tokens_details": {
+          "thinking_tokens": 1297
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 12303,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 5011,
+            "cache_read_input_tokens": 25864,
+            "cache_creation_input_tokens": 181,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 181
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.2253086
+    }
+  ],
+  "response": "# Solution exploration, pass 1: search for campaign notes\n\n**Scope:** I worked from `problem.md` and the skill instructions only. The workspace has no other files: no code, no `docs/adr/`, no `ARCHITECTURE.md`. I did not look at any decision records. The figures for model size, memory and corpus size below are my own estimates, not measurements of this product.\n\n## 1. What we know and what we're assuming\n\n**Facts from the brief:**\n- About 5,000 markdown notes, searched on a laptop.\n- Lexical search misses synonyms.\n- The search-memory budget is 1.5 GB.\n- There is no availability policy and no data-handling policy.\n- There is no quality or latency benchmark for semantic search.\n\n**Working assumptions (to check):**\n- Notes average roughly 0.5–2k tokens. That gives about 10–25k chunks.\n- Campaign notes are full of proper nouns (characters, places, factions). Users often search by those exact names, so exact matching has to stay strong.\n- Notes may be private or creative work that users won't expect to leave the device.\n- Users may edit and search offline, for example at the gaming table.\n\n**Rough sizing:**\n- 25k chunks × 384 dimensions × 4 bytes ≈ 38 MB of vectors; about 77 MB at 768 dimensions.\n- A small local embedding model (MiniLM or bge-small class, roughly 25–130 MB on disk, a few hundred MB at runtime) plus a BM25 index fits well under 1.5 GB.\n- An exact (brute-force) vector search over 25k vectors takes milliseconds, so no approximate-search index is needed.\n\n## 2. Decision criteria\n\n1. **Retrieval quality.** Recall on synonyms and paraphrases, without losing precision on exact names.\n2. **Availability.** Does search work offline or when a service is down?\n3. **Data handling and privacy.** Does note content leave the device?\n4. **Resources.** Fits in 1.5 GB; acceptable CPU and battery use on low-end laptops.\n5. **Latency.** Fast enough for search-as-you-type.\n6. **Cost and operations.** Recurring spend, accounts and auth, vendor dependency.\n7. **Delivery effort and reversibility.** Time to ship, and how easy it is to switch later.\n8. **Measurability.** Can we show the change actually helps?\n\n## 3. Options\n\n### A. Keep the current lexical search\n- **Strongest case:** zero cost, zero risk, and it's already in place.\n- **Weakness:** it leaves the reported problem unsolved. It's only useful as the baseline to measure against.\n\n### B. Improve local lexical retrieval\nThis means BM25 ranking (for example SQLite FTS5 or Tantivy), stemming, fuzzy matching, and query expansion from a synonym or alias list. The alias list could be partly generated from the campaign's own glossary, note titles, front-matter aliases and wiki-links.\n- **Strongest case:**\n  - Cheap, fast to ship, fully offline and private, and well under the memory budget.\n  - Very good at the exact-name lookups that probably dominate campaign search.\n  - Easy to explain: users can see why a note matched.\n  - Alias lists fit the domain naturally (\"the Duke\" means \"Aldric Voss\").\n- **Costs and risks:**\n  - Synonym coverage is only as good as the curated or derived lists.\n  - It doesn't handle real paraphrase (\"the fight at the bridge\" finding \"ambush on the river crossing\").\n  - Lists need upkeep.\n- **Unknown:** what share of failed searches are vocabulary-alias problems versus real paraphrase. If it's mostly aliases, B may be enough on its own.\n\n### C. Local hybrid: B plus a small on-device embedding model\nRun BM25 and a local vector search side by side, merge the results (for example with reciprocal-rank fusion), and update embeddings as notes are saved. Optionally add a small local re-ranking model.\n- **Strongest case:**\n  - Addresses paraphrase as well as synonyms.\n  - Stays offline and private, with no recurring cost.\n  - Fits the budget by a wide margin (estimated a few hundred MB in total).\n  - At this corpus size, vector search is effectively instant.\n- **Costs and risks:**\n  - Ships a model runtime (ONNX or similar).\n  - First-time embedding of the whole corpus takes CPU (probably minutes on a weak laptop) and some battery.\n  - Changing the model later means re-embedding everything.\n  - Small models are weaker than large hosted ones, and noticeably weaker if notes aren't in English.\n  - More moving parts than B.\n- **Unknowns:** quality on this domain, the slowest target hardware, and the notes' languages.\n\n### D. Contributor's proposal: hosted embeddings and vector queries\n- **Strongest case:**\n  - Brings in state-of-the-art embedding models and possibly re-ranking that can't run locally, so it may give the best semantic quality.\n  - Uses close to none of the local memory, CPU or battery for embeddings; the 1.5 GB budget is left almost untouched.\n  - Model upgrades, index tuning and scaling are handled by the vendor.\n  - Lays groundwork for cross-device sync, shared or collaborative campaigns, and server-side features, if the product is heading that way.\n  - Probably the quickest route to good semantic search if the team doesn't want to own an ML runtime.\n- **Costs and risks:**\n  - **Availability:** search breaks or degrades when offline or when the vendor is down. A lexical fallback is still needed, so there are two search paths to maintain.\n  - **Data handling:** note content, and every query, goes to a third party. With no policy in place, this is an unresolved compliance and trust question, not just a technical one.\n  - **Latency:** each query makes a network round trip, typically tens to hundreds of milliseconds, compared with under 10 ms locally.\n  - **Consistency:** every local edit has to sync to the remote index. That adds conflicts, retries and edge cases around deletion.\n  - **Cost and lock-in:** recurring per-query and storage fees, accounts and auth, re-embedding if the vendor changes models, and a hard-to-reverse dependency.\n  - **Scale:** at 5,000 notes, the scaling benefit a hosted service offers is mostly unused.\n- **Unknowns:**\n  - The policies themselves.\n  - Whether a product roadmap toward multi-device or collaboration already exists.\n  - The real quality gap between hosted and local models on this corpus.\n\n### E. Variant: hosted embedding API with a local index\nNote text is sent out to be embedded, but the vectors are stored and searched locally.\n- **Strongest case:** large-model quality without running a hosted vector database; queries can fall back to lexical when offline.\n- **Costs:** it still sends content and queries off the device, so it carries most of D's data-handling exposure. New notes can't get semantic search while offline.\n\nI also considered running a local LLM to rewrite queries. I'm setting it aside: it's heavy for a laptop against a 1.5 GB budget, and C gets most of the benefit more cheaply.\n\n## 4. Comparison\n\n| Criterion | A | B | C | D (proposal) | E |\n|---|---|---|---|---|---|\n| Synonyms and paraphrase | ✗ | ◐ synonyms only | ✓ | ✓✓ (likely) | ✓✓ (likely) |\n| Exact names | ✓ | ✓✓ | ✓✓ | ◐ needs a lexical layer | ✓ with local BM25 |\n| Offline availability | ✓ | ✓ | ✓ | ✗ | ◐ |\n| Data stays on device | ✓ | ✓ | ✓ | ✗ | ✗ |\n| Fits 1.5 GB | ✓ | ✓ | ✓ (est.) | ✓✓ | ✓ |\n| Latency | ✓ | ✓ | ✓ | ◐ | ◐ |\n| Cost and operations | ✓✓ | ✓ | ◐ | ✗ recurring, vendor | ◐ |\n| Reversibility | — | ✓ | ✓ | ✗ | ◐ |\n\n## 5. Main risks and unknowns\n\n1. **No benchmark.** Without one, nobody can show that any option beats the baseline.\n2. **No data-handling or availability policy.** These alone could rule D and E in or out.\n3. **No query-failure analysis.** We don't know whether misses are aliases or paraphrase, and the answer changes how much B alone would deliver.\n4. **Unknown target hardware.** This sets the slowest-case cost of C.\n5. **Unknown note languages.** Multilingual notes would favour bigger or hosted models.\n6. **Unknown product direction.** A roadmap toward sync or collaboration would change D's value.\n\n## 6. Provisional recommendation\n\n> **Do not move to the hosted service now. Measure first, then build local search in stages.**\n>\n> 1. **Build a small evaluation set.** About 50–100 real queries, each with the notes it should find. Include synonym, paraphrase and exact-name cases. Measure the current search to get a baseline (recall@10, MRR, p95 latency).\n> 2. **Ship option B.** BM25, stemming and an alias/synonym layer drawn from note metadata. It's cheap, low-risk and likely fixes a meaningful share of misses.\n> 3. **Prototype option C behind the same evaluation.** Use a small local embedding model and merge its results with BM25. Keep it if it clearly beats B within the memory and latency limits.\n> 4. **Hide the embedding provider behind an interface,** so D or E can be added later if the evidence and policies support it.\n>\n> **Why:** the problem (synonym misses on 5,000 notes) is small enough to solve locally, inside the budget, without new privacy, availability or vendor exposure. The main advantages of the hosted option, scale and large-model quality, are either unused at this size or not yet shown to be needed.\n\n## 7. Evidence that could change this\n\n**Would favour the hosted option (D or E):**\n- A data-handling policy that allows note content to be sent to a named vendor, and an availability policy that accepts search depending on the network.\n- Benchmark results where local models (C) fall clearly short of hosted embeddings on recall for paraphrase or multilingual queries, by a margin users would notice.\n- A committed roadmap for cross-device sync or shared campaigns, which would require server infrastructure anyway.\n- Target laptops that can't embed the corpus or run queries locally within acceptable time or battery cost.\n- A corpus growing by orders of magnitude, well beyond what fits locally.\n\n**Would rule the hosted option out:**\n- A requirement to work offline, or a policy that notes stay on the device.\n\n**Would lead to stopping at B:**\n- The failure analysis shows most misses are aliases or vocabulary, and B closes the gap on the evaluation set.\n\nThis is the visible pass-1 conclusion. Pass 2 (checking it against the decision record) has not started. I didn't edit any files."
+}

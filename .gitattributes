@@ -1,0 +1,2 @@
+# Preserve Markdown hard line breaks in the byte-for-byte Quill ADR snapshot.
+eval/adr-bench/snapshot/docs/adr/*.md whitespace=-blank-at-eol

@@ -1,0 +1,111 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "adr-review",
+  "topic": "transport",
+  "phase": "review",
+  "prompt": "Use the installed /adr-review skill: read .claude/skills/adr-review/SKILL.md. Review the frozen docs/adr corpus and its index, using available source extracts and project decision rules where relevant. Identify active and historical decisions, dependencies, contradictions, stale guidance, and uncertain findings. Return a source-linked map and prioritized action table. Evaluate consolidation only where it would clarify a coherent decision; keep accepted statuses intact. Do not edit files.",
+  "skillRevision": "current",
+  "skillSha256": "bab15d3f09c126fcbd892becc0c64d1638d73ef8aa2e889791ea0b038a02cc70",
+  "rulesRevision": "current",
+  "ruleFiles": [
+    {
+      "path": "rules/agent/decision-records.md",
+      "sha256": "e51c3981c8507a65ffb27adb6bf719d3579e5498549a603f4784f118a4f36a5c"
+    },
+    {
+      "path": "rules/agent/decisions.md",
+      "sha256": "8fc8a1716608ff415225d560303d98418d8ae6774c42d2bfb6cd6c6fd10f8c42"
+    }
+  ],
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 160245,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".claude/skills/adr-review/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md",
+    "rules/agent/decision-records.md",
+    "rules/agent/decisions.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "paths inferred from visible tool events and shell globs; these are read attempts, not proof that every file was fully read",
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 14,
+        "cache_creation_input_tokens": 57385,
+        "cache_read_input_tokens": 216491,
+        "output_tokens": 10601,
+        "output_tokens_details": {
+          "thinking_tokens": 4539
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 57385,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 4605,
+            "cache_read_input_tokens": 60338,
+            "cache_creation_input_tokens": 10789,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 10789
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.7144542
+    }
+  ],
+  "response": "# ADR review: Quill `docs/adr` (0001–0016, frozen corpus)\n\n**Scope and limits.** I read all 16 ADRs, `docs/adr/README.md`, the `docs/ARCHITECTURE.md` extract, the `AGENTS.md`/`CLAUDE.md` extracts, `crates/agent/Cargo.toml`, and both decision rules (`rules/agent/decisions.md`, `rules/agent/decision-records.md`). I edited nothing and changed no status. The directory is not a git repository, so I couldn't check who committed each status. The source tree isn't included either, so any claim that depends on code is marked **[verify]**.\n\n## 1. Decision map\n\n| Area | In force | Historical | What still binds |\n|---|---|---|---|\n| **Product scope and trust** | [0001](docs/adr/0001-local-first-campaign-tool.md) Accepted, scope amended by [0014](docs/adr/0014-federated-local-first-exchange.md) → [0016](docs/adr/0016-p2p-transport-iroh.md) implements 0014's transport port | — | No shared campaign server, no real-time sync, no runtime access control. Spoilers are kept from players by filtering on the GM side before anything is sent, never by a shared disk. Exchange runs over typed packets through a transport port, with iroh P2P plus a portable bundle. Git stays local only. |\n| **Profiles and truth** | [0005](docs/adr/0005-gm-player-profiles.md), [0009](docs/adr/0009-temporal-facts-and-scopes.md) | — | `profile: gm\\|player`. `scope ∈ {public, gm_only, player:<id>}` is rendering metadata, not a firewall. `session_at`/`known_by` live on session events. Entities hold the current state. |\n| **Agent runtime** | [0015](docs/adr/0015-llm-client-rust-genai.md) (genai plus a home-made tool loop and a thin `ModelBackend`), [0011](docs/adr/0011-agent-architecture-react-tiers.md) (ReAct, tool/task tiers, no swarm in v1), [0004](docs/adr/0004-tools-core-single-source.md), [0008](docs/adr/0008-deprecate-claude-channel.md) | [0002](docs/adr/0002-agent-runtime-rig.md), [0003](docs/adr/0003-model-backend-abstraction.md): Superseded by 0015 | `genai::` is confined to the backend of `crates/agent`. All campaign mutations go through `tools/core`. Model roles are `chat`/`extract`/`compose`. MCP is optional. The agent runs in-process. Confirmed by `crates/agent/Cargo.toml:23`: `genai = \"=0.6.5\"` and no Rig. |\n| **Retrieval** | [0012](docs/adr/0012-memory-search-retrieval-orchestrator.md) (deterministic `memory_search` that fuses several retrieval \"lanes\"), [0007](docs/adr/0007-agentic-rag-v0-bm25.md) (BM25 plus scoring weighted by source), [0013](docs/adr/0013-wikilinks-backlinks-obsidian-vault.md) (wikilinks, backlinks held in memory) | — | `memory_search` is one tool with lexical, entity_resolve, events, semantic and rerank lanes, fused by RRF. The dense lanes were adopted by a product decision recorded in 0012's 2026-07-13 amendment. |\n| **Refused scope** | [0010](docs/adr/0010-rejected-technical-scope.md): status is Accepted. Only its title talks about refusals. | — | Rejected: Qdrant server, Neo4j/Graphiti, LangGraph/LlamaIndex, MEMTIER. Deferred: Docling, Whisper. Each has an explicit reopening condition. |\n| **Sequencing** | [0006](docs/adr/0006-phase-ordering.md) | — | Phase order 0→6. **[verify]** whether the plan is still current. |\n\n**Refusals recorded inside accepted ADRs, linked to their current decision:**\n- Event-sourcing (0009 §Question): still holds.\n- git remote and synced folders as the exchange channel (0014 §Alternatives) → 0016.\n- UUIDv5 identity and libp2p (0016).\n- Staying on Rig, and calling `genai::Client` directly (0015).\n- Prefix or substring link resolution (0013).\n\n## 2. Prioritized actions\n\n| # | Finding | Evidence | ADRs | Proposed action | Human decision? |\n|---|---|---|---|---|---|\n| **P1** | `AGENTS.md` still tells agents that Rig is the only allowed crate. `CLAUDE.md` and the code say genai. | `AGENTS.source.md:3,5` (\"Rig uniquement dans `crates/agent`\", \"seul crate Rig\") vs `CLAUDE.source.md:3,5` and `Cargo.toml:6,23` | 0015, 0002 | Update AGENTS.md L12/L16/L23 to the 0015 rule, matching CLAUDE.md. This is an ordinary doc edit. | No |\n| **P1** | The egress line in ARCHITECTURE.md contradicts 0014. It also leaves out the iroh rendezvous/relay and model downloads. | `ARCHITECTURE.md` L84 (\"remote git partagé (co-MJ)\") vs L69 of the same file, 0014:30,71, 0016:37 (rendezvous/relay), and 0012:6 (models downloaded through the admin screen) | 0014, 0016, 0012 | Rewrite L84: LLM endpoints, iroh rendezvous/relay (configurable), mDNS on the LAN, explicit model downloads, and no git remote. | No (it's factual) |\n| **P1** | 0001's amendment misstates 0014: it says git is the \"substrat primaire\", which 0014 explicitly rejects. | `0001:7` vs `0014:30,37,71` | 0001, 0014 | Correct the amendment note to \"transport port (iroh P2P, bundle as fallback), git local only\". This keeps 0014's meaning. | Confirm the wording, since this edits an accepted record |\n| **P1** | The anti-spoiler projection is called a \"critical mechanism\" (one leak is one spoiler), but no ADR covers it. 0014 left it as an open question. | `0014:49,63`. Scope vocabulary already diverges: 0014 says `scope: public\\|player`, 0009 says `player:<id>`. | 0014, 0009, 0005 | Write a **separate Proposed ADR** for the rights/projection model: scope granularity, filtering, and a leak test. Until it's accepted, 0009's scopes and 0014's \"projection côté MJ\" principle remain binding. | **Yes** |\n| **P2** | Whether evaluation gates the dense lanes is contradictory across three records. The real decision sits in an amendment far over the 5-line limit. | 0012:6 (gate lifted, eval afterwards, bge-m3Q, brute-force sidecar) vs 0012:38,71,78 (\"éval-gated\", \"si l'éval confirme\"), 0010:19,23,30 (\"Confirmé par éval avant d'être posé\", \"Qdrant edge\"), 0007:7. 0010:22 also calls BGE-M3 \"an option, not a prerequisite\" while 0012 picks it. The rules say an amendment over 5 lines is \"a new decision wearing an amendment's clothes\". | 0012, 0010, 0007 | **One Proposed ADR, \"Lanes denses de `memory_search`\"**, since this is a single coherent decision: fastembed CPU, bge-m3Q, BGERerankerV2M3, sidecar store, eval after the fact, silent fallback. It should state the fate of each related record: the 0012 amendment becomes history, the dense rows in 0010 and §RAG v2 in 0007 point to the new ADR, and all three statuses stay Accepted. | **Yes** |\n| **P2** | The rule that the agent runs in-process as one desktop binary lives only in a superseded ADR. | `0002:7` (\"le principe … reste vrai\") and 0002 §Décision. 0015 doesn't restate it. 0008 depends on it (`agent_chat` in-process). | 0002, 0015, 0008 | Either add a short cross-link in 0015 (\"0002's in-process / MCP-optional principle stays binding\"), or write a small Proposed ADR. Readers of the active set shouldn't have to open a superseded record. | **Yes**: decide whether the principle is still binding |\n| **P2** | Accepted ADRs still cite Rig as part of the current architecture. | 0011:14,34,40,80 (and `Étend : 0003`), 0010:21,35, 0004:15, 0009:83, 0007:42 | 0011, 0010, 0004, 0009, 0007 | Add a dated amendment note of 5 lines or fewer to each: \"Rig → genai tool loop (ADR-0015); decision unchanged\". For 0010's LangGraph refusal, the reason becomes \"Rust stack (0015)\" and the refusal itself holds. | Light (wording only) |\n| **P3** | The index is stale. | `README.md:37` (\"Numéro suivant : `0009`\", should be 0017). The amendments to 0007 and 0010 by 0012 are missing from the index. `README:39` lists no deprecated status. | all | Fix the next number, add \"(amendé par 0012)\" on 0007 and 0010, and add a \"Remplace / Étend\" column. | No |\n| **P3** | The status vocabulary and section format don't match the installed rules. | Rules: `- **Status**: Accepted`, English, five values, canonical sections. The corpus uses `**Statut :** Accepté`. README:27-32 lists Contexte/Décision/Conséquences/Tickets. Many records add their own sections (Règles, Exception, Séquencement, Implications…). | all | Pick one: localize the rule, or use English status words in new ADRs only. Don't rewrite old records. **[verify]** whether `just adr-check` can parse the French status lines. | **Yes** |\n| **P3** | Several records exceed the size budget (600 words is the hard ceiling). | `wc -w`: 0014 = 942, 0016 = 818, 0012 = 805, 0015 = 719, 0011 = 671, 0009 = 634 | as listed | Leave them as history. For new records, move schemas and types to `DATA-MODEL.md` and sequencing to the plan. | No |\n| **P3** | There are two decision indexes (README and ARCHITECTURE.md). | `ARCHITECTURE.md` L67-69 repeats the decision rows | — | Keep one canonical index (README, by status). In ARCHITECTURE.md keep only one-line stack rows that link to it. Agents then load less. | Optional |\n| **Verify** | Backend path wording differs: `crates/agent/backend/` vs `crates/agent/src/backend/`. | `0015:27` vs `CLAUDE.source.md:3,5` | 0015 | Check the tree, then fix whichever is wrong. | No |\n| **Verify** | Some deletions may never have happened: `channel-server/` (0008, still named at 0004:20), `crates/llm` (0002), `templates/claude/` (Phase 6). | Not visible in the extracts | 0008, 0002, 0004 | Check the repo. If the deletions are done, add `Implemented` lines. | No |\n| **Verify** | Some link targets are outside the corpus: `docs/PRD.md`, `../../backlog/migration/README.md`, `docs/migration-plan.md`, `docs/vision.md`. | 0014:6, 0012:5, README:3,39 | — | Check for broken links. | No |\n| **Note** | 0016 is Accepted but still conditional on a POC, and it adds an always-on rendezvous server, which the record itself calls a departure from local-first. | `0016:52-53` | 0016, 0001 | Keep the status. A human could add the qualifier \"Accepted — POC pending\". When the POC finishes, record its result in `Implemented`. | Optional |\n\n## 3. Consolidation verdict\n\n- **Worth consolidating:** only the dense-retrieval cluster (0007, 0010, 0012 and its amendment). It's one decision that is currently scattered across three records.\n- **Keep separate:**\n  - Federation (0001 → 0014 → 0016) is cleanly layered, and each layer could be accepted on its own. It only needs the 0001 amendment fixed.\n  - The agent runtime chain already has its consolidation in 0015. 0011 is an independent decision and should only get a Rig→genai note.\n  - The projection/rights model is a new decision that needs its own ADR, not a merge.\n\nUntil a human accepts the new proposals, the currently Accepted records stay binding as written.\n\n## 4. Remaining blockers\n\n- Several MCP connectors need authorization before their tools can be used. For claude.ai connectors that's in the connector settings; for others, use `/mcp` or `claude mcp` in an interactive session. None were needed for this review.\n- The `fetch` and `godot-ai` servers failed to connect. Neither was needed here."
+}

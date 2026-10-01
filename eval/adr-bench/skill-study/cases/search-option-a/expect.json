@@ -1,0 +1,9 @@
+{
+  "historicalRejectedAdr": "0002-hosted-vector-search.md",
+  "historicalRejectedProposal": "hosted embedding and vector-search service receiving campaign text",
+  "acceptedAdrWithRejectedAlternative": "0001-local-lexical-search.md",
+  "embeddedAlternativeRejectedThere": "dedicated Qdrant daemon estimated at 2 GB resident memory",
+  "newProposal": "embedded local vector index with an on-device model and no daemon",
+  "materialDifference": "the new proposal avoids network egress and a separate daemon; its memory, latency and quality remain unverified",
+  "persistentConstraints": ["offline search", "no campaign-text egress", "1.5 GB search-memory budget"]
+}

@@ -1,0 +1,25 @@
+{
+  "skillFilesUncommittedInSourceWorktree": true,
+  "files": [
+    {
+      "path": "skills/adr-review/SKILL.md",
+      "sourceWorktree": "/home/michael/.codex/worktrees/cde6/claude-rules",
+      "sha256": "a2286a908591bc8e8b30cf26b28d8a0021dd8e0b465ebcbe065c9d68179065b5"
+    },
+    {
+      "path": "skills/solution-exploration/SKILL.md",
+      "sourceWorktree": "/home/michael/.codex/worktrees/cde6/claude-rules",
+      "sha256": "79ce7fbdd7597c765f81fd96daba9c6a280f719b869f63b8268cb4d41da5ebdb"
+    },
+    {
+      "path": "rules/agent/decision-records.md",
+      "sourceWorktree": "/home/michael/.codex/worktrees/d381/claude-rules",
+      "sha256": "e51c3981c8507a65ffb27adb6bf719d3579e5498549a603f4784f118a4f36a5c"
+    },
+    {
+      "path": "rules/agent/decisions.md",
+      "sourceWorktree": "/home/michael/.codex/worktrees/d381/claude-rules",
+      "sha256": "6cfe90f4ff19741acc8cf38b5603017a0e78b7a33946cbafee1109819b10601d"
+    }
+  ]
+}
