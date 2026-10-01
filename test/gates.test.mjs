@@ -855,6 +855,16 @@ test('worktree-status: loop.md escalates the same way a sprint worklist does', (
   })
 })
 
+test('worktree-status: goal.md escalates the same way a loop or sprint worklist does', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/onboarding/goal.md', worklist(['waiting on the contract owner']))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /onboarding\/goal/)
+    assert.match(r.out, /BLOCKED: waiting on the contract owner/)
+  })
+})
+
 test('worktree-status: a sprint worklist outranks a loop.md in the same capability', () => {
   withTmpRepo((dir) => {
     commits(dir)
@@ -959,13 +969,13 @@ test('publish-summary: no .work/<slug>/ directory is a usage error', () => {
   })
 })
 
-test('publish-summary: a slug dir with no loop.md and no tasks/ is a usage error', () => {
+test('publish-summary: a slug dir with no state file is a usage error', () => {
   withTmpRepo((dir) => {
     commits(dir)
     write(dir, '.work/empty/PLAN.md', '# Plan\n')
     const r = run(PUBLISH_SUMMARY, ['empty', 'COMPLETED'], dir)
     assert.equal(r.status, 2)
-    assert.match(r.out, /no loop\.md or tasks/)
+    assert.match(r.out, /no loop\.md, goal\.md or tasks/)
   })
 })
 
@@ -989,6 +999,25 @@ test('publish-summary: loop.md happy path — status, objective, guardrails, che
     assert.match(summary, /- \[ \] step two/)
     assert.match(summary, /- the API key is missing/)
     assert.match(summary, /\*\*Turns logged\*\*: 2/)
+  })
+})
+
+test('publish-summary: goal.md uses its checkpoints when no loop or task worklist exists', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/goal.md',
+      '# Goal — migrate API clients\n\n'
+      + '- **Objective (bounded)**: migrate API clients\n'
+      + '- **Stopping condition**: `npm test`\n\n'
+      + '## Checkpoints\n\n'
+      + '- [x] migrate contract tests → verified by `npm test`\n\n'
+      + '## Log\n\n- checkpoint 1: tests green\n\n'
+      + '## Blocked on the human\n\n- <blocker>\n')
+    const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
+    assert.equal(r.status, 0, r.out)
+    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /migrate API clients/)
+    assert.match(summary, /## Remaining work \(1\/1 done\)/)
   })
 })
 

@@ -93,8 +93,9 @@ function blockedIn(file) {
 }
 
 /** Every state file an agent escalates in, under `.work/<capability-slug>/`: the
- *  sprint worklists `/tasks` cuts, and the `loop.md` `/loop-setup` writes when
- *  there is no sprint to cut. Sorted so the newest sorts last. */
+ *  sprint worklists `/tasks` cuts, `loop.md` from `/loop-setup`, and `goal.md`
+ *  from `/goal-setup` when there is no sprint to cut. Sorted so the newest sorts
+ *  last. */
 function worklists(root) {
   const found = []
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -103,6 +104,7 @@ function worklists(root) {
     const add = (rel) =>
       found.push({ label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
     if (existsSync(join(root, slug, 'loop.md'))) add('loop.md')
+    if (existsSync(join(root, slug, 'goal.md'))) add('goal.md')
     try {
       for (const n of readdirSync(join(root, slug, 'tasks'))) if (/\.md$/.test(n)) add(`tasks/${n}`)
     } catch { /* no tasks/ yet: the capability is planned, not cut */ }

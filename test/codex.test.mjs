@@ -31,6 +31,13 @@ test('Codex modules resolve alias assets and root guidance without Claude', () =
   assert.equal(read(dir, '.claude-rules.lock'), before)
 }))
 
+test('goal-setup installs as a standalone Codex skill', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'goal-setup', '--agent', 'codex'], dir))
+  assert.ok(has(dir, '.agents/skills/goal-setup/SKILL.md'))
+  assert.match(read(dir, '.agents/skills/goal-setup/SKILL.md'), /\/goal/)
+  assert.ok(!has(dir, '.claude/skills/goal-setup/SKILL.md'))
+}))
+
 test('each target and combined targets remain usable with identical skills', () => {
   for (const agents of ['claude', 'codex', 'cursor', 'claude,codex,cursor']) withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', 'product', '--agent', agents, '--level', 'gates'], dir))

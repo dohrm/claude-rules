@@ -183,7 +183,7 @@ exact command. Install `product` first, or read the table in
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` `devstack` | **in production**: SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` — **on your machine**: `devstack`, the contract between an agent and a running app (no foreground server, no orphan, the log file is the truth) plus the `process-compose` lifecycle at `--level gates` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
-| **Practice** | `product` `investigate` `loop-setup` | the lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, …) · debug methodology · agent loop framing |
+| **Practice** | `product` `investigate` `loop-setup` `goal-setup` | lifecycle skills · debug methodology · repeated-loop framing · durable Codex goal framing |
 
 **Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
@@ -384,7 +384,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 |---|---|
 | `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
-| `investigate` `loop-setup` | `/investigate` `/loop-setup` |
+| `investigate` `loop-setup` `goal-setup` | `/investigate` `/loop-setup` `/goal-setup` |
 
 **3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
 or the agent, and CI. No command is defined twice — and the recipes themselves live
@@ -394,7 +394,7 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 |---|---|---|
 | `just <tech>-lint` | 1 — fmt, lint `-D warnings` | pre-commit hook, seconds |
 | `just <tech>-check` | 2 — + tests, supply chain, build | pre-push hook, tens of seconds |
-| `just check` | 1+2, every tech — **the command an agent closes its loop on** | before every hand-back |
+| `just check` | 1+2, every tech — **the command an agent closes a loop or goal on** | before every hand-back |
 | `just adr-check` | 2 — a decision was taken by a human (+ ADR size/section advisories) | opt-in, with `docs/adr/` |
 | `just docs-check` | 2 — index/unit consistency, experience fields/references (+ budget advisories) | opt-in, with product docs |
 | `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |

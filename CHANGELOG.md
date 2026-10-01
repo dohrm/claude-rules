@@ -14,6 +14,11 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`/goal-setup` for Codex.** It frames one durable `/goal` with a bounded
+  objective, stopping condition, checkpoints, progress proof and pause causes.
+  It writes `goal.md` only when no `/tasks` worklist exists; status and summary
+  tooling recognize that state file. `/loop-setup` remains for repeated loops.
+
 - **Codex installation and module guidance.** New installs select Claude/Codex;
   existing locks retain their targets and Cursor remains optional. Add Codex
   explicitly with `add <installed-profile> --agent codex`.

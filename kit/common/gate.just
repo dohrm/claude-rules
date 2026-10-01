@@ -70,8 +70,8 @@ review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.js
 # before the PR.
 #
 # `work_slug` is the directory under `.work/` — empty means "the branch name", which is
-# right in a repo with one loop per branch. Set it to a `/loop-setup` capability slug to
-# park the marker next to that loop's `loop.md`.
+# right in a repo with one long-running run per branch. Set it to a `/loop-setup` or
+# `/goal-setup` capability slug to park the marker next to its state file.
 work_slug   := ""
 incremental := "1"
 
@@ -416,10 +416,10 @@ status:
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
 # The per-loop counterpart to `just status`: that one is read-only across every
 # worktree at a glance, this one is one worktree, once, at the moment a
-# `/loop-setup` run stops — objective met, blocked, or cap/budget exhausted
-# (skills/loop-setup/SKILL.md's `<loop-prompt-template>` three-way outcome,
-# mapped straight onto the three statuses below). Reads `.work/<slug>/loop.md`
-# (or the newest `tasks/NN-*.md`) plus what only git knows — branch, commits
+# `/loop-setup` or `/goal-setup` run stops — objective met, blocked, or cap/budget exhausted
+# (the setup skills' completion/escalation outcomes, mapped straight onto the
+# three statuses below). Reads `.work/<slug>/loop.md`,
+# `goal.md` (or the newest `tasks/NN-*.md`) plus what only git knows — branch, commits
 # ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
 # catching up on a parallel loop means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something

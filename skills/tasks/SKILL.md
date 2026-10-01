@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: "Cut ONE sprint of a capability's PLAN.md into tasks sized to the green boundary, anchored in the existing code. Writes a sprint worklist under .work/. Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for the loop\". Between /plan and /loop-setup."
+description: "Cut ONE sprint of a capability's PLAN.md into tasks sized to the green boundary, anchored in the existing code. Writes a sprint worklist under .work/. Use on /tasks, \"break this sprint into tasks\", \"prepare sprint N for execution\". Between /plan and /loop-setup or /goal-setup."
 ---
 
 `/plan` deliberately withholds file names, symbols and layers — a sprint is a promise,
@@ -136,6 +136,8 @@ git history, and this file is neither — it is scaffolding.
 `/loop-setup` writes the same skeleton at `.work/<slug>/loop.md` when there is no
 sprint to cut. Run against a worklist, it adds its `## Guardrails` section to
 *this* file and writes nothing else — one loop, one state file.
+`/goal-setup` uses `.work/<slug>/goal.md` when there is no worklist; with a
+worklist, it adds only a `## Goal contract` section here.
 
 ### 6. Branch, then hand off
 
@@ -155,17 +157,20 @@ Then hand off — and stop, unless this is an L3 chain (below):
 
 - **`/loop-setup`** — it wraps this worklist in the guardrails you do not own:
   iteration cap, token budget, divergence guard, escalation point.
+- **`/goal-setup`** — for a durable Codex objective, it adds a stopping condition,
+  checkpoints and pause causes without turning the sprint into a repeated loop.
 - **an orchestrator** — pass the worklist as-is. Roles, never model names: a
   *planner* (this skill's output), an *implementer* per task, a *reviewer*. The
   reviewer judges design; **the gate judges correctness** and is the only authority
   on it (`agent/autonomy.md`).
 
-At *L3*, `/plan` or `/loop-setup` may run this skill themselves when the human asked
+At *L3*, `/plan`, `/loop-setup`, or `/goal-setup` may run this skill themselves when the human asked
 for the chain — the output is the same file, written before any code, so the cut
-stays reviewable and the loop resumable. Reached from `/plan`, do not stop at the
-hand-off: run `/loop-setup L3` on this worklist. Reached from `/loop-setup`, return to it.
+stays reviewable and the run resumable. Reached from `/plan`, do not stop at the
+hand-off: run `/goal-setup L3` for a Codex goal, or `/loop-setup L3` for a repeated
+loop. Reached from either setup skill, return to it.
 
-You do not run the loop yourself — at L3, `/loop-setup` does — and you never flip a sprint to `Shipped` — that is the
+You do not run the work yourself — at L3, the setup skill launches it — and you never flip a sprint to `Shipped` — that is the
 human's act, on the sprint's acceptance criteria, not on ticked boxes. When the
 merge that ships the sprint lands, delete its `tasks/NN-*.md` in the same commit;
 once every sprint under the capability is gone, delete `.work/<slug>/` entirely
@@ -219,8 +224,8 @@ and re-run `/prd` (`product/documents.md`).
      findable without reopening the session. One line per blocker, no placeholders. -->
 - <blocker>
 
-<!-- `/loop-setup` adds a `## Guardrails` section here (iteration cap, token budget,
-     divergence guard). It does not own anything else in this file. -->
+<!-- `/loop-setup` adds `## Guardrails`; `/goal-setup` adds `## Goal contract`.
+     Neither owns the rest of this file. -->
 </worklist-template>
 
 <task-unit>

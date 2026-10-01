@@ -56,7 +56,7 @@ A green gate never settles a **decision** — that line is `agent/decisions.md`.
 ## Levels
 
 How often the agent stops to ask is a per-run choice, declared once in the state
-file header — `.work/<slug>/PLAN.md`, the worklist, or `loop.md`:
+file header — `.work/<slug>/PLAN.md`, the worklist, `loop.md`, or `goal.md`:
 `**Autonomy**: L1 | L2 | L3`.
 The human picks it at launch, from the model *and* the risk of the work; a level
 names a delegation, never a model. **Absent or unreadable → L1.**
@@ -69,16 +69,17 @@ at the next one. A skill that runs another passes its resolved level as the argu
 |---|---|---|
 | **L1 — guided** | every checkpoint a skill marks, before the next step | nothing a skill marks as a checkpoint |
 | **L2 — delegated** | each skill's written output, once | the open questions the code answers, each one recorded |
-| **L3 — autonomous** | only the hard checkpoints below | the cut, the loop's caps, chaining `/plan` → `/tasks` → `/loop-setup` → launching the loop, sub-agents |
+| **L3 — autonomous** | only the hard checkpoints below | the cut, the loop's caps or goal's checkpoints, chaining `/plan` → `/tasks` → `/loop-setup` or `/goal-setup` → launch, sub-agents |
 
 **Hard checkpoints — identical at every level:** an ADR status (`agent/decisions.md`);
 a new acceptance criterion, User Story or scope change; a sprint's `Shipped` and its
 merge; a hard bypass (below); a tree that contradicts the state file.
 
-A level moves *when* the human is asked, never *what* counts as done. The gate, the
-caps, the divergence guard, the escalation channel and one-tree-one-writer hold at
-L3 exactly as at L1 — at L3 the agent sets the caps' values itself, but writes them
-in the state file before the first turn, where the human can read or lower them. Under L2+, every question settled without asking is written
+A level moves *when* the human is asked, never *what* counts as done. The gate,
+escalation channel and one-tree-one-writer hold at L3 exactly as at L1. A loop
+retains its caps and divergence guard; at L3 the agent sets their values itself
+and writes them before the first turn. A goal retains its stopping condition and
+checkpoints at every level. Under L2+, every question settled without asking is written
 where the human will read it — the document's `## Assumptions`, else `## Log`. An
 unrecorded assumption is a silent scope change.
 
@@ -113,8 +114,8 @@ The tree dies with the work. `tree-rm` removes nothing unless the tree is clean 
 the branch is merged, so a forest of detached branches is something you have to
 build on purpose. `just status` reports every tree; it never gates.
 
-The human is a writer too. When they edit the tree a loop owns — legitimate, and
-declared as a `human:` line in `## Log` (`skills/loop-setup`) — that line is a
+The human is a writer too. When they edit the tree a loop or goal owns — legitimate, and
+declared as a `human:` line in `## Log` (`skills/loop-setup` or `skills/goal-setup`) — that line is a
 **fact about the tree**, not an item to redo or undo. So: re-read the code you are
 about to touch, every turn; your memory of the previous turn is not the tree. And
 **never revert a change you cannot explain** — a tree that contradicts the
@@ -137,5 +138,5 @@ make bypass expensive and loud, not impossible. Wiring:
 
 **Declare every bypass.** No silent TODO, skipped test, placeholder, or stub.
 
-**Escalate in that tree's `.work/<slug>/tasks/NN-*.md` → `## Blocked on the human`** —
+**Escalate in that tree's `.work/<slug>/tasks/NN-*.md`, `loop.md`, or `goal.md` → `## Blocked on the human`** —
 what `just status` surfaces. Never in the review report.

@@ -78,8 +78,10 @@ Below L3, emit the invocation for the user's host (ask which if unclear). At *L3
 | Host | Launch | Note |
 |------|--------|------|
 | **Claude Code** | `/loop <paste the loop prompt>` (omit interval → self-pacing) | the prompt must self-terminate; it does |
-| **Codex CLI** (≥ 0.128) | `/goal <objective + done-command + budget>` | Codex plans/tests internally — feed it the bounded objective and the done-command; the budget/cap is what you add |
 | **Cursor** | a stop-hook loop (`loop_limit`) or an Automation | heavier: emit the hook config alongside the prompt; `loop_limit` = your iteration cap |
+
+For a durable Codex objective, use `/goal-setup` and Codex's goal mechanism.
+It tracks checkpoints across turns instead of repeating one loop gesture.
 
 Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail — plus `.work/<slug>/SUMMARY.md` once it stops, if `just publish-summary` is wired).
 

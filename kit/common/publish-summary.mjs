@@ -2,10 +2,10 @@
 
 // publish-summary — the per-loop counterpart to `worktree-status.mjs`: that one is
 // read-only across every worktree at a glance, this one is one worktree, once, at the
-// moment a `/loop-setup` run stops (skills/loop-setup/SKILL.md).
+// moment a `/loop-setup` or `/goal-setup` run stops.
 //
 // Mechanical, not LLM-authored: everything below is either parsed out of the state
-// file the loop was already maintaining (`.work/<slug>/loop.md`, or the newest
+// file the run was already maintaining (`.work/<slug>/loop.md`, `goal.md`, or the newest
 // `.work/<slug>/tasks/NN-*.md`) or computed from git — branch, commits ahead of
 // `base`, a one-line diffstat. `status` is the one thing only the loop knows, because
 // it is why the loop stopped, not something derivable from the file.
@@ -66,14 +66,15 @@ function nonPlaceholderLines(body) {
   return body.split('\n').map((l) => l.trim()).filter((l) => l && !isPlaceholder(l))
 }
 
-/** `.work/<slug>/loop.md` if present, else the newest `.work/<slug>/tasks/NN-*.md` —
- *  the same resolution order `/loop-setup` itself uses and `worktree-status.mjs`'s
- *  `worklists()` already sorts by. */
+/** `.work/<slug>/loop.md`, then `goal.md`, else the newest task worklist — the
+ *  state files setup skills use and `worktree-status.mjs` reports. */
 function findStateFile(slug) {
   const dir = join('.work', slug)
   if (!existsSync(dir)) return { dir, file: null }
   const loopFile = join(dir, 'loop.md')
   if (existsSync(loopFile)) return { dir, file: loopFile }
+  const goalFile = join(dir, 'goal.md')
+  if (existsSync(goalFile)) return { dir, file: goalFile }
   let entries = []
   try {
     entries = readdirSync(join(dir, 'tasks')).filter((n) => n.endsWith('.md')).sort()
@@ -86,7 +87,7 @@ function findStateFile(slug) {
 
 const { dir, file } = findStateFile(slug)
 if (!existsSync(dir)) bail(`no .work/${slug}/ directory`)
-if (!file) bail(`no loop.md or tasks/*.md under .work/${slug}/`)
+if (!file) bail(`no loop.md, goal.md or tasks/*.md under .work/${slug}/`)
 
 const text = readFileSync(file, 'utf8')
 
@@ -98,7 +99,7 @@ const guardrails = section(text, 'Guardrails')
 const iterationCap = guardrails?.match(/\*\*Iteration cap\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
 const tokenBudget = guardrails?.match(/\*\*Token budget\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
 
-const checklistBody = section(text, 'Remaining work') ?? section(text, 'Tasks')
+const checklistBody = section(text, 'Remaining work') ?? section(text, 'Checkpoints') ?? section(text, 'Tasks')
 const items = (checklistBody ?? '')
   .split('\n')
   .map((l) => l.match(/^-\s*\[([ xX])\]\s*(.+)$/))

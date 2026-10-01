@@ -82,7 +82,7 @@ Map languages to `--root` from the tree. Typical:
 - `react` on **every** React tree (web **and** React Native) — not bundled into `portal-flat`
 - Never `portal-http` and `tauri` together
 - `agent testing cicd --level gates` (agent is not a gift; a legacy `update` injects `agent@gates` if `levels` is missing — still name it)
-- `product investigate loop-setup` if they already had them
+- `product investigate loop-setup goal-setup` if they already had them
 - `ops` `k8s` `incident` only if this repo owns run / manifests
 
 A kit `*_dir` is one directory. Two Rust workspaces → keep the second as a

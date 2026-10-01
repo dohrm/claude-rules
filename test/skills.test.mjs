@@ -52,7 +52,7 @@ test('kit references resolve', () => {
 test('slash-command references resolve to a skill', () => {
   const known = new Set(SKILLS)
   // Recipes and flags are written the same way; these are not skills.
-  const NOT_SKILLS = new Set(['check', 'name', 'strict', 'local', 'agent', 'ref'])
+  const NOT_SKILLS = new Set(['check', 'name', 'strict', 'local', 'agent', 'ref', 'goal'])
   for (const file of proseFiles()) {
     for (const m of read(file).matchAll(/`\/([a-z][a-z0-9-]*)`/g)) {
       const n = m[1]
@@ -126,7 +126,7 @@ test('document-producing skills name a path under docs/', () => {
 // capability, under .work/<slug>/, and a bare name for it invites that confusion
 // back.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['tasks', 'loop-setup', 'onboard', 'migrate', 'plan']) {
+  for (const name of ['tasks', 'loop-setup', 'goal-setup', 'onboard', 'migrate', 'plan']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,

@@ -91,7 +91,8 @@ Break the capability into **tracer-bullet** sprints. Each sprint is a thin slice
 </vertical-slice-rules>
 
 If the capability is already sprint-sized — the whole thing fits one `/tasks` +
-`/loop-setup` pass — one sprint is correct. Don't invent a second for ceremony.
+`/loop-setup` or `/goal-setup` pass — one sprint is correct. Don't invent a second
+for ceremony.
 
 ### 7. Validate the breakdown — when depends on the level
 
@@ -130,7 +131,8 @@ sprint into something an agent can execute — anchors in the real code, tasks c
 green boundary, a branch — is `/tasks`, at the moment that sprint starts. Not now, and
 not for every sprint at once: the code will have moved. At *L3*, when the human asked
 for the chain, run `/tasks L3` on the first startable sprint yourself instead of stopping;
-it continues through `/loop-setup`, which launches the loop.
+it continues through `/loop-setup` for a repeated loop or `/goal-setup` for a
+durable Codex goal, which launches at L3.
 
 Once every sprint under this capability ships, delete `.work/<slug>/` and
 re-run `/prd` to flip the capability's status to `Shipped` — the plan's job is

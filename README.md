@@ -43,7 +43,7 @@ npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 
 # Add shared checks, product skills and execution support as needed:
 npx github:dohrm/claude-rules add agent testing cicd --level gates
-npx github:dohrm/claude-rules add product loop-setup
+npx github:dohrm/claude-rules add product goal-setup  # Codex durable goals
 npx github:dohrm/claude-rules add devstack --level gates
 ```
 
@@ -70,7 +70,7 @@ slash-command notation.
 |---|---|
 | Clarify a product or capability | `/prd`; `/interview` if the intent is still unclear |
 | Choose or challenge architecture | `/architect`: compare alternatives, including the current design |
-| Organize substantial work | `/plan` → `/tasks` → `/loop-setup`; pass `L2`/`L3` for fewer checkpoints (default `L1`) |
+| Organize substantial work | `/plan` → `/tasks` → `/goal-setup` (Codex) or `/loop-setup` (repeated loop) |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |
 | Run a local monorepo | `devstack`; [setup and commands](kit/devstack/README.md) |

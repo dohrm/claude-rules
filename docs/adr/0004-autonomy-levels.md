@@ -1,6 +1,6 @@
 # ADR-0004: Declare agent autonomy as a per-run level, defaulting to guided
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-09-23
 
 ## Context
