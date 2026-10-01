@@ -30,9 +30,8 @@ gives the skill a fixture repo to read and asserts on what it wrote. The runner:
 4. asserts: regex over what it said, regex over the files it wrote, and the kit's own
    gates run against those files.
 
-**Deterministic first, judge optional.** The model's prose varies; its output *shape*
-must not. An optional `--judge` runs a second model call to grade the fuzzy criterion
-in `expect.json.judge` when regex cannot express it.
+**Deterministic first.** The model's prose varies; its output *shape* must not.
+`--judge` is currently a stub: it prints the criterion but does not grade it.
 
 ## Running
 
@@ -43,7 +42,7 @@ node eval/run.mjs runbook-commands    # a single case
 node eval/run.mjs --setup-only        # build the workspaces and stop — spends nothing
 node eval/run.mjs --keep              # keep the workspaces, print their paths
 node eval/run.mjs --timeout 900       # per-case seconds (default 600)
-node eval/run.mjs --judge             # also grade fuzzy criteria
+node eval/run.mjs --judge             # prints fuzzy criteria; does not grade them yet
 ```
 
 ⚠️ Each case spends real tokens (it calls a real agent CLI). Keep cases **few and
@@ -75,6 +74,8 @@ node eval/run.mjs --bin ./build/claude                  # the claude preset, ano
 |---|---|---|---|---|
 | `claude` | `.claude/` | yes — streamed over stdin | yes | **verified** |
 | `cursor` (`cursor-agent`) | `.agents/` + `AGENTS.md` | yes — `--continue` | no | **verified** |
+| `codex` | `.agents/` + `AGENTS.md` | no | no | **CLI flags checked; real case unverified** |
+| `opencode` | `.agents/` + `AGENTS.md` | no | no | **CLI flags checked; real case unverified** |
 | `--cmd …` | `--layout` (default `.claude/`) | no | no | **verified** (fake runner in `test/`) |
 
 An entry marked *unverified* was written from documentation and has never been run
@@ -104,6 +105,10 @@ runner can reach the output, and it prints that the *questioning* is no longer t
 Comparing runners is the point: the same case, the same assertions, and the gates as
 the oracle, tell you whether a rule survives the trip to another agent.
 
+The [ADR reading bench](./adr-bench/README.md) is a separate, read-only experiment
+using a frozen Quill snapshot. It compares full and index-guided ADR reading within
+Claude Code, Codex, or OpenCode, and uses an explicit human scoring sheet.
+
 ## Experience cases
 
 `reviewer-experience-profiles` and `reviewer-experience-exploring` check that actor
@@ -113,8 +118,8 @@ omits a required Cancel action. `experience-stabilize` exercises explicit develo
 validation without an ADR ceremony, with runtime evidence still unavailable.
 
 These are source/contract fixtures, not browser or screenshot tests. Verdict/regex
-checks cover the explicit outcomes; `--judge` additionally checks the reasoning
-(including unwanted unification and invented runtime evidence). The cases are
+checks cover the explicit outcomes; the `judge` field describes reasoning to
+inspect manually (including unwanted unification and invented runtime evidence). The cases are
 validated structurally by `npm test`; real model behavior is only established when
 these cases are run against a model. Adding them is not a claim that they passed.
 

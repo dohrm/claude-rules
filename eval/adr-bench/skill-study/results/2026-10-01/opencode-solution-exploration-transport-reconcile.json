@@ -1,0 +1,120 @@
+{
+  "runner": "opencode",
+  "binary": "opencode2",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "transport",
+  "phase": "reconcile",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 145851,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".agents/skills/solution-exploration/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md",
+    "problem.md",
+    "provisional.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input": 3948,
+        "output": 29,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 4647,
+        "output": 106,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 5936,
+        "output": 187,
+        "reasoning": 0,
+        "cache": {
+          "read": 6528,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 6154,
+        "output": 267,
+        "reasoning": 28,
+        "cache": {
+          "read": 12288,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 7277,
+        "output": 149,
+        "reasoning": 27,
+        "cache": {
+          "read": 18304,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    }
+  ],
+  "response": "The core recommendation fits ADR-0014, but two extracts contradict it: ADR-0001’s amendment calls Git the primary exchange substrate, and the architecture egress note permits a shared remote. Also, ADR-0016 specifies connectivity—not a durable offline inbox—so asynchronous remote delivery remains an unresolved requirement in the supplied evidence.\n## Final recommendation\n\n**Keep the typed-packet exchange core, portable bundles, and the iroh adapter selected by ADR-0016. Do not adopt a shared Git remote yet.** Make genuinely asynchronous remote delivery an explicit acceptance test: the supplied evidence establishes connectivity, but not delivery when participants are never online together.\n\nThis **refines rather than reverses** pass 1:\n\n- Bundle-based offline handoff and pre-delivery player projection remain the strongest common foundation.\n- “Convenient LAN delivery” now has a concrete choice: **iroh**, subject to its required POC.\n- Optional co-GM Git remains technically credible, but is **not currently authorized**: ADR-0014 confines Git to local history. Its adoption would require human arbitration, not merely adding an adapter.  \n  Sources: `provisional.md:39–52`; `docs/adr/0014-federated-local-first-exchange.md:29–41,69–73`; `docs/adr/0016-p2p-transport-iroh.md:28–39,51–57`.\n\n## Reconciliation with decisions in force\n\n**The trust model survives every transport option.** Co-GMs and same-user devices receive complete replicas; players receive separate projected artifacts and return only their own data. Projection occurs before transmission, not through UI hiding, repository permissions, or runtime spoiler ACLs. Node pairing authenticates a peer; it does not settle fine-grained content permissions. Those remain explicitly open.  \nSources: `docs/adr/0014-federated-local-first-exchange.md:35–49`; `docs/adr/0016-p2p-transport-iroh.md:31–38`; `docs/adr/0005-gm-player-profiles.md:32–49`.\n\n**Two contradictory statements need correction, not selective interpretation:**\n\n- ADR-0001’s amendment says “Git as primary substrate,” but the amending ADR-0014 explicitly specifies local-only history, typed packets, and P2P/bundle adapters.\n- The architecture extract’s original L84 permits a shared Git remote, whereas its original L67–69 describe ADR-0014/0016’s no-remote architecture.\n\nFor this assessment, the explicit amending decision and concrete transport decision provide the governing direction. The inconsistent prose is a documentation defect—not evidence that optional remote Git is already accepted.  \nSources: `docs/adr/0001-local-first-campaign-tool.md:7`; `docs/adr/0014-federated-local-first-exchange.md:30–33,71`; `docs/ARCHITECTURE.md:3–6`.\n\n**The asynchronous-delivery gap is real.** ADR-0016 describes discovery, hole-punching, direct connections, and encrypted relay fallback. It does not specify a durable store-and-forward mailbox. Consequently, “automatic remote delivery” should not be read as proof of non-overlapping-online delivery. Bundles can cover that need through user-selected channels; queued P2P delivery still needs eventual peer overlap unless another durable mechanism is introduced.  \nSources: `problem.md:5`; `docs/adr/0016-p2p-transport-iroh.md:30–38,44`.\n\n## Sourced option comparison\n\n| Option | Strongest case | Principal cost or limitation |\n|---|---|---|\n| **Shared Git remote, co-GMs only** | Durable asynchronous exchange, reviewable ancestry, offline commits; Markdown/YAML storage makes this plausible. | Hosting, credentials, retained secrets, and semantic merge validation. Git conflicts do not ensure consistency across entity Markdown, character sidecars, and session events. Conflicts with ADR-0014’s local-only rule. |\n| **iroh packet delivery** | Account-free LAN exchange; remote connectivity with established NAT traversal, authenticated nodes, and encryption. | Heavy dependency, relay operations/privacy disclosure, version pinning, and a still-required POC. No documented durable offline inbox. |\n| **Portable bundles** | Offline and non-overlapping-online exchange without Quill-operated storage; same filtered payload boundary. | Manual delivery, stale bases, duplicates, attachment completeness, and application-level reconciliation. |\n| **iroh plus bundles** | Covers LAN, connected remote exchange, and offline handoff without creating competing synchronization models. | Two adapters and shared import/export machinery to build and test; asynchronous convenience remains weaker than a durable remote. |\n\nSources: `CLAUDE.source.md:4`; `docs/adr/0013-wikilinks-backlinks-obsidian-vault.md:30–36`; `docs/adr/0009-temporal-facts-and-scopes.md:29–58`; `docs/adr/0014-federated-local-first-exchange.md:29–41,60–73`; `docs/adr/0016-p2p-transport-iroh.md:41–64`.\n\nThe Git rejection’s **player-clone argument does not defeat a co-GM-only remote**: trusted co-GMs already hold complete replicas. Its operational dependency and architectural conflict still apply. That distinction merits a fair reassessment if durable remote convenience proves essential.\n\n## Concrete impacts\n\nThese are proposed work items, **not claims that the supplied extracts prove an implementation exists**.\n\n### Code and tests\n\n- Put packet types and base/version metadata in the core; keep projection, import validation, conflict application, and campaign mutations in `quill-tools-core`. Both adapters must use the same pipeline—not write campaign files independently.  \n  Sources: `docs/adr/0014-federated-local-first-exchange.md:31–33`; `docs/adr/0004-tools-core-single-source.md:9–21`.\n- Implement and test iroh pairing, campaign allow-list checks, LAN discovery without rendezvous, hostile-NAT fallback, interrupted transfers, retries, and offline behavior. Define key persistence/recovery and packet replay handling. These details are not established by the ADR.  \n  Source: `docs/adr/0016-p2p-transport-iroh.md:30–39,51–54`.\n- Make imports previewable and recoverable; handle duplicate packets, unknown bases, out-of-order updates, incompatible schemas, and manual conflict resolution. Exercise concurrent changes spanning Markdown, `fiche.yaml`, and session events.  \n  Sources: `provisional.md:33–35`; `docs/adr/0014-federated-local-first-exchange.md:31,37–41,62`; `docs/adr/0013-wikilinks-backlinks-obsidian-vault.md:35–36`.\n- Test projection across scopes, event perspective, attachments, links/aliases, and historical material. Never ship full Git history or GM-derived search caches inside a player pack. Rebuild receiver-side derived indexes from permitted content.  \n  Sources: `docs/adr/0009-temporal-facts-and-scopes.md:33–58`; `docs/adr/0013-wikilinks-backlinks-obsidian-vault.md:30–59`; `docs/adr/0012-memory-search-retrieval-orchestrator.md:7,43–45`.\n\n### Documentation and migration\n\n- Reconcile ADR-0001’s misleading amendment and the architecture egress note; document actual rendezvous/relay traffic, bundle-channel confidentiality, and delivery guarantees.\n- Specify packet schemas and import/base recovery in `docs/DATA-MODEL.md`; publishing, pairing, conflict, and failure states in `docs/EXPERIENCE.md`; adapter boundaries in `docs/ARCHITECTURE.md`.  \n  Source: `agent/decision-records.md:67–75`.\n- Preserve existing Markdown/YAML workspaces and local history. Define schema compatibility, initial full-replica/bootstrap exchange, backup/rollback, and legacy player-pack import behavior before rollout. Do not silently migrate users to hosted repositories.\n- Preserve phase ordering: exchange/player-pack work must not displace the agent-notes blocker without a separate sequencing decision.  \n  Sources: `docs/adr/0006-phase-ordering.md:13–33`; `docs/adr/0005-gm-player-profiles.md:53–54`.\n\nThe source extracts also show stale Rig guidance in `AGENTS.source.md`; ADR-0015, `CLAUDE.source.md`, and the pinned `genai` dependency agree on the newer direction. Correct that guidance when authorized, but **do not couple transport work to another agent-runtime migration**.  \nSources: `AGENTS.source.md:3–5`; `CLAUDE.source.md:3–5`; `crates/agent/Cargo.toml:21–23`; `docs/adr/0015-llm-client-rust-genai.md:24–32,48–49`.\n\n## Human decisions required\n\n1. **If adopting co-GM remote Git:** revisit ADR-0014’s local-only history/no-remote choice. Explicitly retain player separation and choose whether Git carries native workspace files or typed packets. Revisit ADR-0016 only if Git replaces its selected transport role.\n2. **If adding durable hosted packet storage:** arbitrate the new infrastructure, retention, encryption, and trust boundary against ADR-0014/0016. A connectivity relay is not automatically authorization for persistent campaign payload storage.\n3. **Before production player exchange:** settle the detailed projection and inbound ownership policy through the dedicated decision ADR-0014 leaves open.\n4. **If the iroh POC fails:** reopen ADR-0016; it expressly allows reconsidering libp2p. Do not reopen unrelated retrieval, storage, or agent decisions.\n5. **Only if delivery work changes strategic ordering:** reopen ADR-0006.\n\n**Bottom line:** retain the current layered direction for substantive reasons—shared projection/import semantics, offline portability, and delegated network complexity—not because its ADRs are Accepted. Reconsider a **strictly co-GM-only Git remote** if tests show non-overlapping-online exchange is dominant and bundle delivery is too cumbersome. The supplied corpus contains no exchange implementation, merge benchmark, or iroh POC results sufficient to justify that change today.\n\nNo files or ADR statuses were changed. Adoption remains a human decision; any later replacement proposals should be separate `Proposed` records, one per distinct decision. If declined, ADR-0014/0016 remain in force.  \nSources: `agent/decisions.md:13–21,28–43`; `agent/decision-records.md:35–44`."
+}

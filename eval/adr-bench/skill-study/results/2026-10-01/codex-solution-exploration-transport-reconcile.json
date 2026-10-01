@@ -1,0 +1,60 @@
+{
+  "runner": "codex",
+  "binary": "codex",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "transport",
+  "phase": "reconcile",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 98964,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".agents/skills/solution-exploration/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md",
+    "problem.md",
+    "provisional.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 205430,
+        "cached_input_tokens": 173056,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3477,
+        "reasoning_output_tokens": 947
+      },
+      "costUsd": null
+    }
+  ],
+  "response": "I’m applying the installed solution-exploration skill for pass 2. I’ll trace the transport proposal through the decisions in force and the Quill source extracts, then report the recommendation and concrete impacts without changing files or ADR status.\nADR-0014 and ADR-0016 change the transport assessment: they specify local history, typed packets, filtered player projections, iroh delivery, and portable bundles. I’m checking the source extracts and dependent decisions now, including an architecture extract that still mentions an optional shared Git remote.\n## Pass 2 recommendation\n\n**Revise the provisional recommendation:** keep the recipient-scoped exchange contract, but do **not** recommend a shared Git remote as Quill’s co-GM transport under the decisions now in force. [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:27) places typed packets above a transport port, keeps history local, and selects P2P plus portable bundles. [ADR-0016](/tmp/adr-skill-study-WwSZAz/docs/adr/0016-p2p-transport-iroh.md:26) selects iroh for P2P delivery. This is a change to pass 1’s *optional Git remote* recommendation; its trust boundary and offline bundle rationale still stand. [provisional.md](/tmp/adr-skill-study-WwSZAz/provisional.md)\n\n| Option | Assessment against the brief and current evidence |\n|---|---|\n| Shared Git remote for co-GMs | Still has a strong case for asynchronous exchange when peers are not online together. Trusted co-GMs may hold full replicas, so the player-clone spoiler objection does **not** apply to a co-GM-only remote. It does add hosted storage, access control and another exchange path. ADR-0014 explicitly declines remote Git as the exchange substrate. [problem.md](/tmp/adr-skill-study-WwSZAz/problem.md) · [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:69) |\n| iroh P2P | Covers the intended LAN and distant direct-delivery paths, with node identity and a rendezvous or relay for distant connections. Its dependency and network behavior still require the POC specified by ADR-0016. Direct delivery alone does not demonstrate delivery while the recipient is offline. [ADR-0016](/tmp/adr-skill-study-WwSZAz/docs/adr/0016-p2p-transport-iroh.md:30) · [ADR-0016](/tmp/adr-skill-study-WwSZAz/docs/adr/0016-p2p-transport-iroh.md:51) |\n| Portable bundles | Preserve offline handoff and can provide distant, nonconcurrent exchange through a user-chosen delivery channel. They are an **adapter carrying the typed packet**, rather than the core exchange contract itself. Manual delivery and import remain costs. [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:31) |\n\n**Proceed with ADR-0014/0016’s packet, projection, iroh and bundle direction, subject to the iroh POC.** Keep the Git remote proposal available for human reconsideration if that POC or actual exchange use shows that nonconcurrent distant delivery needs an integrated store-and-forward path. Accepted status establishes the present contract; the stronger co-GM-only case for Git deserves evaluation on its merits, not dismissal by status. No supplied source extract demonstrates the POC outcome or a completed exchange implementation.\n\n### Concrete impacts to plan\n\n- **Core and import path:** define packet type, sender, recipient and base version in `quill-core`; put campaign mutations and import handling through `quill-tools-core`. Add duplicate detection and a reviewable manual conflict path for trusted full replicas. The existing workspace is Markdown/YAML, with entity filenames serving as `semantic_id` and `fiche.yaml` retained as a sidecar; packet and merge handling must preserve those relationships. [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:29) · [ADR-0004](/tmp/adr-skill-study-WwSZAz/docs/adr/0004-tools-core-single-source.md:11) · [ADR-0013](/tmp/adr-skill-study-WwSZAz/docs/adr/0013-wikilinks-backlinks-obsidian-vault.md:23)\n- **Player boundary:** build the GM-side projection before either adapter publishes a packet; test that GM-only material and unintended metadata never enter a player packet. Keep player workspaces separate and import player notes or character updates in the opposite direction. ADR-0009 supplies initial scopes, while ADR-0014 explicitly leaves the finer projection and nonleakage rules undecided. [ADR-0009](/tmp/adr-skill-study-WwSZAz/docs/adr/0009-temporal-facts-and-scopes.md:27) · [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:35) · [ADR-0014](/tmp/adr-skill-study-WwSZAz/docs/adr/0014-federated-local-first-exchange.md:47)\n- **Adapters and migration:** implement bundle export/import and validate the iroh path, including identity, pairing, LAN discovery and distant relay behavior. Existing local workspaces need a baseline history and a compatible first packet; existing player packs need a path into the filtered packet format. These are migration tasks implied by the decisions, **not verified existing features** in the supplied extracts. [ADR-0016](/tmp/adr-skill-study-WwSZAz/docs/adr/0016-p2p-transport-iroh.md:30) · [ADR-0005](/tmp/adr-skill-study-WwSZAz/docs/adr/0005-gm-player-profiles.md:45)\n- **Docs:** reconcile contradictory extracts before implementation guidance is used. [ARCHITECTURE.md](/tmp/adr-skill-study-WwSZAz/docs/ARCHITECTURE.md:6) still permits an optional co-GM Git remote despite its own local-only history line and ADR-0014. [ADR-0001’s amendment](/tmp/adr-skill-study-WwSZAz/docs/adr/0001-local-first-campaign-tool.md:6) also calls Git the primary exchange substrate, contrary to ADR-0014’s explicit decision. Clarifying those summaries need not change an ADR status.\n\nA human would need to arbitrate **adding a shared Git remote as a supported exchange adapter or substrate**, because it reopens ADR-0014’s explicit remote-Git rejection and may change ADR-0016’s transport role. The **fine-grained player projection and verification policy** is a separate open decision identified by ADR-0014. Neither decision has been made by this exploration. No files or ADR statuses were changed."
+}

@@ -1,0 +1,22 @@
+{
+  "runtime": {
+    "current": {
+      "question": "A contributor follows the Rig instruction in AGENTS.source.md while updating crates/agent. What architecture and import boundary should the change follow today? Identify which parts of ADR-0002/0003 survive and which are replaced, and list concrete documentation or code impacts.",
+      "evidence": ["ADR-0002", "ADR-0003", "ADR-0015", "AGENTS.source.md", "CLAUDE.source.md", "crates/agent/Cargo.toml"]
+    },
+    "alternative": {
+      "question": "A contributor proposes restoring Rig and its typed provider backends to simplify the agent runtime. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete code/documentation impacts. Do not silently adopt the proposal.",
+      "evidence": ["ADR-0002", "ADR-0003", "ADR-0015", "AGENTS.source.md", "CLAUDE.source.md", "crates/agent/Cargo.toml"]
+    }
+  },
+  "transport": {
+    "current": {
+      "question": "An engineer reads the optional shared remote git statement in docs/ARCHITECTURE.md and plans to implement exchange through it. What exchange and transport architecture is in force today? Identify the conflicting line and concrete implementation/documentation impacts.",
+      "evidence": ["ADR-0014", "ADR-0016", "docs/ARCHITECTURE.md"]
+    },
+    "alternative": {
+      "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+      "evidence": ["ADR-0014", "ADR-0016", "docs/ARCHITECTURE.md"]
+    }
+  }
+}

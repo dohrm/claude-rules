@@ -1,7 +1,7 @@
 // Which CLI runs a case, and where that CLI reads its assets from.
 //
-// The harness covers the two targets the installer emits for: Claude Code and
-// Cursor. A runner is four facts — the command line, the asset layout, the
+// The harness can invoke Claude Code, Cursor, Codex, and OpenCode. A runner is
+// four facts — the command line, the asset layout, the
 // output format, and what the tool can and cannot do — and adding one is a
 // table entry, not a code change. Anything else goes through `--cmd`.
 //
@@ -38,6 +38,8 @@ export const RUNNERS = {
       ...withModel(model),
       ...(streaming ? [] : [prompt]),
     ],
+    benchArgs: ({ prompt, model }) => ['-p', '--output-format', 'stream-json', '--verbose',
+      '--allowedTools=Read,Grep,Glob', ...withModel(model), prompt],
   },
 
   // Cursor's agent CLI (`cursor-agent`, program name `agent`). Needs `agent login` or
@@ -54,6 +56,24 @@ export const RUNNERS = {
     // `--force` allows the commands.
     args: ({ prompt, model }) => ['-p', '--force', ...withModel(model), prompt],
     resume: ({ answer, model }) => ['-p', '--continue', '--force', ...withModel(model), answer],
+  },
+
+  // Single-shot skill cases and the ADR bench. Agent/subagent cases are skipped.
+  codex: {
+    bin: 'codex', layout: 'agents', format: 'codex-json', drive: null,
+    subagents: false,
+    args: ({ prompt, model }) => ['exec', '--json', '--ephemeral', '-s', 'workspace-write',
+      ...withModel(model, '-m'), prompt],
+    benchArgs: ({ prompt, model }) => ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '-s', 'read-only',
+      ...withModel(model, '-m'), prompt],
+    unverified: true,
+  },
+  opencode: {
+    bin: 'opencode', layout: 'agents', format: 'opencode-json', drive: null,
+    subagents: false,
+    args: ({ prompt, model }) => ['run', '--format', 'json', ...withModel(model, '-m'), prompt],
+    benchArgs: ({ prompt, model }) => ['run', '--format', 'json', ...withModel(model, '-m'), prompt],
+    unverified: true,
   },
 }
 

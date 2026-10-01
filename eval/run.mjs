@@ -130,9 +130,10 @@ function setupWorkspace(caseDir, expect) {
 // ----------------------------------------------------------------------- invoking
 function invokeOnce(ws, prompt) {
   const r = spawnSync(runner.bin, runner.args({ prompt, model, ws, streaming: false }), {
-    cwd: ws, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
+    cwd: ws, input: '', encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs,
   })
   if (r.error) throw new Error(`failed to spawn ${runner.bin}: ${r.error.message}`)
+  if (r.status !== 0) throw new Error(`${runner.bin} exited ${r.status}: ${(r.stderr || '').trim().slice(-1000)}`)
   return r.stdout || ''
 }
 
@@ -200,6 +201,17 @@ function driveConversation(ws, prompt, answers) {
 function parseOutput(raw) {
   // A pretty-printing CLI mixes ANSI escapes into its output; strip them, or an
   // assertion anchored on a line start matches a colour code instead.
+  if (runner.format === 'codex-json' || runner.format === 'opencode-json') {
+    const lines = raw.split('\n').flatMap(line => { try { return [JSON.parse(line)] } catch { return [] } })
+    const parts = lines.flatMap(event => {
+      if (runner.format === 'codex-json' && event.type === 'item.completed'
+          && event.item?.type === 'agent_message') return [event.item.text || '']
+      if (runner.format === 'opencode-json' && event.type === 'text')
+        return [event.part?.text || '']
+      return []
+    })
+    return { text: parts.join('\n'), subagentRan: false }
+  }
   if (runner.format !== 'stream-json')
     return { text: raw.replace(/\[[0-9;]*[A-Za-z]/g, ''), subagentRan: false }
   let text = '', subagentRan = false

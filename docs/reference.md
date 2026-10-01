@@ -37,6 +37,8 @@ flowchart LR
 |---|---|---|---|
 | **Frame** | `/interview` → `/prd` | `.work/<slug>/intent.md` (what is still open), then `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
 | **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per decision | agent writes `Proposed`, **human accepts** |
+| **Explore solutions** | `/solution-exploration` | independent options first, then ADR impacts; `Proposed` ADR only if a replacement is chosen for proposal | human decides whether to adopt it |
+| **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
 | **Slice one capability** | `/plan` | `.work/<slug>/PLAN.md` — sprints for that capability (committed, dies once it ships) | human validates the granularity |
@@ -382,7 +384,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` `goal-setup` | `/investigate` `/loop-setup` `/goal-setup` |
 

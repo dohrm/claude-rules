@@ -1,0 +1,45 @@
+{
+  "runner": "opencode",
+  "binary": "opencode2",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "transport",
+  "phase": "blind",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 70192,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".agents/skills/solution-exploration/SKILL.md",
+    "problem.md"
+  ],
+  "observedAdrReads": [],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input": 3921,
+        "output": 20,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 4519,
+        "output": 59,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    }
+  ],
+  "response": "## Pass 1 — problem-first comparison\n\n**Scope:** This assessment uses only `problem.md` and the installed skill’s pass-1 instructions. No ADRs were consulted and no files were changed.\n\n### Needs and decision criteria\n\nQuill needs asynchronous remote exchange, convenient LAN exchange, and offline handoff—not live collaboration or a central campaign service (`problem.md:3–5`).\n\nThe key distinction is **who receives what**, not merely how it travels:\n\n- **Co-GMs:** trusted to receive and edit a complete campaign replica.\n- **Players:** receive only explicitly permitted projections; return their own notes and character updates.\n- **Conflicts:** manual resolution is acceptable, but changes must remain understandable and recoverable.\n\nCompare options on privacy, operational dependencies, offline behavior, conflict handling, implementation risk, and migration cost. The existing storage format, exchange implementation, and users’ technical comfort are unknown, so migration estimates are relative rather than measured.\n\n### Credible options\n\n| Option | Strongest case | Costs, risks, and unknowns |\n|---|---|---|\n| **Shared Git remote for co-GMs** | A strong fit for trusted, asynchronous, complete replicas: local commits work offline; a remote decouples participants’ availability; branches and history support review, recovery, and manual conflict resolution. A hosted or self-managed repository supplies remote storage without a bespoke campaign server. | Requires remote hosting, credentials, and usable Git error handling. Text merges may produce structurally valid but semantically inconsistent campaign data; binary or frequently rewritten files may merge poorly. Git history retains removed secrets. **Players must not receive access to the full repository**; projections need a separate exchange path. Adoption cost depends heavily on storage layout and whether Git mechanics can be hidden reliably. |\n| **Direct peer-to-peer packet delivery** | Best fit for convenient LAN exchange without accounts or persistent third-party storage. The same delivery mechanism can carry complete co-GM updates or narrowly scoped player packets. | Remote asynchronous exchange is weak unless peers overlap online or a durable relay/store is added. Internet reachability, discovery, retries, acknowledgements, duplicates, and interrupted transfer increase implementation risk. Encryption does not make an overbroad player packet safe. Manual conflict resolution still needs application-level change tracking. |\n| **Portable bundles** | Covers offline handoff and asynchronous distance exchange through user-selected channels. A bundle can contain a full co-GM update or a deliberately restricted player projection. No always-on Quill infrastructure is required. Explicit export/import boundaries make validation and privacy review easier. | More manual steps; users may import stale or duplicate bundles or exchange updates out of order. Incremental bundles require a known base or a recovery route. Conflict handling, integrity checks, attachment completeness, and schema compatibility remain application responsibilities. Transport privacy depends on bundle encryption and the chosen delivery channel. |\n| **Bundles plus LAN delivery, optionally Git for co-GMs** | A common exchange format separates data policy from transport: handoff remains available everywhere, LAN delivery removes local friction, and Git can provide durable remote history for trusted co-GMs where useful. | More components and testing unless transports share one import/export pipeline. Git and bundle histories can diverge if both independently define synchronization state. The design must specify whether Git stores native workspace files or exchange bundles; those offer different merge benefits. |\n\n### Important design boundaries\n\nThese are requirements inferred from the brief, not claims about existing implementation:\n\n- **Filter before delivery.** Hiding GM fields in the player UI is insufficient. Player exports must exclude restricted records, attachments, metadata, and historical content.\n- **Separate trust from transport.** Co-GM repository permissions should never double as player authorization. Validate player-returned updates against permitted ownership and fields.\n- **Preserve a conflict base.** Manual resolution is much safer when the receiver can distinguish concurrent edits from sequential updates. Git provides file ancestry; it does not automatically provide campaign-level correctness.\n- **Keep imports recoverable.** Preview, validation, duplicate detection, and rollback matter across all options.\n\nThe largest unknowns are storage mergeability, attachment sizes, expected exchange frequency, identity and ownership rules, projection complexity, and the amount of existing exchange code. Those determine both implementation and migration cost.\n\n## Provisional recommendation\n\n**Favor a portable-bundle exchange core with convenient LAN delivery. Treat a shared Git remote as a credible optional co-GM transport, not as the universal exchange mechanism.**\n\nThis combination covers all stated delivery needs while giving player filtering and update validation one explicit boundary. It does require application-level conflict handling. The contributor’s proposal could instead be the best primary **co-GM** path if Quill’s files are stable, meaningfully diffable, and readily mergeable, and users accept remote hosting.\n\n**Evidence that could change this recommendation:**\n\n- Representative concurrent edits show Git merges preserve campaign invariants and produce understandable conflicts.\n- Existing storage or exchange code makes Git adoption substantially cheaper than a bundle protocol.\n- User testing shows remote co-GM exchange dominates usage and repository setup is acceptable.\n- LAN reachability tests show direct delivery works reliably in intended environments.\n- Projection tests reveal leakage through history, attachments, or references—requiring stronger separation regardless of transport.\n- Bundle prototypes show unacceptable duplication, size, or conflict-resolution burden, strengthening the case for Git or another durable asynchronous mechanism."
+}

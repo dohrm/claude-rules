@@ -69,16 +69,22 @@ slash-command notation.
 | Need | Start with |
 |---|---|
 | Clarify a product or capability | `/prd`; `/interview` if the intent is still unclear |
-| Choose or challenge architecture | `/architect`: compare alternatives, including the current design |
+| Define the initial architecture and write ADRs | `/architect` |
+| Explore a proposed solution or architectural limit | `/solution-exploration`: assess options before reading affected ADRs |
+| Untangle a large ADR corpus | `/adr-review`: map active decisions, conflicts and consolidation options |
 | Organize substantial work | `/plan` → `/tasks` → `/goal-setup` (Codex) or `/loop-setup` (repeated loop) |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |
 | Run a local monorepo | `devstack`; [setup and commands](kit/devstack/README.md) |
 | Equip an existing repo / migrate an installation | `/onboard` / `/migrate` |
 
-An accepted ADR governs implementation, but its rationale can be challenged.
-Alternatives remain proposals until **you manually change and commit the ADR
-status**. The agent does not accept or supersede decisions on your behalf.
+Use `/solution-exploration` to assess a problem and its options before reading
+the relevant ADRs; it then follows dependent decisions where needed. Use `/adr-review`
+to audit the whole corpus for decisions in force, duplication, contradictions and
+consolidation opportunities. `/architect` remains the entry point for initial
+architecture and ADR writing. Accepted decisions stay in force during exploration;
+only you can change and commit their status.
+
 Ordinary authorized adjustments update the affected product documents in place.
 
 Other skills, including design-system, UI prompt export and incident workflows,

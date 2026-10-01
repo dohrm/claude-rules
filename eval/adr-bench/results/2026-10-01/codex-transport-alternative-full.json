@@ -1,0 +1,75 @@
+{
+  "runner": "codex",
+  "binary": "codex",
+  "model": null,
+  "topic": "transport",
+  "task": "alternative",
+  "mode": "full",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+  "expectedEvidence": [
+    "ADR-0014",
+    "ADR-0016",
+    "docs/ARCHITECTURE.md"
+  ],
+  "durationMs": 84792,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 156350,
+        "cached_input_tokens": 133504,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3220,
+        "reasoning_output_tokens": 887
+      },
+      "costUsd": null
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "I’ll read the index and all sixteen ADRs, then compare the shared remote proposal with the decisions in force and the supporting documentation. I’ll leave the fixture unchanged.\nADR-0014 explicitly separates local history, typed packets, and transport; ADR-0016 selects iroh for online delivery. I’ll now check the surrounding documents for older git guidance and identify where the proposal would require a new decision.\n## Decision in force\n\nQuill’s accepted design gives each participant a local workspace and local history. Co-MJs are trusted to replicate the **full** campaign and resolve conflicts through that history. Exchange still uses typed packets through a transport port; ADR-0016 selects iroh for online delivery, while portable bundles remain available offline. A shared git remote is **not** the chosen exchange mechanism. [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0016](snapshot/docs/adr/0016-p2p-transport-iroh.md)\n\n## Evidence and supersession\n\nThe [ADR index](snapshot/docs/adr/README.md) marks ADR-0014 and ADR-0016 accepted and ADR-0001 amended. ADR-0014 explicitly rejects a shared git remote or fork as the exchange substrate, retaining git for **local history**. ADR-0016 then chooses iroh to carry packets; its accepted status establishes direction while acknowledging that iroh needs a proof of concept. [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0016](snapshot/docs/adr/0016-p2p-transport-iroh.md)\n\nTwo older-looking statements do not reverse that decision. ADR-0001’s amendment calls git a “primary substrate,” but ADR-0014 supplies the more specific decision: local history, no remote, packets for exchange. The egress line in [docs/ARCHITECTURE.md](fixtures/transport/docs/ARCHITECTURE.md) still mentions an optional co-MJ remote, contradicting that file’s own history and transport lines and ADR-0014. It is stale documentation, not a new ADR. [ADR-0001](snapshot/docs/adr/0001-local-first-campaign-tool.md), [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md)\n\n## Alternative assessment\n\nThe strongest case is **co-MJ exchange specifically**. Co-MJs already receive the whole workspace, so a private remote does not create the player-clone spoiler problem that rules out sharing the campaign with players. Git offers familiar push, fetch, branches, history, and manual merge tools. Co-MJs could commit offline and exchange changes when connected; a hosted remote could accept changes while the main MJ’s computer is off. This could reduce the need to build iroh delivery for that trusted-to-trusted path. [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0016](snapshot/docs/adr/0016-p2p-transport-iroh.md)\n\nThe costs are substantive. A shared remote stores a full campaign copy outside the participants’ workspaces and needs hosting, credentials, access management, and an availability model. A direct push/pull workflow also bypasses the typed packet’s sender, recipient, base version, and import boundary. Git’s merge tools help with conflicts but do not settle Quill’s semantic reconciliation. Extending the remote to players would expose GM history through clones, including material absent from a filtered working tree; ADR-0014 requires projection **before** player delivery. The proposal therefore cannot replace packet transport for every participant without a separate, filtered player channel. [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0009](snapshot/docs/adr/0009-temporal-facts-and-scopes.md)\n\nA narrower git-backed **packet adapter** is conceivable: publish and receive typed packets through isolated remote refs without sharing the campaign repository with players. That preserves more of ADR-0014’s semantics, but it still changes its explicit “no remote” choice and adds hosted infrastructure. It is a different proposal from co-MJs simply sharing a repo.\n\n## Impacts\n\nAdopting the alternative would require a new decision amending or superseding the relevant parts of ADR-0014 and ADR-0016; their accepted statuses are not ours to change in this review. The decision would need to say whether a full-campaign remote is allowed **only for trusted co-MJs**, whether iroh remains for other exchange, and what “no server of campaign data” means when a remote hosts the repository. The index, ADR-0001’s amendment text, and the contradictory lines in [docs/ARCHITECTURE.md](fixtures/transport/docs/ARCHITECTURE.md) would then need to be made consistent. [ADR index](snapshot/docs/adr/README.md), [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0016](snapshot/docs/adr/0016-p2p-transport-iroh.md)\n\nImplementation would need remote setup and authorization, fetch/push and retry behavior, conflict presentation, and a defined path for applying received changes. If git directly updates campaign files, that path must be reconciled with ADR-0004’s rule that campaign mutations pass through `tools/core`. Player publishing and filtered player packs still need their own safe exchange path; profile and scope metadata alone are not runtime access controls. [ADR-0004](snapshot/docs/adr/0004-tools-core-single-source.md), [ADR-0005](snapshot/docs/adr/0005-gm-player-profiles.md), [ADR-0009](snapshot/docs/adr/0009-temporal-facts-and-scopes.md), [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md)\n\n## Uncertainties\n\nThe fixture gives no measured comparison of git-remote operations against the planned iroh proof of concept. It also leaves the detailed projection rights and leak checks open, and accepts manual co-MJ conflict resolution without specifying the workflow. Those are important inputs to a revised decision, especially whether the proposal is limited to trusted co-MJs or intended to replace packet delivery generally. Until such a decision is made, the shared remote remains a plausible **alternative**, not Quill’s architecture. [ADR-0014](snapshot/docs/adr/0014-federated-local-first-exchange.md), [ADR-0016](snapshot/docs/adr/0016-p2p-transport-iroh.md)",
+  "modelResolved": "gpt-6-sol",
+  "modelResolution": "local Codex config.toml default",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/codex-transport-alternative-full.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

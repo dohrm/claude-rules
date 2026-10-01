@@ -1,0 +1,103 @@
+{
+  "runner": "opencode",
+  "binary": "opencode2",
+  "model": null,
+  "topic": "transport",
+  "task": "alternative",
+  "mode": "index",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+  "expectedEvidence": [
+    "ADR-0014",
+    "ADR-0016",
+    "docs/ARCHITECTURE.md"
+  ],
+  "durationMs": 85324,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input": 5948,
+        "output": 33,
+        "reasoning": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 1088,
+        "output": 130,
+        "reasoning": 0,
+        "cache": {
+          "read": 5760,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 4557,
+        "output": 92,
+        "reasoning": 0,
+        "cache": {
+          "read": 6656,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 2496,
+        "output": 132,
+        "reasoning": 30,
+        "cache": {
+          "read": 11008,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 3309,
+        "output": 106,
+        "reasoning": 0,
+        "cache": {
+          "read": 13312,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "ADR-0014 explicitly rejects shared git exchange, but its spoiler objection does not apply to trusted co-GMs in the same way it applies to players. There is also a stale amendment summary in ADR-0001 that calls git the primary exchange substrate, contrary to ADR-0014 and ADR-0016.\n## Decision in force\n\n**A shared git remote is a credible co-GM alternative, but it is not the current decision.**\n\n- **ADR-0014** adopts typed packets behind `publish(packet)` / `receive()`, with local history, MJ-side projection, P2P transport and portable bundles. It explicitly rejects git remote/fork exchange.\n- **ADR-0016** selects iroh for the P2P adapter: Ed25519 node identity, invitation/allow-list pairing, QUIC, rendezvous and relay fallback.\n- Co-GMs are trusted participants receiving **complete workspace replicas**, with reconciliation through local history and **manual conflict resolution**. Players receive only separately projected artifacts.\n\nSources: `docs/adr/0014-federated-local-first-exchange.md`, §§ Decision, Consequences, Alternatives; `docs/adr/0016-p2p-transport-iroh.md`, § Decision.\n\n## Evidence and supersession\n\n- **ADR-0014 amends ADR-0001**, broadening strictly single-user, one-way export into bidirectional federation. It retains no shared campaign server, no real-time synchronization and no runtime anti-spoiler ACL.\n- **ADR-0016 implements ADR-0014’s transport port**; it does not replace its trust model or packet semantics.\n- The amendment summary in `docs/adr/0001-local-first-campaign-tool.md:7` says “git as primary substrate.” This is **stale contradictory wording**, not authorization: ADR-0014 explicitly limits git to local history, and ADR-0016 chooses iroh.\n- `docs/ARCHITECTURE.md` has the same inconsistency: extracted L67–L69 describe packets, iroh and local-only git, whereas extracted L84 permits an optional co-GM remote. That egress sentence is **documentation drift**, not a new decision.\n- `docs/adr/README.md` establishes ADR precedence over vision/legacy backlog. Its “next number: 0009” instruction is also stale given the index through 0016; it does not authorize renumbering or changing accepted statuses.\n\n## Alternative assessment\n\n**Strongest case — engineering assessment, not an ADR decision:** a co-GM-only remote fits trusted full replication well. Git offers familiar branches, diffs, merges and tooling; a durable remote could support asynchronous exchange without peers being online together. Local editing remains possible offline. It could avoid iroh/QUIC integration for this particular flow.\n\nCrucially, **the player-clone spoiler objection is not decisive for trusted co-GMs**: ADR-0014 already authorizes their complete replicas. Applying that objection indiscriminately would misread the topology.\n\nNevertheless:\n\n- **Infrastructure and custody:** ADR-0014 rejects required remotes and server/domain provisioning. A campaign repository stores campaign data, unlike ADR-0016’s rendezvous/relay, which has no campaign storage or business logic and carries encrypted traffic.\n- **Semantics:** raw push/pull is not merely another pipe if it bypasses packet sender, recipient and base-version semantics. A git-backed **packet adapter** would preserve more architecture, but still require revisiting the explicit remote rejection.\n- **Conflicts remain:** git provides merge machinery, not narrative correctness. ADR-0014 already accepts manual reconciliation.\n- **Partial savings:** replacing only co-GM exchange leaves player P2P and bundles necessary, potentially adding a third adapter rather than eliminating iroh.\n- **Security changes:** repository accounts, credentials, access revocation and hosting trust require design; they are not equivalent to iroh NodeId pairing. Repository access control may restrict trusted co-GMs, but cannot replace player projection.\n\nThe assumptions needing reconsideration are therefore: willingness to provision a remote, permit campaign-data custody there, accept a co-GM-specific exchange path, and possibly relax the shared-server invariant. Offline solo operation, non-real-time collaboration and player projection need not change.\n\nSources: **ADR-0014**, `docs/adr/0014-federated-local-first-exchange.md`; **ADR-0016**, `docs/adr/0016-p2p-transport-iroh.md`.\n\n## Impacts\n\nIf formally approved, implementation would need:\n\n- A choice between a packet-preserving git adapter and direct repository synchronization; the latter changes more than transport.\n- Remote configuration, credential handling, trusted-participant enrollment/revocation, branch/base-version conventions, fetch/push failure handling and manual conflict UX.\n- Tests for offline operation, divergent histories, failed transfers and trust separation. Players must never gain access to campaign repository objects or history; filtered artifacts remain separate.\n- Preservation of profile and scope semantics: **ADR-0005** treats profiles as cognitive/corpus policy, while **ADR-0009** treats scopes as export filtering, not a security firewall. Sources: `docs/adr/0005-gm-player-profiles.md`, `docs/adr/0009-temporal-facts-and-scopes.md`.\n\nDocumentation would require a **new proposed ADR** explicitly identifying amendments to ADR-0014 and any transport change to ADR-0016—not silently rewriting their accepted status. Independently of adopting git, the contradictory ADR-0001 summary and architecture egress sentence need correction. Egress/privacy documentation must accurately cover the selected transport, including iroh relay traffic today.\n\n## Uncertainties\n\n- ADR-0016 expressly requires an iroh POC; acceptance establishes direction, not demonstrated implementation success.\n- ADR-0014 leaves detailed projection granularity and non-leak verification open.\n- The proposal does not specify hosting, data encryption, co-GM-only scope, or whether packets survive.\n- Referenced `docs/PRD.md` and `docs/migration-plan.md` are absent from this fixture; implementation completion and backlog changes cannot be verified.\n\n**Recommendation:** evaluate a narrowly scoped co-GM remote against the iroh POC, particularly asynchronous delivery and operational cost, but retain the accepted architecture unless a subsequent decision approves the change. No files were edited.",
+  "modelResolved": "openai/gpt-6.1-sol",
+  "modelResolution": "OpenCode session database model field",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/opencode-transport-alternative-index.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

@@ -1,0 +1,6 @@
+{
+  "newProposalRelation": "same as the hosted service refused in ADR-0002",
+  "expectedPersistentObjections": ["offline search", "no campaign-text egress"],
+  "acceptedAlternativeRelation": "different from the local daemon refused within ADR-0001",
+  "reopeningRequires": "a human change to offline and data-egress constraints, supported by a new decision"
+}

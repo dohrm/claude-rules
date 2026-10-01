@@ -1,0 +1,137 @@
+{
+  "runner": "opencode",
+  "binary": "opencode2",
+  "model": null,
+  "topic": "transport",
+  "task": "alternative",
+  "mode": "full",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+  "expectedEvidence": [
+    "ADR-0014",
+    "ADR-0016",
+    "docs/ARCHITECTURE.md"
+  ],
+  "durationMs": 88594,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input": 3896,
+        "output": 24,
+        "reasoning": 0,
+        "cache": {
+          "read": 2048,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 624,
+        "output": 25,
+        "reasoning": 0,
+        "cache": {
+          "read": 5760,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 150,
+        "output": 76,
+        "reasoning": 0,
+        "cache": {
+          "read": 6272,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 14145,
+        "output": 122,
+        "reasoning": 0,
+        "cache": {
+          "read": 6272,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 3419,
+        "output": 22,
+        "reasoning": 0,
+        "cache": {
+          "read": 20224,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    },
+    {
+      "usage": {
+        "input": 547,
+        "output": 23,
+        "reasoning": 0,
+        "cache": {
+          "read": 23552,
+          "write": 0
+        }
+      },
+      "costUsd": 0
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "## Decision in force\n\n**A shared git remote is a credible alternative for trusted co-GMs, but it is not the selected architecture.** Adopting it would require an explicit architectural reconsideration—not merely configuring another transport.\n\n- **ADR-0014** selects local-first federation: local history, transport-independent typed packets, GM-side projection, and a transport port. Co-GMs receive complete replicas; players receive only distinct, filtered artifacts. It explicitly rejects shared git remotes as the exchange substrate. [`docs/adr/0014-federated-local-first-exchange.md`](docs/adr/0014-federated-local-first-exchange.md)\n- **ADR-0016** selects iroh/QUIC for online packet delivery, with Ed25519 identities, pairing, LAN discovery, and rendezvous/relay infrastructure. Portable bundles remain available offline. [`docs/adr/0016-p2p-transport-iroh.md`](docs/adr/0016-p2p-transport-iroh.md)\n\nThe accepted statuses are existing decisions, not mine to change. No fixture files were edited.\n\n## Evidence and supersession\n\nI read ADR-0001 through ADR-0016 and the index.\n\nTwo contradictory passages must **not** be treated as authorization for the proposal:\n\n- **ADR-0001’s amendment banner** says “git comme substrat primaire.” That conflicts with the actual amending decision, **ADR-0014**, which restricts git to local history and explicitly rejects remote/fork exchange. The federation amendment is valid; that transport description is stale. [`docs/adr/0001-local-first-campaign-tool.md`](docs/adr/0001-local-first-campaign-tool.md)\n- **`docs/ARCHITECTURE.md`** lists local-only git and packet transport in its L67–L69 extracts, but its L84 egress extract permits an optional shared co-GM remote. That egress statement conflicts with ADR-0014/0016; it is documentation drift, not a separate accepted decision. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)\n\nThe index identifies ADR-0001 as amended and ADR-0002/0003 as replaced by **ADR-0015**. Its instruction to use “next number `0009`” is also stale administrative guidance. [`docs/adr/README.md`](docs/adr/README.md)\n\nOther supersession matters when estimating impacts: Rig is no longer the selected runtime client (**ADR-0015** preserves ADR-0011’s tiers), and ADR-0012’s July 13 amendment overrides its older evaluation-gated sequencing. Older wording is not automatically current architecture.\n\n## Alternative assessment\n\n### Strongest case for a co-GM remote\n\nThe proposal is strongest when narrowly limited to **trusted co-GMs**, not players:\n\n- ADR-0014 already allows co-GMs full workspace replicas. Therefore its **player-clone spoiler objection does not apply directly** to this restricted audience.\n- Markdown files, local commits, and accepted manual conflict resolution fit git naturally. Existing hosting could provide familiar branches, diffs, review, and asynchronous push/pull without inventing reconciliation tooling.\n- A persistent remote could let one co-GM publish while another is offline. The ADRs do not specify equivalent durable offline-recipient delivery for iroh.\n- It could reduce the co-GM path’s exposure to iroh/QUIC integration risk. ADR-0016 itself acknowledges a heavy dependency, evolving ecosystem, and required proof of concept.\n\nThese advantages are particularly persuasive if the team already operates suitable git hosting.\n\n### Objections and tradeoffs\n\n- **Explicit policy conflict:** ADR-0014 rejects remote-based exchange and says history leaves the machine only in transported packets. Direct workspace push/pull bypasses that boundary.\n- **Infrastructure is exchanged, not eliminated:** a remote requires hosting, credentials, access management, availability, and backup policies. Conversely, iroh also has always-on rendezvous infrastructure; its distinction is that the relay has no campaign business logic or retained campaign store, and fallback traffic is encrypted.\n- **Git merging is not campaign reconciliation:** textual merges can produce inconsistent entity state, session events, or sidecars even without conflict markers. ADR-0009’s narrative chronology is not git commit order.\n- **Security consequences differ:** a full remote contains GM secrets and potentially their historical versions. Trusted co-GMs may legitimately access them, but host access, revocation, retained clones, and credential compromise become explicit concerns.\n- **It does not replace player exchange:** ADR-0005/0009/0014 still require separate player workspaces and pre-emission projection. Runtime scopes cannot safely hide secrets already cloned.\n- **Two exchange mechanisms may remain:** a co-GM-only remote does not necessarily remove iroh or bundles for players. Its simplicity must be evaluated across the whole product, not just the co-GM workflow.\n\nRelevant foundations: [`ADR-0005`](docs/adr/0005-gm-player-profiles.md), [`ADR-0009`](docs/adr/0009-temporal-facts-and-scopes.md), [`ADR-0014`](docs/adr/0014-federated-local-first-exchange.md), [`ADR-0016`](docs/adr/0016-p2p-transport-iroh.md).\n\n### Assumptions that would have to change\n\nAn explicit decision would need to accept:\n\n1. Optional hosted campaign-history storage for trusted peers, qualifying the current no-remote rule.\n2. Remote provisioning and credentials as acceptable **exchange** dependencies, while keeping solo operation fully offline.\n3. A trust boundary excluding players from the full repository, including its history.\n4. Either a co-GM-specific exception to packet exchange or a git adapter that preserves typed-packet semantics.\n\nThat last distinction matters: **using git to carry packets is not the same architecture as sharing the campaign repository.** The transport port supports replaceability, but does not silently override the explicit rejection of remotes.\n\n## Impacts\n\nIf authorized, implementation would need:\n\n- **A defined exchange contract:** repository contents, base-version identification, peer attribution, incoming-change validation, retries, duplicate handling, and conflict presentation.\n- **Safe application of changes:** imports and reconciliation must respect ADR-0004’s `tools/core` mutation boundary. External markdown editing remains legitimate under ADR-0013; application-driven synchronization must not become an uncontrolled write path. [`ADR-0004`](docs/adr/0004-tools-core-single-source.md), [`ADR-0013`](docs/adr/0013-wikilinks-backlinks-obsidian-vault.md)\n- **Consistency tests:** concurrent entity/session edits, deletes and renames, `fiche.yaml` sidecars, semantic-ID collisions, and temporal metadata. Git history must not replace ADR-0009’s session-event model.\n- **Repository-content policy:** determine treatment of derived Tantivy/vector data and local configuration; rebuild or invalidate retrieval and backlink state after imports. ADR-0012 places vectors in `.quill/embeddings/vectors.bin`; it does not decide their exchange policy. [`ADR-0012`](docs/adr/0012-memory-search-retrieval-orchestrator.md)\n- **Security and operations:** credential storage, remote authorization, host retention, backup/recovery, and tests proving that no player publication includes GM files or historical secrets.\n\nDocumentation would need a **new proposed ADR** explaining the restricted alternative and its relationship to ADR-0014/0016. Only following an authorized decision should statuses or normative text change. Separately, the stale ADR-0001 banner, architecture egress extract, and index numbering guidance merit correction.\n\nThis need not reopen the agent architecture, retrieval design, optional MCP, or channel-server retirement. Nor should it silently override ADR-0006’s delivery priorities. [`ADR-0006`](docs/adr/0006-phase-ordering.md), [`ADR-0008`](docs/adr/0008-deprecate-claude-channel.md), [`ADR-0015`](docs/adr/0015-llm-client-rust-genai.md)\n\n## Uncertainties\n\n- The fixture contains architectural documents, not implementation evidence; completion and actual effort cannot be verified.\n- ADR-0014 leaves detailed projection rights and non-leak verification open. It also does not specify a complete reconciliation protocol.\n- ADR-0016 accepts a direction but requires POC validation; delivery queueing and offline-recipient behavior are unspecified.\n- The proposal does not identify hosting, trust/retention requirements, whether it shares repositories or transports packets, or whether it replaces iroh only for co-GMs.\n\n**Assessment:** worth evaluating as a narrowly scoped, trusted-co-GM exception—especially for asynchronous collaboration—but currently contrary to the selected exchange substrate and insufficiently specified to adopt.",
+  "modelResolved": "openai/gpt-6.1-sol",
+  "modelResolution": "OpenCode session database model field",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/opencode-transport-alternative-full.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

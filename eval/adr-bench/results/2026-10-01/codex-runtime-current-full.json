@@ -1,0 +1,80 @@
+{
+  "runner": "codex",
+  "binary": "codex",
+  "model": null,
+  "topic": "runtime",
+  "task": "current",
+  "mode": "full",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "A contributor follows the Rig instruction in AGENTS.source.md while updating crates/agent. What architecture and import boundary should the change follow today? Identify which parts of ADR-0002/0003 survive and which are replaced, and list concrete documentation or code impacts.",
+  "expectedEvidence": [
+    "ADR-0002",
+    "ADR-0003",
+    "ADR-0015",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "crates/agent/Cargo.toml"
+  ],
+  "durationMs": 64577,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "crates/agent/Cargo.toml",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 167313,
+        "cached_input_tokens": 135168,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2403,
+        "reasoning_output_tokens": 249
+      },
+      "costUsd": null
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "I’ll read the index, all sixteen ADRs, and the Rig and agent files, then trace which decisions still govern the architecture and import boundary.\nThe index marks ADR-0002 and ADR-0003 as replaced by ADR-0015. I’m checking the frozen code and remaining prose now so the impacts distinguish decisions from migration work and stale Rig references.\n## Decision in force\n\nA change to `crates/agent` should follow **ADR-0015**: use `rust-genai` as the LLM client and run Quill’s own multi-turn tool loop. Keep a small `ModelBackend` trait for completion, streaming, and tests, with `GenaiBackend` behind it. The import boundary is **`genai::` only in `crates/agent/src/backend/`**; `core`, `tools/core`, desktop, and MCP should not import the LLM client. Campaign mutations still go through `quill-tools-core`. The desktop agent remains in-process, with MCP optional. ([ADR-0015](docs/adr/0015-llm-client-rust-genai.md), [ADR-0004](docs/adr/0004-tools-core-single-source.md), [ADR-0002](docs/adr/0002-agent-runtime-rig.md))\n\n## Evidence and supersession\n\nThe [ADR index](docs/adr/README.md) and the status lines of [ADR-0002](docs/adr/0002-agent-runtime-rig.md) and [ADR-0003](docs/adr/0003-model-backend-abstraction.md) explicitly mark both as **replaced by ADR-0015**. ADR-0002’s integrated, single-desktop-binary design and optional MCP survive; its choice of Rig for providers, streaming, and the loop does not. ADR-0003’s thin test seam and `chat`/`extract` model roles survive, with `compose` added by [ADR-0011](docs/adr/0011-agent-architecture-react-tiers.md). Its Rig-specific factory, `RigBackend`, `BackendCapabilities`, and provider Cargo features are replaced by genai model resolution. The `providers` and `agent.*` YAML structure remains. ([ADR-0015](docs/adr/0015-llm-client-rust-genai.md))\n\nThe Rig instruction in [AGENTS.source.md](AGENTS.source.md:3) is stale. [CLAUDE.source.md](CLAUDE.source.md:3) states the successor import boundary, and [crates/agent/Cargo.toml](crates/agent/Cargo.toml:21) already pins `genai = \"=0.6.5\"`. Those files corroborate the decision; they do not change ADR status. Rig wording also remains in the prose of accepted ADRs, notably [ADR-0011](docs/adr/0011-agent-architecture-react-tiers.md) and [ADR-0010](docs/adr/0010-rejected-technical-scope.md). Read their continuing architecture decisions alongside ADR-0015, rather than treating their old implementation references as a renewed Rig decision.\n\n## Alternative assessment\n\n[ADR-0015](docs/adr/0015-llm-client-rust-genai.md) rejects staying on Rig because provider and tool differences require continuing Quill glue and prompt caching is weaker. It also rejects using `genai::Client` directly throughout the agent: the small trait is retained to fake model calls in tests and enforce the import boundary. An OpenAI-only client or hand-written HTTP would lose the intended provider-neutral client or recreate that glue.\n\nThe ReAct **architecture** in [ADR-0011](docs/adr/0011-agent-architecture-react-tiers.md) survives: a principal native tool-calling loop, bounded tools and tasks, and no autonomous swarm in v1. Its references to a *Rig* loop are superseded. Retrieval remains a deterministic `memory_search` tool under [ADR-0012](docs/adr/0012-memory-search-retrieval-orchestrator.md), rather than a separate agent.\n\n## Impacts\n\n- **Agent code:** replace Rig backend files and the Rig tool adapter with a single genai backend and a Quill-owned streaming tool loop; retain the thin `ModelBackend`, `chat`/`extract`/`compose` roles, prompt caching, and model selection through config. Keep `genai::` imports inside `src/backend/`. ([ADR-0015](docs/adr/0015-llm-client-rust-genai.md), [ADR-0011](docs/adr/0011-agent-architecture-react-tiers.md))\n- **Business boundary:** have agent tools and tasks call `tools/core` for writes; keep desktop and MCP as adapters. Preserve workspace and GM/player behavior rather than putting campaign logic in the LLM adapter. ([ADR-0004](docs/adr/0004-tools-core-single-source.md), [ADR-0005](docs/adr/0005-gm-player-profiles.md), [ADR-0011](docs/adr/0011-agent-architecture-react-tiers.md))\n- **Documentation:** correct the three Rig descriptions in [AGENTS.source.md](AGENTS.source.md:3) to match ADR-0015 and [CLAUDE.source.md](CLAUDE.source.md:3). Clarify stale Rig implementation wording in accepted ADR prose and any downstream guidance while preserving the recorded statuses and decisions. The [index](docs/adr/README.md) already records the supersession.\n\n## Uncertainties\n\nThis fixture contains [crates/agent/Cargo.toml](crates/agent/Cargo.toml) but no agent source files, so the dependency pin is visible while the backend and loop implementation cannot be verified here. ADR-0015 calls out streaming, cancellation, and error handling as migration regression risks; whether those are resolved in code is outside this snapshot. No files were edited.",
+  "modelResolved": "gpt-6-sol",
+  "modelResolution": "local Codex config.toml default",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/codex-runtime-current-full.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

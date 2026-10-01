@@ -1,0 +1,5 @@
+# Exchange problem brief
+
+Quill is a local-first tabletop campaign tool. Each participant owns a local workspace and can work offline. A co-GM is trusted to hold a complete campaign replica and may edit it. A player must receive only a filtered projection of GM material; a player can send their own notes and character-sheet updates back. Shared live editing and a central campaign server are outside the intended product scope. Conflicts between trusted replicas can be resolved manually.
+
+The team needs asynchronous exchange at a distance and convenient exchange on a local network, while retaining offline handoff. A contributor proposes a **shared git remote for co-GM exchange**. Other plausible designs include direct peer-to-peer packet delivery, portable bundles, or a combination. Compare the options in terms of privacy, operational dependencies, offline behavior, conflict handling, implementation risk and migration cost. The current decision record is deliberately unavailable in the first pass.

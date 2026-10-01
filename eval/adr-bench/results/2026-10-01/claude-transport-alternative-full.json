@@ -1,0 +1,100 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "model": null,
+  "topic": "transport",
+  "task": "alternative",
+  "mode": "full",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "question": "An engineer proposes a shared git remote for co-GM exchange instead of the chosen packet transport. Evaluate this as a real alternative against the current decisions: strongest case for it, objections and tradeoffs from the ADRs, what assumptions would have to change, and concrete implementation/documentation impacts. Do not silently adopt the proposal.",
+  "expectedEvidence": [
+    "ADR-0014",
+    "ADR-0016",
+    "docs/ARCHITECTURE.md"
+  ],
+  "durationMs": 77604,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0002-agent-runtime-rig.md",
+    "docs/adr/0003-model-backend-abstraction.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0007-agentic-rag-v0-bm25.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0011-agent-architecture-react-tiers.md",
+    "docs/adr/0012-memory-search-retrieval-orchestrator.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0015-llm-client-rust-genai.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "readMeasurement": "best effort from visible CLI tool events; may undercount",
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 40467,
+        "cache_read_input_tokens": 116038,
+        "output_tokens": 6139,
+        "output_tokens_details": {
+          "thinking_tokens": 2089
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 40467,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 5595,
+            "cache_read_input_tokens": 26926,
+            "cache_creation_input_tokens": 27283,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 27283
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.4697636
+    }
+  ],
+  "changedFixturePaths": [],
+  "response": "# Shared git remote vs. the packet transport for co-GM exchange\n\n**Short answer:** the ADRs in force reject this proposal by name (ADR-0014, line 71). It is still the strongest alternative for the co-GM case specifically, because the spoiler objection doesn't apply to a co-GM. But it conflicts with several accepted invariants. Adopting it would take a new ADR. It cannot be done as a configuration choice or a documentation edit.\n\nI read ADR-0001 through ADR-0016, `docs/adr/README.md` and `docs/ARCHITECTURE.md`. I edited nothing.\n\n## Decision in force\n\n- **ADR-0014 (Accepted)** splits exchange into five layers:\n  - offline-first;\n  - **local history: \"Aucun remote, aucun nom de domaine requis\"** (no remote or domain name required), and history leaves the machine only as a transported packet (`0014-…md:30`);\n  - typed packet;\n  - GM-side projection;\n  - a transport port, `publish(packet)` / `receive()` (`:33`).\n- **Co-GM topology (ADR-0014, line 37):** the co-GM is trusted, gets a **full replica**, and changes are reconciled by the history layer with no filtering. Multiple machines of the same user use the same mirror mechanism (`:41`).\n- **Rejected alternative (ADR-0014, line 71):** \"git comme substrat d'échange (remote/fork partagé) — rejeté : impose un remote (serveur, nom de domaine) et un clone expose les spoilers\". In short: rejected because it requires a remote, and a clone exposes spoilers. git is kept **only** as local history.\n- **ADR-0016 (Accepted)** implements the port with iroh:\n  - each node's identity is an Ed25519 key (its `NodeId`);\n  - a rendezvous node is used for discovery, and it holds **\"aucune donnée campagne\"** (no campaign data) (`0016-…md:32`);\n  - the trust decision (the allow-list) lives on the GM side, never on infrastructure (`:33`);\n  - the payload can be \"lot de commits de l'historique local\", a batch of local-history commits (`:38`).\n- **Invariants from ADR-0001, kept by ADR-0014 (line 45):** no shared campaign server, no real-time sync, no runtime ACL.\n\n## Evidence and supersession\n\n- **ADR-0014 amends ADR-0001 but does not replace it.** ADR-0001 is still Accepted, and the index says so: \"Accepté (amendé par 0014)\".\n- **ADR-0015 replaces ADR-0002 and ADR-0003.** That has no bearing on transport.\n- **No ADR replaces or amends ADR-0014 or ADR-0016.** The rejection of a git remote is the current decision.\n\nStale or conflicting text. Each of these disagrees with the ADR bodies, and none of them overrides an ADR:\n\n1. **`docs/ARCHITECTURE.md` (extract line \"L84\"):** says egress optionally goes \"au remote git partagé (co-MJ)\" (to the shared git remote for the co-GM). This contradicts:\n   - \"L69\" in the same file: \"git **local** par nœud (pas de remote)\" (local git per node, no remote);\n   - ADR-0014, lines 30 and 71.\n\n   This is probably the source of the proposal. It is stale documentation, not a decision. The README says ADRs win over other docs, though it only names `docs/vision.md` and the legacy backlog explicitly.\n2. **ADR-0001 amendment banner (line 8):** says \"git comme substrat primaire et des bundles portables en secours\" (git as the primary channel, portable bundles as fallback). ADR-0014's own body says the opposite: git is local only, P2P is the target, and bundles are the offline channel. The banner summarises ADR-0014 wrongly; the body of ADR-0014 is authoritative.\n3. **Minor drift, not related to transport:**\n   - ADR-0010 line 21 and ADR-0004 still mention Rig, which ADR-0015 replaced.\n   - The README says \"Numéro suivant : `0009`\" (next number: 0009); the next number is actually 0017.\n\n## Alternative assessment\n\n**The strongest case for a shared git remote:**\n- **The spoiler half of the rejection doesn't apply to co-GMs.** A co-GM is defined as a trusted full replica (ADR-0014, line 37), so a clone on their disk leaks nothing they aren't already entitled to.\n- **git already does what the history layer needs.** It handles history, merges, and manual conflict resolution, which ADR-0014 accepts (line 62). ADR-0016's payload is already commit batches (line 38), so a git remote is the native way to move them.\n- **It is mature and has no POC risk.** ADR-0016 says iroh is a heavy dependency that still has to be validated by a POC (line 51).\n- **Async exchange comes for free.** The co-GMs don't need to be online at the same time, and no always-on rendezvous node is needed.\n- **It is familiar** to technical GMs and fits the Obsidian/vault workflow (ADR-0013).\n\n**Objections from the ADRs:**\n- **Explicit rejection:** ADR-0014 rejects this alternative by name (line 71) and counts dissolving \"l'objection remote git\" (the git-remote objection) as a benefit (line 55). Reversing that is a new decision, not an interpretation.\n- **Data at rest on infrastructure:** a remote stores the full GM workspace, spoilers included. The ADR-0016 rendezvous is acceptable precisely because it holds *no* campaign data and only relays encrypted bytes. A remote breaks that line, and arguably the ADR-0001 rule against a shared campaign server.\n- **Trust moves to the server:** who can clone is decided by the host's access control (SSH keys, forge permissions). That is a server-side ACL, which ADR-0016 (line 33) and ADR-0001 rule out. It also sits next to the Ed25519 identity model rather than inside it.\n- **It bypasses the port:** using a remote directly skips `publish`/`receive`. That breaks ADR-0014's split between what is durable (the semantics) and what is replaceable (the transport).\n- **Leak by misconfiguration:** once a campaign remote exists, one mistaken invite or clone by a *player* exposes everything. That is exactly the \"shared disk = leak\" failure ADR-0014 is built to prevent (lines 19, 72). Protection would then rely on operator discipline instead of projection.\n- **Asymmetric topology:** ADR-0014 uses one mirror mechanism for co-GMs and for one user's several machines. A git path just for co-GMs would either split that mechanism or spread to multi-machine use too.\n\n**Tradeoff:** the remote removes iroh's POC risk and the always-on rendezvous, but brings in data-holding infrastructure, a server-side trust model and a leak risk.\n\n**Compromises that fit the current ADRs without amending them (my reading, not stated in the ADRs):**\n- Use `git bundle` files as the payload for co-GM packets, delivered over the existing bundle or iroh adapters.\n- Or run git's protocol *over* the iroh connection.\n\nBoth keep git's merge machinery and stay inside the port.\n\n**Assumptions that would have to change for the proposal itself:**\n- ADR-0014 layer 2, \"no remote / no domain\" (line 30), would need a co-GM exception.\n- Some infrastructure would be allowed to hold campaign data, at least for trusted roles.\n- Some trust decisions could live outside the GM's allow-list.\n- ADR-0014 line 71 would need narrowing, for example \"rejected for players, allowed for co-GMs\".\n- If the remote bypasses the port, the port's job of being the single exchange boundary (line 33) would need rewording.\n\n## Impacts\n\n**If it were pursued:**\n- **Governance:**\n  - A new ADR-0017 with status `Proposé`, amending ADR-0014 and possibly ADR-0016.\n  - ADR-0014 and ADR-0016 stay Accepted until reviewers decide. Changing their status isn't my call.\n  - It needs an entry in the `docs/adr/README.md` index and possibly in `docs/migration-plan.md` (not in this fixture).\n- **Implementation:**\n  - Either a `GitRemoteTransport` adapter behind the port, or a separate path for co-GM sync.\n  - Credentials and remote configuration per campaign.\n  - A guard that refuses to push to, or offer the remote to, any `NodeId` or participant without the co-GM role.\n  - Player packs and projections must never be pushed there.\n  - A rule for how the remote's access list relates to the GM's allow-list.\n  - Leak tests, since projection is already flagged as critical (ADR-0014, line 63).\n- **Documentation:**\n  - `ARCHITECTURE.md` \"L69\" changes; \"L84\" becomes accurate only for the co-GM case.\n  - A privacy note for data at rest on a third-party or self-hosted remote, alongside the existing note about the relay (ADR-0016, line 53).\n\n**If it is rejected (the status quo), these fixes are needed anyway:**\n- Correct `docs/ARCHITECTURE.md` \"L84\", which currently describes a remote the ADRs reject.\n- Correct the ADR-0001 banner (line 8).\n\n## Uncertainties\n\n- `docs/PRD.md`, `docs/migration-plan.md` and the source code aren't in this fixture, so I can't check the PRD's co-GM requirements or what is actually built.\n- The full `ARCHITECTURE.md` isn't here either. The extract doesn't show whether \"L84\" is intended for a future version or just left over.\n- The iroh POC result is unknown. If iroh fails it, ADR-0016 names libp2p as the next option to re-examine (line 64), not git. A failed POC would still strengthen the case for a remote.\n- The detailed rights and projection model is deliberately left open (ADR-0014, line 49). Whether a co-GM can *ever* have a narrower view than the GM, which would undermine the \"clone is harmless\" premise, is undecided.\n- It's unclear whether a remote hosted on a co-GM's own machine (over SSH, not a forge) counts as a \"serveur de campagne\". The ADRs don't settle that case.",
+  "modelResolved": "claude-opus-5-5",
+  "modelResolution": "CLI message events",
+  "rawEventsPath": "/tmp/adr-bench-live-2026-10-01/claude-transport-alternative-full.events.jsonl",
+  "rawEventsNote": "Raw CLI events were retained locally during this run; their /tmp path is transient."
+}

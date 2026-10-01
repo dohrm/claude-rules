@@ -1,0 +1,86 @@
+{
+  "runner": "claude",
+  "binary": "claude",
+  "modelRequested": null,
+  "skill": "solution-exploration",
+  "topic": "transport",
+  "phase": "reconcile",
+  "sourceCommit": "6ae2994dcf2dc040452e600cebf2d8718859b95b",
+  "durationMs": 95385,
+  "exitCode": 0,
+  "error": null,
+  "observedReadPaths": [
+    ".claude/skills/solution-exploration/SKILL.md",
+    "AGENTS.source.md",
+    "CLAUDE.source.md",
+    "agent/decision-records.md",
+    "agent/decisions.md",
+    "crates/agent/Cargo.toml",
+    "docs/ARCHITECTURE.md",
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md",
+    "docs/adr/README.md",
+    "problem.md",
+    "provisional.md"
+  ],
+  "observedAdrReads": [
+    "docs/adr/0001-local-first-campaign-tool.md",
+    "docs/adr/0004-tools-core-single-source.md",
+    "docs/adr/0005-gm-player-profiles.md",
+    "docs/adr/0006-phase-ordering.md",
+    "docs/adr/0008-deprecate-claude-channel.md",
+    "docs/adr/0009-temporal-facts-and-scopes.md",
+    "docs/adr/0010-rejected-technical-scope.md",
+    "docs/adr/0013-wikilinks-backlinks-obsidian-vault.md",
+    "docs/adr/0014-federated-local-first-exchange.md",
+    "docs/adr/0016-p2p-transport-iroh.md"
+  ],
+  "changedFixturePaths": [],
+  "usage": [
+    {
+      "usage": {
+        "input_tokens": 12,
+        "cache_creation_input_tokens": 41019,
+        "cache_read_input_tokens": 206539,
+        "output_tokens": 8089,
+        "output_tokens_details": {
+          "thinking_tokens": 3585
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 41019,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "not_available",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 3323,
+            "cache_read_input_tokens": 49157,
+            "cache_creation_input_tokens": 5604,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 5604
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "costUsd": 0.5312878000000001
+    }
+  ],
+  "response": "# Pass 2: checking the transport recommendation against the decision record\n\n**Bottom line:** the decision record already settles this question, and it settles it close to how pass 1 did. ADR-0014 and ADR-0016 are both Accepted. I recommend keeping both and not adopting the shared git remote as proposed. The contributor's main argument for git, real three-way merges between co-GMs, is already met by the local git history these ADRs keep. Two things are still open and need a human: true asynchronous delivery at a distance, and the projection/rights ADR that ADR-0014 promised but nobody has written. I edited no files and changed no ADR statuses.\n\n**What I read:** `.claude/skills/solution-exploration/SKILL.md`, `provisional.md`, `problem.md`, `agent/decisions.md`, `agent/decision-records.md`, `docs/adr/README.md`, ADRs 0014, 0016, 0001, 0005, 0009, 0010 and 0013, plus the extracts in `docs/ARCHITECTURE.md`, `AGENTS.source.md`, `CLAUDE.source.md` and `crates/agent/Cargo.toml`. I also searched ADRs 0004, 0006 and 0008 for transport terms and found nothing. The workspace still isn't a git repository, so I couldn't check the history of any status line.\n\n## 1. Where the decision record already agrees with pass 1\n\n| Pass-1 element | Decision in force |\n|---|---|\n| One packet format, with carriers kept separate | ADR-0014 separates *what* is exchanged from *how it travels*. The typed packet carries sender, recipient and base version (`0014:32`). It goes through a port, `publish`/`receive`, with no technology chosen at that level (`0014:33`). |\n| A single point where privacy is enforced | The GM side builds the projection before anything leaves. Spoiler content is \"never written\" into a player's packet (`0014`, layer 4). This builds on ADR-0009's `scope` field, which defaults to `gm_only` (`0009:33`). |\n| Players never touch a shared repo | A player never receives the campaign workspace. The player pack is a separate artifact (`0014:38-40`). |\n| Offline first | The app is fully usable without a network (`0014`, layer 1). A portable bundle is one of the two carriers (`0014:33`). |\n| Local network and distance | ADR-0016 uses iroh: mDNS discovery on a local network with no rendezvous needed, and for distance a rendezvous followed by direct QUIC or a relay (`0016:36-37`). |\n| Git kept only as a co-GM backend | Git is kept **only as local history** (`0014:30`, `0014:71`). What gets sent is a \"batch of commits from local history\" (`0016:38`), so this is the git-backed version of D. |\n\nPass-1 unknown #1 is now answered in git's favour. Campaign data is markdown plus YAML, one file per entity, with no database (`AGENTS.source.md` L16, ADR-0013). Git merges that kind of data well, so co-GM reconciliation through local history is low-risk.\n\n## 2. What changed from pass 1, and why\n\n1. **There is some infrastructure after all.** Pass 1 said D needed none. ADR-0016 accepts an always-on rendezvous: public by default, optionally self-hosted on k3s. It holds no campaign data (`0016:32`). Its relay fallback carries encrypted traffic when NAT gets in the way. The record names this as the one exception to being fully local-first, and it is softened by local-network play needing no rendezvous. I accept this cost. It is not a reason to reopen the ADR.\n2. **The git remote is ruled out more firmly than pass 1 assumed.** The proposal conflicts with layer 2, \"no remote, no domain name required\" (`0014:30`). It also conflicts with the alternative ADR-0014 rejected (`0014:71`). One caveat: of the two reasons that rejection gives, the second (\"a clone exposes spoilers to the player\") applies only to players. A remote limited to co-GMs could be a filesystem path or a NAS. So the rejection is only partly justified for the narrow co-GM case. Even so, the proposal still adds a host that can read GM content in plaintext, credentials, and a second sync path. Meanwhile the merge benefit it offers is already available through local history. The argument for change is weak.\n3. **New emphasis: asynchronous delivery at a distance is only partly covered.** iroh needs both peers online at once. The relay forwards traffic but does not store it. The design puts the GM's machine at the centre as the hub (`0016:17`). So when a player sends from home (`0016:14`), the GM has to be online at that moment, or the player falls back to a manual bundle sent by email or chat. Pass 1 had already flagged this weakness for option B. The ADRs neither solve it nor explicitly accept it.\n4. **New emphasis: bundle security isn't specified.** ADR-0014 doesn't say whether portable bundles are signed or encrypted. A co-GM bundle is a full replica, and sending it by email or USB exposes all GM material at rest. The Ed25519 `NodeId` from ADR-0016 could sign bundles, and could encrypt them if converted to X25519. That is a security policy, so it belongs in an ADR.\n\n## 3. Impacts (I made none of these changes)\n\n**Documentation that contradicts the decisions in force**, all amendable prose:\n- `docs/adr/0001-local-first-campaign-tool.md:7`: the amendment banner says \"git as the primary substrate and portable bundles as a fallback\". That directly contradicts ADR-0014. Fixing it is a prose amendment, and an agent may make it under `agent/decisions.md`.\n- `docs/ARCHITECTURE.md` L84: the egress line allows \"optionally, the shared git remote (co-GM)\". That contradicts ADR-0014 and line L69 of the same file. The line also omits outbound traffic to the iroh rendezvous and relay, which matters for the privacy write-up ADR-0016 asks for.\n- `docs/adr/README.md:37` still says the next number is \"0009\". The README also uses French status names (`Accepté`, `Remplacé par`), while `agent/decision-records.md` uses the five English ones. `just adr-check` may flag this; I couldn't run it.\n\n**Code.** None of the visible source shows transport work yet. The only crate extract is `quill-agent`, and it has no iroh dependency. ADR-0016 requires a proof of concept before the transport is built for real (`0016:51`). The work, as the ADRs describe it:\n- a packet type and a transport port in core;\n- a projection or filter function in `tools/core`, as ADR-0009's implementation notes say;\n- leak tests on that projection;\n- an iroh adapter, best kept in its own crate with an exact version pin, following the `genai` confinement rule;\n- a bundle adapter built on `quill export player-pack` (MIG-406);\n- `NodeId` key generation at install;\n- a per-campaign allow-list of trusted nodes.\n\n**Migration.** Existing workspaces need local git history set up. Existing player packs become the campaign-to-player packet. Because entities without a scope default to `gm_only`, players will see almost nothing until the GM tags entities. That fails safe, but it needs a mention in the user experience.\n\n## 4. Decisions a human would need to make\n\n| Question | Records affected | Agent's position |\n|---|---|---|\n| Adopt the shared git remote anyway? | ADR-0014 (layer 2 and the rejected alternative) would need a superseding `Proposed` ADR. `ARCHITECTURE.md` L69 would change. | Not recommended. |\n| Is \"the GM is online, or the player sends a bundle by hand\" good enough for async at a distance, or is store-and-forward needed? | If store-and-forward is needed: a new transport-adapter ADR, such as a mailbox of encrypted packets on any simple shared store. A human must also confirm it isn't the \"synchronized folder\" ADR-0014 rejected (`0014:72`), and that ciphertext doesn't break ADR-0016's rule that the relay holds no campaign data (`0016:32`). | **The main open question.** |\n| Projection/rights model | The dedicated ADR ADR-0014 promised (`0014:47-49`). It is pending, so nothing is being reopened. | Write it before any player traffic ships. |\n| Bundle signing and encryption | Fold it into the projection/rights ADR, or give it its own ADR. | Recommended. |\n\nNothing in ADR-0001's core rules (no shared server, no real-time sync, no runtime access control), ADR-0005, ADR-0009 or ADR-0013 needs reopening.\n\n## 5. Final recommendation\n\n- **Keep ADR-0014 and ADR-0016 as they stand.** They implement pass 1's option D in its git-backed form, and the decision record confirms its main requirement: privacy is enforced by projection and never by a shared disk.\n- **Decline the shared git remote.** It solves only the co-GM case, which local history already covers. It adds a host and credentials, and it conflicts with a decision whose rationale mostly still holds.\n- **Before building:** run the iroh proof of concept, write the projection/rights ADR with leak tests, specify bundle signing and encryption, and get a human ruling on whether asynchronous delivery needs store-and-forward.\n\nIf no new ADRs are proposed, ADR-0014 and ADR-0016 stay in force exactly as written.\n\n**Remaining uncertainty:**\n- I couldn't check implementation status beyond the extracts.\n- How hard NAT traversal is with iroh in real use is still for the proof of concept to show.\n- I don't know how often co-GMs edit at the same time. That affects how much manual merging users will face, but not which design to choose."
+}
