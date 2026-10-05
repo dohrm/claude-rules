@@ -53,6 +53,11 @@ Shape, in one line: **backend / frontend / fullstack / gamedev / something
 else**, and why the tree says that. Brownfield: **respect existing choices**.
 A change is a migration with a cost, named, not a rewrite.
 
+Shared decision repository and RFC store — ask which repository the organization
+keeps (`none` is an answer) and where RFCs live (`local`, `gh`, `plane`), and record
+both in the hand-off; `/architect` writes it into
+`docs/ARCHITECTURE.md` (`agent/decisions.md` § Shared decisions).
+
 Observed capabilities — a list the later `/prd` can turn into units. Names
 the code uses, not product-speak you invented. This is an inventory, not a
 spine.
@@ -68,6 +73,7 @@ gitignored in repos that followed `init`; say so if it is not). Shape:
 ## As-built
 ## Observed capabilities
 ## Shape
+## Shared decisions and RFC store
 ## Proposed claude-rules command
 ## Hand-off
 ```

@@ -1,6 +1,6 @@
 ---
 name: prd
-description: "Frame or extend `docs/PRD.md` (stable spine + capability units). Use on /prd, \"write the PRD\", \"frame this project\". Names no technology. Upstream of /architect and /plan."
+description: "Frame or extend `docs/PRD.md` (stable spine + capability units). Use on /prd, \"write the PRD\", \"frame this project\". Names no technology. Upstream of /architect and /rfc."
 ---
 
 You question the user to produce or extend `docs/PRD.md` using the template below.
@@ -25,7 +25,7 @@ You question the user to produce or extend `docs/PRD.md` using the template belo
 
 6. **Then settle the intent, if there was one.** The capability is now the home of the problem, the outcome and the success criteria, so they leave `.work/<slug>/intent.md`: every question you closed becomes one `## Settled` line pointing at the PRD section or the ADR that now answers it, and the `## Capability` line at the top gets its number. What stays is what is still open.
 
-   If the capability came out under a different name, `git mv` the directory to the capability's slug — `/plan` and `/tasks` will write beside it and there is one `.work/<slug>/` per capability. Nothing else references it yet, so the rename is free now and expensive later.
+   If the capability came out under a different name, `git mv` the directory to the capability's slug — `/rfc` will start from it, and the first RFC of the capability can take the same directory. Nothing else references it yet, so the rename is free now and expensive later.
 
    An intent whose open list is empty has done its job; it is not deleted here — the whole directory dies when the capability ships (`product/documents.md`).
 
@@ -88,9 +88,9 @@ Risks, external dependencies, assumptions. Keep it short; *"Nothing to report."*
 At `/prd` time this section may stay a **stub**: the one or two stories obvious
 enough to cadre the capability, no more. Writing the full, edge-case-covering set
 this early is speculative — the capability may not be worked for months, and
-`/plan` will elaborate it against the real code right before it is. Full
+`/rfc` will elaborate it against the real code right before it is. Full
 coverage (main interactions, empty states, errors, alternative paths, edge
-cases) is `/plan`'s job when it opens this capability, not `/prd`'s upfront.
+cases) is `/rfc`'s job when it frames this capability, not `/prd`'s upfront.
 
 ## Behavior decisions
 
@@ -109,4 +109,4 @@ What this capability deliberately does not do, one line each — distinct from t
 - No named technology, no gaps, no file path, no code snippet in the PRD.
 - User Stories must be numbered: US-1, US-2 … and the numbering is **global**, never restarted per capability.
 - The spine stays one screen, and stays stable. Growth is a new capability unit — never a longer section, never a `(continued)` heading.
-- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, the sprint-by-sprint order is the (ephemeral) plan. The PRD carries what, why-anyone-cares, and whether it has shipped — and links to the rest.
+- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, the delivery order is the (ephemeral) RFC sequence. The PRD carries what, why-anyone-cares, and whether it has shipped — and links to the rest.

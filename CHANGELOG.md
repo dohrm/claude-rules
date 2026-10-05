@@ -14,6 +14,14 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **`/rfc`, the execution path** (ADR-0006, ADR-0007). One feature is framed in
+  `.work/<slug>/rfc.md`: granularity verdict, local decisions, steps with proofs and
+  a stopping condition. You iterate on it with the agent, mark it `ready`, and the
+  agent implements it under the declared autonomy level. Larger work splits into
+  ordered RFCs. The RFC lives where `> RFC store:` in `docs/ARCHITECTURE.md` says:
+  `local` (default), `gh` (GitHub issue) or `plane` (Plane work item, via its MCP
+  server). Install with `update` on a `product` profile.
+
 - **`/goal-setup` for Codex.** It frames one durable `/goal` with a bounded
   objective, stopping condition, checkpoints, progress proof and pause causes.
   It writes `goal.md` only when no `/tasks` worklist exists; status and summary
@@ -51,6 +59,16 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Changed
 
+- **Fewer, broader ADRs** (ADR-0005). A project ADR now needs an arbitration that is
+  hard to reverse, constrains more than one feature, and refused real alternatives.
+  Enterprise policy goes to a shared decision repository, stack conventions to the
+  installed rules, feature-local choices to the work document and PR. A rule deviation
+  is an in-place exception with its reason, not an ADR. Records no longer carry lock
+  clauses, and the "we will outside Decision" split test is gone. `/architect` stops
+  writing one ADR per stack row; `/observability` keeps SLO targets in
+  `docs/OBSERVABILITY.md` instead of one ADR each. Existing ADRs stay valid; consolidate
+  them with `/adr-review` when convenient.
+
 - **Four validation depths:** T1 lint, T2 technical checks, T3 independent review,
   T4 mutation/Go coverage ratchet. Generated justfile guidance now matches PR mutation
   cadence; local mutation stays optional and shipped CI remains non-blocking during
@@ -60,6 +78,16 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   selected profiles do not require an ADR merely because they are new.
 
 ### Breaking
+
+- **`/plan`, `/tasks` and `/goal-setup` are removed** (ADR-0007), and so is the
+  `goal-setup` profile. The new CLI rejects a lock that names it, so remove it with
+  your current ref first: `npx github:dohrm/claude-rules#<current-ref> remove goal-setup`,
+  then `update`.
+  `/rfc` replaces all three. The coherent block of `agent/autonomy.md` is the RFC,
+  not the sprint. `just status` and `just publish-summary` read `.work/<slug>/rfc.md`
+  and `loop.md` only. Finish open `.work/<slug>/PLAN.md` / `tasks/` work first, or
+  rewrite what remains as RFCs. `/loop-setup` stays, for repeated chores only; it no
+  longer extends a worklist.
 
 - **`cqrs` drops `cqrs-rust-lib`.** The profile is the write/read +
   event-sourcing principles. `rules/cqrs/rust.md` is gone (it was a

@@ -120,13 +120,12 @@ test('document-producing skills name a path under docs/', () => {
 })
 
 // The mirror of the map above. These skills produce scaffolding, not documents:
-// it lives in .work/, committed but ephemeral, deleted once the capability it
-// belongs to ships. A bare `PLAN.md` (no path prefix) would read as the durable,
-// project-wide document this repo used to have — /plan now writes one per
-// capability, under .work/<slug>/, and a bare name for it invites that confusion
-// back.
+// it lives in .work/, committed but ephemeral, deleted once the work it belongs to
+// ships. A bare `PLAN.md` (no path prefix) would read as the durable, project-wide
+// document this repo used to have — /rfc writes one RFC per feature under
+// .work/<slug>/, and a bare name invites that confusion back.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['tasks', 'loop-setup', 'goal-setup', 'onboard', 'migrate', 'plan']) {
+  for (const name of ['rfc', 'loop-setup', 'onboard', 'migrate']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,

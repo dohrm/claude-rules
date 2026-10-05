@@ -41,7 +41,7 @@ review_out := ".work/review.tmp"
 # installer emits `.claude/` AND `.agents/` byte-identical — so two thirds of the
 # reviewer's context went to files nobody reviews, and it reviewed THIS library instead
 # of the feature. `.work/` is excluded for a second reason: it holds `review_in`, so a
-# repo that commits its plans feeds the reviewer the previous run's prompt.
+# repo that commits its RFCs feeds the reviewer the previous run's prompt.
 # Repo-specific generated paths (a vendored dir, a codegen output) belong in an override
 # in the root justfile, appended to this list — not silently dropped from it.
 #
@@ -71,7 +71,7 @@ review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.js
 #
 # `work_slug` is the directory under `.work/` — empty means "the branch name", which is
 # right in a repo with one long-running run per branch. Set it to a `/loop-setup` or
-# `/goal-setup` capability slug to park the marker next to its state file.
+# `/rfc` slug to park the marker next to its state file.
 work_slug   := ""
 incremental := "1"
 
@@ -328,19 +328,17 @@ mutate-mark:
 # archaeological dig this replaces.
 worktree_root := env_var_or_default('CR_WORKTREES', env_var_or_default('HOME', '.') / '.worktrees')
 
-# `just tree <slug> [branch]` — the worktree for one CAPABILITY, at its canonical
+# `just tree <slug> [branch]` — the worktree for one RFC, at its canonical
 # path, printed on stdout so the next step (an `cd`, an IDE, an orchestrator) does
 # not have to guess it. Idempotent: an existing tree is printed, not recreated.
 #
-# One tree per capability, one branch per sprint INSIDE it — not one tree per
-# sprint. `.work/<capability-slug>/` is per-worktree and holds that capability's
-# plan and every sprint worklist, so any other arrangement splits one work unit
-# across trees (rules/agent/autonomy.md, "One tree, one writer").
+# One tree per RFC. `.work/<slug>/` is per-worktree and holds that RFC's state
+# file, so any other arrangement splits one work unit across trees
+# (rules/agent/autonomy.md, "One tree, one writer").
 #
-# And parallelise across CAPABILITIES, never across the sprints of one: a sprint is
-# a vertical slice, so two sprints of the same capability traverse the same layers
-# and collide by construction. `Blocked by` in the plan serialises the dependent
-# ones; the others are independent as promises, not as files.
+# Parallelise across RFCs that touch disjoint code, never across RFCs the
+# granularity verdict ordered: those traverse the same layers and collide by
+# construction, so they run one after the other.
 #
 # git refuses to check out a branch that is already live in another tree. That is
 # the invariant, enforced by the tool rather than by prose — leave it that way.
@@ -416,10 +414,10 @@ status:
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
 # The per-loop counterpart to `just status`: that one is read-only across every
 # worktree at a glance, this one is one worktree, once, at the moment a
-# `/loop-setup` or `/goal-setup` run stops — objective met, blocked, or cap/budget exhausted
+# `/loop-setup` or `/rfc` run stops — objective met, blocked, or cap/budget exhausted
 # (the setup skills' completion/escalation outcomes, mapped straight onto the
-# three statuses below). Reads `.work/<slug>/loop.md`,
-# `goal.md` (or the newest `tasks/NN-*.md`) plus what only git knows — branch, commits
+# three statuses below). Reads `.work/<slug>/loop.md`
+# (else `rfc.md`) plus what only git knows — branch, commits
 # ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
 # catching up on a parallel loop means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something

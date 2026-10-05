@@ -4,14 +4,14 @@
 //
 // The loop's proof is local to the tree: `.work/review-report.md` is ONE file per
 // worktree, `review-guard` reads the one in the tree it runs in, and
-// `.work/<capability-slug>/` is one work unit. That is why parallel sessions get
+// `.work/<slug>/` is one work unit. That is why parallel sessions get
 // parallel trees (rules/agent/autonomy.md, "One tree, one writer") — and why, once
 // they do, nothing shows you all of them at once. This does.
 //
 // One line per worktree: branch · commits ahead of base · dirty files · worklist ·
 // review verdict + staleness. Then, indented under it, whatever that worklist's
-// `## Blocked on the human` section holds — the escalation channel `/tasks` already
-// defines, which is worth nothing if nobody walks the trees to read it.
+// `## Blocked on the human` section holds — the escalation channel `/rfc` and
+// `/loop-setup` already define, which is worth nothing if nobody walks the trees to read it.
 //
 // It ALWAYS exits 0, and it is read-only. A dashboard that fails is a dashboard
 // nobody runs, and the verdict printed here is a REPORT of a gate, never the gate:
@@ -92,10 +92,9 @@ function blockedIn(file) {
     .filter((l) => l && !/^[-*]?\s*<[^>]*>$/.test(l))
 }
 
-/** Every state file an agent escalates in, under `.work/<capability-slug>/`: the
- *  sprint worklists `/tasks` cuts, `loop.md` from `/loop-setup`, and `goal.md`
- *  from `/goal-setup` when there is no sprint to cut. Sorted so the newest sorts
- *  last. */
+/** Every state file an agent escalates in, under `.work/<slug>/`: `rfc.md` from
+ *  `/rfc` and `loop.md` from `/loop-setup`. Sorted, so within one slug the RFC
+ *  sorts last and is the one shown. */
 function worklists(root) {
   const found = []
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -103,11 +102,7 @@ function worklists(root) {
     const slug = entry.name
     const add = (rel) =>
       found.push({ label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
-    if (existsSync(join(root, slug, 'loop.md'))) add('loop.md')
-    if (existsSync(join(root, slug, 'goal.md'))) add('goal.md')
-    try {
-      for (const n of readdirSync(join(root, slug, 'tasks'))) if (/\.md$/.test(n)) add(`tasks/${n}`)
-    } catch { /* no tasks/ yet: the capability is planned, not cut */ }
+    for (const name of ['loop.md', 'rfc.md']) if (existsSync(join(root, slug, name))) add(name)
   }
   return found.sort((a, b) => a.label.localeCompare(b.label))
 }

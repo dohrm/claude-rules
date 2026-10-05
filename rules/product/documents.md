@@ -18,26 +18,24 @@ a 900-line PRD does not.
 | Experience | one screen/workflow for one actor — `docs/experience/<journey>-<actor>.md` | `docs/EXPERIENCE.md` | from the first new contract; legacy single-file docs remain valid |
 | PRD | one capability — `docs/prd/NN-<slug>.md` | `docs/PRD.md` — the spine + the capability table (with status) | more than ~8 capabilities, or 400 lines |
 
-**Neither the intent nor the plan is on this table.** `/interview`, `/plan` and
-`/tasks` write under `.work/<capability-slug>/` — committed (so a PR shows what was
-being framed, the sprint breakdown, and the task cut it landed on), but
-**ephemeral**: it exists for as long as the
-capability is being worked, and is deleted once every sprint under it ships. The
-PRD's capability table is what still says "done" afterward — the plan doesn't
-need to, because nothing durable reads it once the code and the git log are the
-record. One file per capability (`.work/<slug>/PLAN.md`) is enough at this scale;
-the unit/index split above exists for documents that must stay readable for the
-life of the project, which this one no longer is.
+**Neither the intent nor the RFC is on this table.** `/interview` and `/rfc` write
+under `.work/<slug>/` — committed (so a PR shows what was being framed and the steps
+it landed on), but **ephemeral**: an RFC is deleted once its PR merges. The PRD's
+capability table is what still says "done" afterward — the RFC doesn't need to,
+because nothing durable reads it once the code and the git log are the record. One
+file per RFC is enough at this scale; the unit/index split above exists for
+documents that must stay readable for the life of the project, which this one never
+is.
 
 **"Committed" is one gitignore line, and it is not `.work/`.** What sits *directly*
 in `.work/` is per-tree scratch — the review report, the review prompt, the status
 file — and committing a verdict is how one tree's `CLEAN` ends up authorising
-another's push (`agent/autonomy.md`). What sits in `.work/<slug>/` is the plan. So
+another's push (`agent/autonomy.md`). What sits in `.work/<slug>/` is the RFC. So
 ignore the files and keep the directories:
 
 ```gitignore
-# Working memory. A capability's plan and worklists live in .work/<slug>/ and ARE
-# committed — a PR shows the cut it landed on. What sits directly in .work/ is
+# Working memory. RFCs and loops live in .work/<slug>/ and ARE committed —
+# a PR shows the steps it landed on. What sits directly in .work/ is
 # per-tree scratch: review report, review prompt, status.
 .work/*
 !.work/*/
@@ -56,19 +54,18 @@ pattern un-ignores. Two rules, two scopes — don't collapse them into one.
 still open** while a capability is framed and built. It is not an archive and needs
 no successor — what was promised ends up in the PRD, what was decided in an ADR,
 and the options that lost are already kept there under *Alternatives considered*
-(`agent/decision-records.md`). One directory per capability, born with the intent,
-dead when the capability ships.
+(`agent/decision-records.md`). Born with the intent, dead when the capability ships.
 
-The framing skills read it — `/prd`, `/plan`, `/pre-mortem`. **An implementer does
-not**: a task already carries its own anchors, and an open product question is not
-its business — paying for that context on every turn of a loop buys nothing.
+The framing skills read it — `/prd`, `/rfc`, `/pre-mortem`. **An implementer does
+not**: a ready RFC already carries its anchors, and an open product question is not
+its business — paying for that context on every turn buys nothing.
 
-**Nor the PRD, nor the decision log** — same argument, one step out. A task cut by
-`/tasks` carries `Serves: <acceptance criterion>`, which *is* the PRD projected onto
-that task, and `Constrained by: ADR-NNNN § section`, which is `docs/adr/` projected
-the same way. Both projections were paid once, at the cut. An implementer that opens
-the PRD or walks the decision log is a **worklist that failed to say what bound it** —
-fix the cut, not the reading habit.
+**Nor the PRD, nor the decision log** — same argument, one step out. An RFC carries
+`Serves: <acceptance criterion>`, which *is* the PRD projected onto it, and
+`Constrained by: ADR-NNNN § section`, which is `docs/adr/` projected the same way.
+Both projections are paid once, while the RFC is framed. An implementer that opens
+the PRD or walks the decision log is an **RFC that failed to say what bound it** —
+fix the RFC, not the reading habit.
 
 Below the threshold, one file is right — a directory for three phases is ceremony,
 and the split is a mechanical migration, not a decision to agonise over.
@@ -86,7 +83,7 @@ never writes `.docs-budgets.json`. The gate does not see a fact living in two
 documents, a shipped unit rewritten to match the code, or an index that answers
 the wrong three questions.
 
-Experience units are living contracts (`product/experience.md`), not frozen sprint
+Experience units are living contracts (`product/experience.md`), not frozen delivery
 history. The developer may revise a retained behavior with its checks. Their
 `exploring`/`stable` status and independent visual policy live in the unit, not the
 index. `docs-check` validates their fields and references; it cannot establish

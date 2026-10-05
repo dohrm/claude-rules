@@ -96,8 +96,9 @@ acceptance is still required before adopting the replacement.
 For code changes, distinguish compliance from fitness:
 
 Read the ADRs that bear on the changed files: the decision log in
-`docs/ARCHITECTURE.md` indexes them, and a `/tasks` worklist names the ones its
-sprint was cut against under **Constrained by**. Then:
+`docs/ARCHITECTURE.md` indexes them, and the `.work/<slug>/rfc.md` being built names
+the ones it was framed against under **Constrained by**. Its local decisions are not
+ADRs. Then:
 
 - **Code that contradicts an `Accepted` ADR is 🔴** — name the record and the
   section it breaks. That is a fact the author can check, and it is the ONLY
@@ -112,7 +113,7 @@ sprint was cut against under **Constrained by**. Then:
 ### Experience — preserve the selected journey, not an imagined uniform portal
 
 For UI changes, read `docs/EXPERIENCE.md` and the affected contracts under
-`docs/experience/` (a worklist's **Experience** links narrow that read). Check the
+`docs/experience/` (an RFC's links narrow that read). Check the
 actor and scope; expert and assisted journeys may legitimately differ. Read the
 shared toolkit in `docs/DESIGN.md` and applicable supplied visual references.
 Legacy single-file requirements still count; missing new metadata does not erase

@@ -27,8 +27,8 @@ code a tired human can understand six months later.
 ## Before coding
 
 Identify the requested outcome, the module that owns it, affected boundaries and
-how to verify the change. Use the plan when one exists. A small correction or an
-authorized adjustment does not require a new plan or worklist; update the affected
+how to verify the change. Use the RFC when one exists. A small correction or an
+authorized adjustment does not require a new RFC; update the affected
 documents as part of the change. Ask only when an unresolved choice affects scope
 or correctness. For a conflict with an accepted ADR, use `agent/decisions.md`.
 

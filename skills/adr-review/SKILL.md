@@ -27,6 +27,13 @@ and makes each affected record's fate explicit. Use separate proposals when the
 choices can be accepted independently. Preserve the old records as history; do
 not rewrite them to make the current state look inevitable.
 
+Read the shared decision repository named in `docs/ARCHITECTURE.md` (ask for it
+if absent; `none` is an answer). Flag project records that are enterprise policy,
+stack convention or feature-local detail (`agent/decisions.md` § Which choices need
+an ADR), and records that duplicate or contradict a shared one. For each enterprise
+candidate, propose a PR on the shared repository (§ Shared decisions) and, once
+merged there, a pointer in place of the project record.
+
 Return a compact source-linked map of the current decision set and a prioritized
 action table: finding, evidence, affected ADRs, proposed action, and whether a
 human decision is needed. Recommend a slimmer index or clearer cross-links where

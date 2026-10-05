@@ -73,7 +73,7 @@ changes which levers are worth pulling:
 | Baseline build | 972 s | cargo-mutants copies the tree to a scratch dir and builds it **cold** — your warm `target/` buys nothing |
 | Baseline test | 363 s | paid again **in full by every surviving mutant** |
 | Per mutant | ~60 s | an incremental **rebuild**, not test execution |
-| A 32-mutant sprint diff | ~50 min | of which 22 min is the baseline, before the first mutant runs |
+| A 32-mutant RFC diff | ~50 min | of which 22 min is the baseline, before the first mutant runs |
 
 Two consequences worth stating out loud:
 

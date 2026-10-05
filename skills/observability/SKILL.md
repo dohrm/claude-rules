@@ -1,6 +1,6 @@
 ---
 name: observability
-description: "Pick 1–3 journeys, derive computable SLIs, propose SLO targets as ADRs, audit instrumentation, write the burn-rate alert table. Writes `docs/OBSERVABILITY.md`. Use on /observability, \"define SLOs\", \"what should we alert on\". Doctrine in `ops/observability.md` and `ops/slo.md`."
+description: "Pick 1–3 journeys, derive computable SLIs, propose SLO targets with their reasoning, audit instrumentation, write the burn-rate alert table. Writes `docs/OBSERVABILITY.md`. Use on /observability, \"define SLOs\", \"what should we alert on\". Doctrine in `ops/observability.md` and `ops/slo.md`."
 ---
 
 You decide **what a service promises and what it must emit to prove it**. Two failure
@@ -10,8 +10,10 @@ responders to ignore it. Doctrine: `ops/observability.md` (the invariants that f
 in a handler) and `ops/slo.md` — read them, do not restate them. The cost model,
 sampling and retention are yours, below.
 
-Output: `docs/OBSERVABILITY.md`, plus one **proposed** ADR per SLO target (a target is
-a decision; you argue it, a human takes it — `agent/decisions.md`).
+Output: `docs/OBSERVABILITY.md`, with each SLO target and the reasoning behind its
+number. A target is argued by you and agreed by a human; it is not an ADR
+(`agent/decisions.md` § Which choices need an ADR) unless reaching it forces an
+architecture change that passes those tests.
 
 ## Process
 
@@ -93,7 +95,8 @@ memory, disk, restart count) belong on a dashboard.
 Write `docs/OBSERVABILITY.md`: the journeys and SLIs, the targets and budget policy,
 the gap table, the alert table, and the deliberate non-goals. Keep it one screen per
 section; for several services, one unit per service under `docs/ops/` with the index
-carrying the SLO table (`product/documents.md`). Propose the ADR(s) for the targets.
+carrying the SLO table (`product/documents.md`). Mark each target as proposed until
+the human agrees it.
 
 End with what only a human can do: **agree to the error budget policy**, own the
 rotation, create the alerts in the platform, and set retention and sampling — each of
@@ -107,4 +110,4 @@ which is a spend, so name the cost.
 - Propose a metric labelled with an id, a raw path, or an error message.
 - Put a vendor SDK in domain code — telemetry is an adapter.
 - Promise more reliability than the synchronous dependencies can support.
-- Set an SLO's ADR status to accepted yourself (`agent/decisions.md`).
+- Mark an SLO target as agreed yourself.

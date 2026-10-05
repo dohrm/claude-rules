@@ -17,8 +17,8 @@
 # already keeps it out of code review — this is the same doctrine reaching the
 # other gate, which it previously did not.
 #
-# This protects the VARIANCE, not the average. A typical sprint diff is a few dozen
-# mutants and would not notice; the sprint that regenerates an OpenAPI or protobuf
+# This protects the VARIANCE, not the average. A typical RFC diff is a few dozen
+# mutants and would not notice; the RFC that regenerates an OpenAPI or protobuf
 # client is thousands, and that is the run that makes someone turn the gate off.
 # Measured on one real workspace: 8128 mutants for a whole-tree sweep, generated
 # sources at the top of the per-file count.

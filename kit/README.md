@@ -35,7 +35,7 @@ reason; they need Node >= 18 and no dependencies.)
 |------|--------|---------|------|---------|
 | 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
 | 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
-| 3 | `just code-review` | per coherent block/sprint, before push | independent review; CRITICAL blocks via pre-push review-guard | minutes |
+| 3 | `just code-review` | per coherent block (one RFC), before push | independent review; CRITICAL blocks via pre-push review-guard | minutes |
 | 4 | `just mutate-diff` | PR gate after calibration; optional locally | mutation / Go coverage ratchet — NEVER a hook | minutes |
 
 Local T3/T4 runs measure **what a previous pass has not already cleared**, not the whole branch:
@@ -151,7 +151,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    changed file, so nothing goes missing silently. `review_max_bytes` fails the gate on
    a diff too big to review rather than letting the reviewer see a random subset of it.
    Successive runs review only what the last passing one did not clear (the marker
-   above); `work_slug` parks that marker next to a `/loop-setup` capability's `loop.md`
+   above); `work_slug` parks that marker next to a `/loop-setup` or `/rfc` state file
    instead of under the branch name. Doctrine: `../rules/agent/autonomy.md`.
 6. **Parallel sessions** (only if you run more than one at a time): `just status`.
    The reason it exists is

@@ -23,11 +23,11 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 | When | Command | What it answers |
 |---|---|---|
 | Per iteration | `just check` (Tier 1-2) | fmt, lint, tests, deny — seconds |
-| Per sprint, before push | `just code-review` (Tier 3) | judgment a gate cannot make — minutes |
+| Per RFC, before push | `just code-review` (Tier 3) | judgment a gate cannot make — minutes |
 | Per push | CI | a **witness**, same tools on the PR diff |
 | Per pull request | `mutate-diff` in CI (Tier 4) | do the tests *assert*? — **the gate**, not a witness |
 
-**The coherent block is the sprint**, not the task. Say it plainly because the
+**The coherent block is the RFC**, not the step. Say it plainly because the
 drift is one-way: a loop that commits per task starts running Tier 3 per task, and
 then Tier 3 is a tax somebody eventually removes.
 
@@ -56,30 +56,30 @@ A green gate never settles a **decision** — that line is `agent/decisions.md`.
 ## Levels
 
 How often the agent stops to ask is a per-run choice, declared once in the state
-file header — `.work/<slug>/PLAN.md`, the worklist, `loop.md`, or `goal.md`:
+file header — `.work/<slug>/rfc.md` or `loop.md`:
 `**Autonomy**: L1 | L2 | L3`.
 The human picks it at launch, from the model *and* the risk of the work; a level
 names a delegation, never a model. **Absent or unreadable → L1.**
 A level passed at launch is written into that header before the first turn: the
 state file is the source of truth, so a level that lives only in the prompt is lost
 at the next one. A skill that runs another passes its resolved level as the argument
-(`/tasks L3`) — the callee's own lookup would fall back to an older header or to L1.
+(`/rfc L3`) — the callee's own lookup would fall back to an older header or to L1.
 
 | Level | The human validates | The agent settles alone |
 |---|---|---|
 | **L1 — guided** | every checkpoint a skill marks, before the next step | nothing a skill marks as a checkpoint |
 | **L2 — delegated** | each skill's written output, once | the open questions the code answers, each one recorded |
-| **L3 — autonomous** | only the hard checkpoints below | the cut, the loop's caps or goal's checkpoints, chaining `/plan` → `/tasks` → `/loop-setup` or `/goal-setup` → launch, sub-agents |
+| **L3 — autonomous** | only the hard checkpoints below | the RFC's local decisions and steps, the loop's caps, launching once `ready` (a Codex `/goal` included), sub-agents |
 
 **Hard checkpoints — identical at every level:** an ADR status (`agent/decisions.md`);
-a new acceptance criterion, User Story or scope change; a sprint's `Shipped` and its
-merge; a hard bypass (below); a tree that contradicts the state file.
+a new acceptance criterion, User Story or scope change; an RFC's `ready`, a
+capability's `Shipped` and the merge; a hard bypass (below); a tree that contradicts the state file.
 
 A level moves *when* the human is asked, never *what* counts as done. The gate,
 escalation channel and one-tree-one-writer hold at L3 exactly as at L1. A loop
 retains its caps and divergence guard; at L3 the agent sets their values itself
-and writes them before the first turn. A goal retains its stopping condition and
-checkpoints at every level. Under L2+, every question settled without asking is written
+and writes them before the first turn. An RFC retains its stopping condition and
+the proof of each step at every level. Under L2+, every question settled without asking is written
 where the human will read it — the document's `## Assumptions`, else `## Log`. An
 unrecorded assumption is a silent scope change.
 
@@ -88,38 +88,36 @@ ambiguity the code cannot settle asks, which is escalation, not failure.
 
 ## One tree, one writer
 
-`.work/` (review report, worklist) is per-tree. Two sessions in one checkout
+`.work/` (review report, RFC) is per-tree. Two sessions in one checkout
 share one verdict: A's `CLEAN` authorises B's push. **One tree, one writer, one
-branch, one worklist.**
+branch, one RFC.**
 
 Parallel work gets a parallel tree, at a path you do not have to remember:
 
 ```bash
-just tree <capability-slug>     # prints the path; one tree per capability
-just tree-rm <capability-slug>  # tree AND branch, at the merge, in one act
+just tree <slug>     # prints the path; one tree per RFC
+just tree-rm <slug>  # tree AND branch, at the merge, in one act
 ```
 
 Every tree on the machine lives under one root (`$CR_WORKTREES`, default
 `~/.worktrees/<repo>/<slug>`) — outside every repo, because a checkout nested in a
-repo is one every tool scans. **One tree per capability, one branch per sprint
-inside it**: `.work/<capability-slug>/` is per-tree and holds that capability's plan
-and all its worklists, so any other split puts one work unit in two trees.
+repo is one every tool scans. **One tree, one branch, one RFC**: `.work/<slug>/` is per-tree and holds that
+RFC, so any other split puts one work unit in two trees.
 
-**Parallelise across capabilities, never across the sprints of one.** A sprint is a
-vertical slice, so two sprints of the same capability traverse the same layers and
-collide by construction — `Blocked by` in the plan serialises the dependent ones,
-and the rest are independent as promises, not as files.
+**Parallelise across RFCs that touch disjoint code, never across ordered ones.** When
+a granularity verdict splits a feature into ordered RFCs, they traverse the same
+layers and collide by construction: run them in sequence.
 
 The tree dies with the work. `tree-rm` removes nothing unless the tree is clean and
 the branch is merged, so a forest of detached branches is something you have to
 build on purpose. `just status` reports every tree; it never gates.
 
-The human is a writer too. When they edit the tree a loop or goal owns — legitimate, and
-declared as a `human:` line in `## Log` (`skills/loop-setup` or `skills/goal-setup`) — that line is a
+The human is a writer too. When they edit the tree a loop or an RFC owns — legitimate, and
+declared as a `human:` line in `## Log` (`skills/loop-setup` or `skills/rfc`) — that line is a
 **fact about the tree**, not an item to redo or undo. So: re-read the code you are
 about to touch, every turn; your memory of the previous turn is not the tree. And
 **never revert a change you cannot explain** — a tree that contradicts the
-worklist is an escalation, not a merge conflict to resolve on your own.
+RFC or loop is an escalation, not a merge conflict to resolve on your own.
 
 ## Never fake green
 
@@ -138,5 +136,5 @@ make bypass expensive and loud, not impossible. Wiring:
 
 **Declare every bypass.** No silent TODO, skipped test, placeholder, or stub.
 
-**Escalate in that tree's `.work/<slug>/tasks/NN-*.md`, `loop.md`, or `goal.md` → `## Blocked on the human`** —
+**Escalate in that tree's `.work/<slug>/rfc.md` or `loop.md` → `## Blocked on the human`** —
 what `just status` surfaces. Never in the review report.

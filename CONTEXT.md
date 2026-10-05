@@ -92,16 +92,20 @@ One unit of the PRD — an actor, the job it does for them, its status, and
 where its User Stories live (`docs/prd/NN-<slug>.md`).
 _Avoid_: feature, epic, milestone (considered and rejected — see below)
 
-**Sprint**:
-One vertical slice inside a capability's `.work/<slug>/PLAN.md`, cut by
-`/plan`, executed by `/tasks` + `/loop-setup`.
-_Avoid_: phase (the retired, project-wide term this replaced)
-
 **ADR**:
 A decision record under `docs/adr/`. `Proposed` by an agent; `Accepted` /
 `Rejected` / `Superseded` / `Deprecated` only by a human, in a commit
 (`agent/decisions.md`).
-_Avoid_: RFC, design doc
+_Avoid_: design doc
+
+**RFC**:
+One feature framed by `/rfc` — in `.work/<slug>/rfc.md`, a GitHub issue or a Plane
+work item, per the project's RFC store: its local decisions,
+execution steps and stopping condition, iterated until the human marks it `ready`,
+then implemented. A capability too large for one is split into ordered RFCs.
+Ephemeral; deleted once its PR merges. Not a decision record — a
+choice that earns an ADR leaves the RFC as a `Proposed` ADR.
+_Avoid_: spec, plan, sprint (the retired `/plan` → `/tasks` units it replaced)
 
 **Experience contract**:
 One screen or workflow for one actor profile under `docs/experience/`, indexed by

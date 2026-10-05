@@ -92,9 +92,9 @@ diffs from there:
 | `.work/<slug>/.latest_mutate` | what `mutate-diff` cleared, once you wire it |
 
 `<slug>` is the branch name unless you set `work_slug` (a `/loop-setup` or
-`/goal-setup` capability slug parks the marker next to its state file). Both files are per developer —
+`/rfc` slug parks the marker next to its state file). Both files are per developer —
 `diff-since.mjs` keeps `.work/.gitignore` carrying the patterns, so they stay private
-even in a repo that commits its `.work/` plans.
+even in a repo that commits its `.work/` RFCs.
 
 Three properties, none of them optional:
 

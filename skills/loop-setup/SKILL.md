@@ -1,6 +1,6 @@
 ---
 name: loop-setup
-description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<capability-slug>/loop.md` (or Guardrails on a /tasks worklist). Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Starts it only at autonomy L3. Not for one-off tasks."
+description: "Frame a self-terminating agent loop: 4 preconditions, bounded objective, measurable done-command, guardrails. Writes `.work/<slug>/loop.md`. Use on /loop-setup, \"set up a loop\", \"loop until the tests pass\". Starts it only at autonomy L3. Not for one-off tasks, and not for a feature — that is /rfc."
 ---
 
 You help build a loop that **stops on proof, not on a feeling**. The whole value is upstream of the loop command: an objective that is bounded, a "done" that a machine decides, and guardrails that keep tokens and drift under control. Simplicity first — an unbounded loop that "wanders until it figures it out" is the expensive failure mode, and you are hostile to it. Below L3 you do not start the loop; you produce the prompt and the state file, then hand the exact command to run. At L3 you launch it yourself (phase 5).
@@ -52,22 +52,19 @@ The level sets how much one turn covers, and so the unit the cap is counted in �
 | *L2* | the next item and the ones sharing its anchor | turns |
 | *L3* | every remaining item, until the Done-check or a hard checkpoint; sub-agents allowed for exploration and review | tokens and wall-time — a turn is no longer a unit of cost |
 
-At *L3*, count the divergence guard in **done-command runs**, not turns: one turn may cover the whole sprint, so a turn-based guard would never fire.
+At *L3*, count the divergence guard in **done-command runs**, not turns: one turn may cover every remaining item, so a turn-based guard would never fire.
 
 ### 4. Write the state file
 
-The loop's state is **one file under `.work/<capability-slug>/`** — committed
-working memory, deleted once the capability ships, never under `docs/`
-(`product/documents.md`).
+The loop's state is **one file, `.work/<slug>/loop.md`** — committed working
+memory, deleted once the objective is met, never under `docs/`
+(`product/documents.md`). A loop never extends an RFC: a feature with steps and
+local decisions is `/rfc`; a loop is a repeated chore.
 
-**First, look for a file that already exists:**
-
-- **`.work/<slug>/tasks/NN-*.md` — a worklist from `/tasks`.** Then the plan is already written, with anchors and tasks cut at the green boundary. **Do not create a second file.** Read it, and add only what you own: the `## Guardrails` section from phase 3 — plus its `**Autonomy**` header line when the human passed a level for this run, so the file the next turn reads agrees with the prompt. Everything else is `/tasks`' and stays untouched.
-- **Nothing there, but a `.work/<slug>/PLAN.md` sprint is the objective, at *L3*** — run `/tasks L3` on it first, passing the level explicitly — the plan header may still say L1, and `/tasks` would then stop to ask. It writes L3 into the worklist header without waiting; then add Guardrails to the worklist it produced, and continue to phase 5.
-- **Nothing there** — write `.work/<slug>/loop.md` from `<loop-file-template>`.
+- **No file yet** — write it from `<loop-file-template>`.
 - **A file exists from an earlier run** — read it and fill only the deltas; don't clobber validated content.
 
-Build the **loop prompt** from `<loop-prompt-template>`, pointing at whichever file you settled on.
+Build the **loop prompt** from `<loop-prompt-template>`, pointing at that file.
 
 Confirm *"✓ `.work/<slug>/<file>` written (guardrails added); loop prompt ready"*.
 
@@ -80,8 +77,8 @@ Below L3, emit the invocation for the user's host (ask which if unclear). At *L3
 | **Claude Code** | `/loop <paste the loop prompt>` (omit interval → self-pacing) | the prompt must self-terminate; it does |
 | **Cursor** | a stop-hook loop (`loop_limit`) or an Automation | heavier: emit the hook config alongside the prompt; `loop_limit` = your iteration cap |
 
-For a durable Codex objective, use `/goal-setup` and Codex's goal mechanism.
-It tracks checkpoints across turns instead of repeating one loop gesture.
+A feature to build, on any host, is `/rfc`: at L3 on Codex it starts a `/goal`
+on the RFC's stopping condition.
 
 Then state **how to interrupt** the loop and where to watch progress (the state file's checkboxes and its `## Log` tail — plus `.work/<slug>/SUMMARY.md` once it stops, if `just publish-summary` is wired).
 
@@ -95,9 +92,7 @@ And state the one thing the human must not improvise — **editing the code whil
 If this happens often, that is a signal about the **cut**, not about the agent: an item needing exploration failed precondition 3 (*end-to-end doable*) and belonged in an `/investigate`, not in the loop.
 
 <loop-file-template>
-<!-- `.work/<slug>/loop.md`, rewritten every turn. A sprint worklist from /tasks has
-     this same skeleton plus its anchors — then add the Guardrails section there
-     instead of creating this file. -->
+<!-- `.work/<slug>/loop.md`, rewritten every turn. -->
 # Loop — <objective in one line>
 
 - **Objective (bounded)**: <finite, checkable end state>
@@ -140,7 +135,7 @@ If this happens often, that is a signal about the **cut**, not about the agent: 
 You are running one turn of a bounded loop toward a fixed objective. Work only from the state file below; it is the source of truth, not your memory of prior turns.
 
 **Objective:** <bounded objective>
-**State file:** `<.work/<slug>/loop.md or .work/<slug>/tasks/NN-slug.md>` — remaining work, guardrails, and what already failed.
+**State file:** `.work/<slug>/loop.md` — remaining work, guardrails, and what already failed.
 **Autonomy:** <L1 | L2 | L3> — turn scope: <one item | the items sharing the next anchor | every remaining item until the Done-check or a hard checkpoint>.
 
 This turn:
@@ -168,6 +163,6 @@ On any of these: stop, write the reason and current state under `## Blocked on t
 
 - Done is a green command (`agent/autonomy.md`). No loop without a cap and an escalation point — at every autonomy level.
 - The level is the human's call. Never raise it on your own; dropping to asking is always allowed.
-- One state file under `.work/<slug>/`. Never a second plan next to a `/tasks` worklist — add Guardrails there.
-- `.work/<slug>/SUMMARY.md` (if `just publish-summary` is wired) is a terminal snapshot, not a second state file — the loop stops and escalates from `loop.md`/the worklist alone, with or without it.
+- One state file, `.work/<slug>/loop.md`. Never a loop on a feature — that is `/rfc`.
+- `.work/<slug>/SUMMARY.md` (if `just publish-summary` is wired) is a terminal snapshot, not a second state file — the loop stops and escalates from `loop.md` alone, with or without it.
 - Plan mode: writing `.work/*` is allowed.

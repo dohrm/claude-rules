@@ -778,14 +778,14 @@ test('review-guard: with no commit yet there is nothing to compare against', () 
 // The counterpart of review-guard: that one is the gate in ONE tree, this one is
 // the report across ALL of them. So what gets pinned here is that it aggregates
 // faithfully (a CRITICAL in a sibling tree is visible from here), that the
-// escalation channel /tasks defines actually surfaces, and that it NEVER blocks —
+// escalation channel /rfc and /loop-setup define actually surfaces, and that it NEVER blocks —
 // a dashboard with an exit code is a second gate nobody asked for.
 const WT_STATUS = join(REPO, 'kit', 'common', 'worktree-status.mjs')
 
-/** A sprint worklist / loop.md, with the `## Blocked on the human` section
- *  /tasks and /loop-setup both write. */
+/** An rfc.md / loop.md, with the `## Blocked on the human` section
+ *  /rfc and /loop-setup both write. */
 const worklist = (blockers) =>
-  '# Sprint 02: split — worklist\n\n## Tasks\n\n- [ ] T1\n\n## Blocked on the human\n\n'
+  '# RFC — split\n\n## Steps\n\n- [ ] T1\n\n## Blocked on the human\n\n'
   + '<!-- What the loop cannot decide or access. -->\n'
   + (blockers.length ? blockers.map((b) => `- ${b}\n`).join('') : '- <blocker>\n')
 
@@ -828,16 +828,16 @@ test('worktree-status: a CRITICAL in a SIBLING tree is visible from here', () =>
   })
 })
 
-test('worktree-status: a sprint worklist and its blockers surface, placeholders do not', () => {
+test('worktree-status: an rfc.md and its blockers surface, placeholders do not', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/split/tasks/02-split.md', worklist([]))
+    write(dir, '.work/split/rfc.md', worklist([]))
     const quiet = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(quiet.out, /split\/tasks\/02-split/)
+    assert.match(quiet.out, /split\/rfc/)
     assert.doesNotMatch(quiet.out, /BLOCKED/, 'an untouched template is not an escalation')
     assert.doesNotMatch(quiet.out, /waiting on you/)
 
-    write(dir, '.work/split/tasks/02-split.md', worklist(['the PRD says X, the schema says Y — which wins?']))
+    write(dir, '.work/split/rfc.md', worklist(['the PRD says X, the schema says Y — which wins?']))
     const loud = run(WT_STATUS, ['HEAD'], dir)
     assert.equal(loud.status, 0)
     assert.match(loud.out, /BLOCKED: the PRD says X, the schema says Y/)
@@ -845,7 +845,7 @@ test('worktree-status: a sprint worklist and its blockers surface, placeholders 
   })
 })
 
-test('worktree-status: loop.md escalates the same way a sprint worklist does', () => {
+test('worktree-status: loop.md escalates the same way an rfc.md does', () => {
   withTmpRepo((dir) => {
     commits(dir)
     write(dir, '.work/onboarding/loop.md', worklist(['waiting on the API key']))
@@ -855,31 +855,23 @@ test('worktree-status: loop.md escalates the same way a sprint worklist does', (
   })
 })
 
-test('worktree-status: goal.md escalates the same way a loop or sprint worklist does', () => {
+test('worktree-status: an rfc.md outranks a loop.md under the same slug', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/onboarding/goal.md', worklist(['waiting on the contract owner']))
+    write(dir, '.work/split/loop.md', worklist(['stale — the RFC took over']))
+    write(dir, '.work/split/rfc.md', worklist([]))
     const r = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(r.out, /onboarding\/goal/)
-    assert.match(r.out, /BLOCKED: waiting on the contract owner/)
-  })
-})
-
-test('worktree-status: a sprint worklist outranks a loop.md in the same capability', () => {
-  withTmpRepo((dir) => {
-    commits(dir)
-    write(dir, '.work/split/loop.md', worklist(['stale — /tasks already cut this sprint']))
-    write(dir, '.work/split/tasks/02-split.md', worklist([]))
-    const r = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(r.out, /split\/tasks\/02-split \(\+1\)/, 'the sprint worklist sorts last and wins, the loop.md is only counted')
+    assert.match(r.out, /split\/rfc \(\+1\)/, 'the RFC sorts last and wins, the loop.md is only counted')
     assert.doesNotMatch(r.out, /BLOCKED/, 'it reads the winning file, not the stale loop.md')
   })
 })
 
-test('worktree-status: a capability with no tasks/ yet and no loop.md reports —', () => {
+test('worktree-status: retired state files (PLAN.md, tasks/, goal.md) are not read', () => {
   withTmpRepo((dir) => {
     commits(dir)
     write(dir, '.work/planned/PLAN.md', '# Plan\n')
+    write(dir, '.work/planned/goal.md', worklist(['a goal nobody runs any more']))
+    write(dir, '.work/planned/tasks/02-split.md', worklist(['a worklist nobody runs any more']))
     const r = run(WT_STATUS, ['HEAD'], dir)
     assert.match(r.out, /  —  /)
     assert.doesNotMatch(r.out, /BLOCKED/)
@@ -973,9 +965,10 @@ test('publish-summary: a slug dir with no state file is a usage error', () => {
   withTmpRepo((dir) => {
     commits(dir)
     write(dir, '.work/empty/PLAN.md', '# Plan\n')
+    write(dir, '.work/empty/goal.md', '# Goal — retired\n')
     const r = run(PUBLISH_SUMMARY, ['empty', 'COMPLETED'], dir)
     assert.equal(r.status, 2)
-    assert.match(r.out, /no loop\.md, goal\.md or tasks/)
+    assert.match(r.out, /no loop\.md or rfc\.md/)
   })
 })
 
@@ -1002,34 +995,37 @@ test('publish-summary: loop.md happy path — status, objective, guardrails, che
   })
 })
 
-test('publish-summary: goal.md uses its checkpoints when no loop or task worklist exists', () => {
+test('publish-summary: rfc.md uses its Steps when no loop.md exists', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/goal.md',
-      '# Goal — migrate API clients\n\n'
-      + '- **Objective (bounded)**: migrate API clients\n'
+    write(dir, '.work/demo/rfc.md',
+      '# RFC — migrate API clients\n\n'
+      + '- **Status**: implementing\n'
       + '- **Stopping condition**: `npm test`\n\n'
-      + '## Checkpoints\n\n'
-      + '- [x] migrate contract tests → verified by `npm test`\n\n'
-      + '## Log\n\n- checkpoint 1: tests green\n\n'
-      + '## Blocked on the human\n\n- <blocker>\n')
-    const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
+      + '## Steps\n\n'
+      + '- [x] migrate contract tests — touches `api/` → proof: `npm test`\n'
+      + '- [ ] drop the old client — touches `client/` → proof: `npm test`\n\n'
+      + '## Blocked on the human\n\n- need a decision on X\n\n'
+      + '## Log\n\n- step 1: tests green\n')
+    const r = run(PUBLISH_SUMMARY, ['demo', 'BLOCKED'], dir)
     assert.equal(r.status, 0, r.out)
     const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
-    assert.match(summary, /migrate API clients/)
-    assert.match(summary, /## Remaining work \(1\/1 done\)/)
+    assert.match(summary, /\*\*Objective\*\*: migrate API clients/, 'the RFC title, without its prefix')
+    assert.match(summary, /## Remaining work \(1\/2 done\)/)
+    assert.match(summary, /- need a decision on X/)
   })
 })
 
-test('publish-summary: tasks/NN-*.md is used when there is no loop.md, and the newest NN wins', () => {
+test('publish-summary: loop.md outranks rfc.md under the same slug', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/split/tasks/01-first.md', worklist([]))
-    write(dir, '.work/split/tasks/02-split.md', worklist(['need a decision on X']))
-    const r = run(PUBLISH_SUMMARY, ['split', 'BLOCKED'], dir)
+    write(dir, '.work/demo/rfc.md', worklist(['from the RFC']))
+    write(dir, '.work/demo/loop.md', loopMd({ blocked: ['from the loop'] }))
+    const r = run(PUBLISH_SUMMARY, ['demo', 'BLOCKED'], dir)
     assert.equal(r.status, 0, r.out)
-    const summary = readFileSync(join(dir, '.work/split/SUMMARY.md'), 'utf8')
-    assert.match(summary, /- need a decision on X/)
+    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /- from the loop/)
+    assert.doesNotMatch(summary, /from the RFC/)
   })
 })
 
@@ -1075,14 +1071,14 @@ test('publish-summary: all three statuses are accepted', () => {
   })
 })
 
-test('publish-summary: a sprint worklist with no Objective bullet falls back to its title', () => {
+test('publish-summary: an rfc.md with no Objective bullet falls back to its title', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/split/tasks/02-split.md', worklist([]))
+    write(dir, '.work/split/rfc.md', worklist([]))
     const r = run(PUBLISH_SUMMARY, ['split', 'BLOCKED'], dir)
     assert.equal(r.status, 0, r.out)
     const summary = readFileSync(join(dir, '.work/split/SUMMARY.md'), 'utf8')
-    assert.match(summary, /\*\*Objective\*\*: Sprint 02: split — worklist/)
+    assert.match(summary, /\*\*Objective\*\*: split$/m)
   })
 })
 
@@ -1113,7 +1109,7 @@ test('publish-summary: an untouched Log placeholder counts as zero turns', () =>
 // also be excluded from mutation: nobody wrote the assertions that would catch such a
 // mutant, and "fixing" a survivor means editing a file the generator overwrites. This
 // is the one exclusion list that ships FILLED, so a future edit cannot quietly comment
-// it back out — the sprint that regenerates an API client is the one that turns a
+// it back out — the RFC that regenerates an API client is the one that turns a
 // gate off, and it is thousands of mutants, not the usual few dozen.
 test('kit/rust/mutants.toml ships generated-code exclusions, not just a commented example', () => {
   const toml = readFileSync(join(REPO, 'kit', 'rust', 'mutants.toml'), 'utf8')
