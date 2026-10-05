@@ -5,6 +5,11 @@
   "shared": [
     { "from": "rules/common", "to": ".claude/rules/common", "kind": "rule" }
   ],
+  "retired": {
+    "_comment": "Profiles and skills removed from the library. A lock that still names a retired profile is cleaned on read instead of rejected; retired skill directories are purged on install.",
+    "profiles": { "goal-setup": "replaced by /rfc in the product profile (ADR-0007)" },
+    "skills": ["plan", "tasks", "goal-setup"]
+  },
   "aliases": {
     "rust-api": ["rust", "hexagonal", "api", "backend"],
     "go-api": ["go", "hexagonal", "api", "backend"],

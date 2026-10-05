@@ -239,6 +239,28 @@ test('add/update purge leftover trees from retired agent targets', () => {
   })
 })
 
+test('update drops a retired profile from an old lock and purges retired skills', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'product', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    lock.profiles = [...lock.profiles, 'goal-setup']
+    lock.modules['.'] = [...lock.modules['.'], 'goal-setup']
+    lock.levels = { ...lock.levels, 'goal-setup': 'rules' }
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+    mkdirSync(join(dir, '.claude/skills/plan'), { recursive: true })
+    writeFileSync(join(dir, '.claude/skills/plan/SKILL.md'), '---\nname: plan\n---\n')
+
+    const r = ok(runCli(['update'], dir))
+    const after = lockOf(dir)
+    assert.ok(!after.profiles.includes('goal-setup'))
+    assert.ok(!after.modules['.'].includes('goal-setup'))
+    assert.ok(!('goal-setup' in (after.levels || {})))
+    assert.equal(r.stdout.match(/Dropped retired profile "goal-setup"/g)?.length, 1)
+    assert.ok(!has(dir, '.claude/skills/plan'))
+    assert.ok(has(dir, '.claude/skills/rfc/SKILL.md'))
+  })
+})
+
 test('update drops retired agents from an old lock', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))

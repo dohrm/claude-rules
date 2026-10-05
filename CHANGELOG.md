@@ -80,9 +80,9 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 ### Breaking
 
 - **`/plan`, `/tasks` and `/goal-setup` are removed** (ADR-0007), and so is the
-  `goal-setup` profile. The new CLI rejects a lock that names it, so remove it with
-  your current ref first: `npx github:dohrm/claude-rules#<current-ref> remove goal-setup`,
-  then `update`.
+  `goal-setup` profile. `update` drops `goal-setup` from an existing lock (it says
+  so) and deletes the `plan`, `tasks` and `goal-setup` skill directories; review them
+  with `git status`.
   `/rfc` replaces all three. The coherent block of `agent/autonomy.md` is the RFC,
   not the sprint. `just status` and `just publish-summary` read `.work/<slug>/rfc.md`
   and `loop.md` only. Finish open `.work/<slug>/PLAN.md` / `tasks/` work first, or

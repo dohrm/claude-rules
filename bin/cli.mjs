@@ -496,7 +496,7 @@ function normalizeModules(profiles, modules = {}, validateRoot = true) {
 function readLock() {
   if (!existsSync(LOCK)) return null
   safePath(LOCK)
-  const lock = JSON.parse(readFileSync(LOCK, 'utf8'))
+  const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
   lock.profiles = unpackNames(lock.profiles, true)
   lock.modules = normalizeModules(lock.profiles, lock.modules)
   if (lock.levels) {
@@ -506,6 +506,35 @@ function readLock() {
     lock.levels = levels
   }
   return lock
+}
+// A profile removed from the library must not make an old lock unreadable: drop it
+// from profiles, modules and levels, say so, and let the next write persist that.
+function dropRetiredProfiles(lock) {
+  const retired = registry.retired?.profiles || {}
+  const gone = (lock.profiles || []).filter(p => retired[p])
+  if (!gone.length) return lock
+  if (!dropRetiredProfiles.told) for (const p of gone) console.log(`Dropped retired profile "${p}" from the lock: ${retired[p]}.`)
+  const keep = ps => ps.filter(p => !retired[p])
+  lock.profiles = keep(lock.profiles)
+  if (lock.modules) lock.modules = Object.fromEntries(Object.entries(lock.modules).map(([d, ps]) => [d, keep(ps)]))
+  if (lock.levels) lock.levels = Object.fromEntries(Object.entries(lock.levels).filter(([p]) => !retired[p]))
+  if (!dropRetiredProfiles.told) console.log('')
+  dropRetiredProfiles.told = true
+  return lock
+}
+// Skill directories of retired skills: library-owned, so no update would ever reach
+// them again. Codex-owned files under .agents/skills are pruned by its inventory.
+function purgeRetiredSkills(agents, codexOwned) {
+  for (const agent of agents) {
+    if (codexOwned && SKILL_DIR[agent] === SKILL_DIR.codex) continue
+    for (const name of registry.retired?.skills || []) {
+      const dir = `${SKILL_DIR[agent]}/${name}`
+      if (!existsSync(dir)) continue
+      safePath(dir)
+      rmSync(dir, { recursive: true, force: true })
+      console.log(`  ✗ ${dir}  (retired skill — run git status before committing)`)
+    }
+  }
 }
 function writeLock(ref, profiles, agents, modules, levels, codex) {
   const lock = { repo: registry.repo, ref, profiles, agents, modules: normalizeModules(profiles, modules, false) }
@@ -615,6 +644,7 @@ async function install(profiles, ref, agents, modules, levels) {
     }
     if (codex) applyCodex(codex)
     purgeRetired()
+    purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
     writeLock(ref, profiles, agents, modules, levels, codex?.inventory)
   } finally {
