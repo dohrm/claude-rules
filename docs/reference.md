@@ -19,11 +19,11 @@ flowchart LR
   DM -.-> A
   A --> PM["/pre-mortem"]
   PM -.-> P
-  A --> PL["/plan"]
   P --> DS["/design-system"] & EX["/experience"]
   DS & EX --> UP["/ui-prompt"]
-  PL --> T["/tasks"]
-  T --> B["build<br/>rules + just check"]
+  P --> RFC["/rfc"]
+  A --> RFC
+  RFC --> B["build<br/>rules + just check"]
   B --> G["gate<br/>hooks + CI"]
   G --> R["release<br/>tag"]
   R --> O["/observability"]
@@ -41,8 +41,7 @@ flowchart LR
 | **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
-| **Slice one capability** | `/plan` | `.work/<slug>/PLAN.md` — sprints for that capability (committed, dies once it ships) | human validates the granularity |
-| **Cut one sprint** | `/tasks` | `.work/<slug>/tasks/NN-*.md` — anchors + tasks sized to the green boundary (committed, dies with the capability) | human validates the cut |
+| **Engineer one feature** | `/rfc` | the RFC — `.work/<slug>/rfc.md`, a GitHub issue or a Plane work item: granularity verdict, local decisions, steps with proofs; iterated, then implemented | **human marks it `ready`** |
 | **Build** | (no command — rules auto-load) | code + tests, `just check` green | **the gate**, not an opinion |
 | **Gate** | `/ci-setup` | the pipeline, calling the same `just` recipes | human sets branch protection |
 | **Ship** | — | a tag | **human pushes the tag** |
@@ -135,9 +134,10 @@ docs/
 ├── postmortem/         # one per incident, blameless
 └── premortem/          # one register per (target, horizon)
 
-.work/<capability-slug>/  # committed, ephemeral — dies once the capability ships
-├── PLAN.md              # this capability's sprints — /plan
-└── tasks/NN-*.md        # one sprint cut at the green boundary — /tasks
+.work/<slug>/            # committed, ephemeral — dies once its PR merges
+├── intent.md            # what is still open while framing — /interview
+├── rfc.md               # one feature: decisions, steps, stopping condition — /rfc
+└── loop.md              # a repeated chore with a done-command — /loop-setup
 ```
 
 ---
@@ -185,7 +185,7 @@ exact command. Install `product` first, or read the table in
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` `devstack` | **in production**: SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` — **on your machine**: `devstack`, the contract between an agent and a running app (no foreground server, no orphan, the log file is the truth) plus the `process-compose` lifecycle at `--level gates` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
-| **Practice** | `product` `investigate` `loop-setup` `goal-setup` | lifecycle skills · debug methodology · repeated-loop framing · durable Codex goal framing |
+| **Practice** | `product` `investigate` `loop-setup` | lifecycle skills, `/rfc` included · debug methodology · repeated-loop framing |
 
 **Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
@@ -384,9 +384,9 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/plan` `/tasks` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/rfc` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
-| `investigate` `loop-setup` `goal-setup` | `/investigate` `/loop-setup` `/goal-setup` |
+| `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 
 **3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
 or the agent, and CI. No command is defined twice — and the recipes themselves live
@@ -400,9 +400,9 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just adr-check` | 2 — a decision was taken by a human (+ ADR size/section advisories) | opt-in, with `docs/adr/` |
 | `just docs-check` | 2 — index/unit consistency, experience fields/references (+ budget advisories) | opt-in, with product docs |
 | `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |
-| `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block/sprint, before push; writes `.work/review-report.md` |
+| `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block (the RFC), before push; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
-| `just status` | — reports, never gates: every worktree at a glance (branch, dirty, worklist, verdict, blockers) | opt-in, when sessions run in parallel trees |
+| `just status` | — reports, never gates: every worktree at a glance (branch, dirty, RFC or loop, verdict, blockers) | opt-in, when sessions run in parallel trees |
 
 Tier 3 is independent review before push. Tier 4 mutation gates the PR; running
 it locally is optional. `git diff <base>...HEAD` gives local and CI runs the same
@@ -515,7 +515,7 @@ or **the profile catalogue above** disagrees with the registry, when a rule cite
 sibling rule that no longer exists, or when a shipped workflow uses an expression
 syntax GitHub rejects.
 
-`eval/` covers the two subagents and five skills (`/architect`, `/plan`, `/runbook`,
+`eval/` covers the two subagents and four skills (`/architect`, `/runbook`,
 `/postmortem`, `/experience`), judged where possible by the kit's own gates — `adr-check --strict`
 and `docs-check --strict` are the oracle, so the assertion stays deterministic while
 the prose varies. It runs against the harness targets (`claude`, `cursor`)

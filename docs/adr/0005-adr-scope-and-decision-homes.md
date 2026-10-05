@@ -42,6 +42,11 @@ deleted. The shared repository needs its own owner and acceptance flow, and how
 projects consume it is undecided. Agents make more unasked local choices. Existing
 corpora stay valid until migrated with `/adr-review`, one pilot repository first.
 
+> **Amendment 2026-10-05** — consumption decided: a project declares its shared
+> decision repository in `docs/ARCHITECTURE.md`, asked for at `/architect` and
+> `/onboard`. Skills read it read-only and, on an organization-wide finding, prepare
+> a PR there and ask before opening it (`agent/decisions.md` § Shared decisions).
+
 ## Alternatives considered
 
 - Keep the corpus, read through the index: cuts reading cost (≈ -37% in the bench), not acceptance load or cascades.
