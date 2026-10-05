@@ -36,7 +36,7 @@ flowchart LR
 | Phase | Command | Produces | Who decides |
 |---|---|---|---|
 | **Frame** | `/interview` → `/prd` | `.work/<slug>/intent.md` (what is still open), then `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
-| **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per decision | agent writes `Proposed`, **human accepts** |
+| **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per arbitration that earns one | agent writes `Proposed`, **human accepts** |
 | **Explore solutions** | `/solution-exploration` | independent options first, then ADR impacts; `Proposed` ADR only if a replacement is chosen for proposal | human decides whether to adopt it |
 | **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
@@ -46,7 +46,7 @@ flowchart LR
 | **Build** | (no command — rules auto-load) | code + tests, `just check` green | **the gate**, not an opinion |
 | **Gate** | `/ci-setup` | the pipeline, calling the same `just` recipes | human sets branch protection |
 | **Ship** | — | a tag | **human pushes the tag** |
-| **Run** | `/observability` | `docs/OBSERVABILITY.md`, SLOs as ADRs, the alert table | human agrees the error budget policy |
+| **Run** | `/observability` | `docs/OBSERVABILITY.md` (SLO targets and their reasoning), the alert table | human agrees the error budget policy |
 | **Survive** | `/runbook`, `/postmortem` | `docs/runbook/*`, `docs/postmortem/*` | human owns each action item |
 
 `/domain-modeling` is not a phase in this table — it runs alongside `/interview`,

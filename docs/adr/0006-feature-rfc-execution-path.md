@@ -1,6 +1,6 @@
 # ADR-0006: Offer an iterated feature RFC as a lighter execution path
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-05
 
 ## Context

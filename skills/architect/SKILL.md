@@ -1,9 +1,9 @@
 ---
 name: architect
-description: "Define initial architecture, compare alternatives, and recommend stack, boundaries and claude-rules profiles. Writes `docs/ARCHITECTURE.md` + one Proposed ADR per decision under `docs/adr/`. Use on /architect, \"choose the stack\", \"write an ADR\", or \"which rules do we need\". For a focused challenge to an existing choice, use /solution-exploration. Names real technology — /prd does not."
+description: "Define initial architecture, compare alternatives, and recommend stack, boundaries and claude-rules profiles. Writes `docs/ARCHITECTURE.md` + a Proposed ADR for each arbitration that earns one, under `docs/adr/`. Use on /architect, \"choose the stack\", \"write an ADR\", or \"which rules do we need\". For a focused challenge to an existing choice, use /solution-exploration. Names real technology — /prd does not."
 ---
 
-You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + one ADR per significant decision under `docs/adr/`.
+You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + an ADR for each arbitration that earns one under `docs/adr/`.
 
 **Two levels of usage, same process.** Right after `/prd`, this runs once at
 **product level**: shape, stack, cross-cutting guidelines. Later, `/plan` may
@@ -82,7 +82,7 @@ Do **not** recommend `rust testing cicd ops hexagonal api backend` as one bag. T
 `python` carries one decision the others don't: it assumes a **committed lockfile
 and a runner that installs from it** (uv by default). On a brownfield repo still
 on `pip install -r requirements.txt`, say so out loud — adopting the profile means
-adopting that, and it is worth its own ADR.
+adopting that, and it belongs in the stack decision's ADR.
 
 In a **monorepo**, anchor each profile to the directory it governs (`--root`), and
 keep `react` on every React tree, `portal-flat` on every portal, and let the
@@ -106,7 +106,7 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 
 Create `docs/` and `docs/adr/` if absent.
 
-- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). If the `agent` module is installed, read `agent/decision-records.md` before writing (it is path-scoped and may not have loaded yet); otherwise follow the repository's ADR format and the template below. Record the selected profiles with the stack/boundary decision they implement; do not create a separate ADR for each profile or local implementation choice.
+- One **ADR per arbitration that earns one** (`agent/decisions.md` § Which choices need an ADR; most stack rows of the overview do not): `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). If the `agent` module is installed, read `agent/decision-records.md` before writing (it is path-scoped and may not have loaded yet); otherwise follow the repository's ADR format and the template below. Record the selected profiles with the stack/boundary decision they implement; do not create a separate ADR for each profile or local implementation choice.
 - Every ADR you write is **`Proposed`**, with or without the optional `agent/decisions.md` rule. In the hand-back, list what you propose and what changes if the answer is no — otherwise nothing tells the human something is waiting on them.
 - The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
 
@@ -178,7 +178,7 @@ External services, the contract with each, the blast radius if it fails.
 
 ## Rules
 
-- ADR only **architecturally-significant** decisions. Shape: `agent/decision-records.md`. Index shape: `product/documents.md`.
+- ADR only the arbitrations that pass `agent/decisions.md` § Which choices need an ADR. A small project may need three. Shape: `agent/decision-records.md`. Index shape: `product/documents.md`.
 - Status is always **`Proposed`**. Discussing is not accepting.
 - Simplicity first — justify every service, store, and layer against the PRD.
 - Name real technology here. Never invent a PRD constraint — ask.

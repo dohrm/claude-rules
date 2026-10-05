@@ -49,16 +49,26 @@ record's decision intact until the human arbitrates.
 
 ## Which choices need an ADR
 
-Use an ADR for a durable project constraint: technology/architecture selection,
-security/authentication policy, a mandated structural library, or a change to an
-Accepted decision. Existing profiles already settle their conventions; applying
-one does not require an ADR per implementation detail. Profile selection can be
-recorded once with the stack decision.
+A project ADR records an arbitration that passes **all three** tests: it is hard to
+reverse, it constrains more than one feature, and it refused real alternatives at a
+real cost. Changing an Accepted decision is the fourth case. Everything else has
+another home:
 
-Local, reversible choices within that frame belong to the implementer: a helper,
-a component, an interaction variant or an ordinary dependency consistent with the
-stack. Explain relevant dependency trade-offs in the change summary and run the
-supply-chain checks. Novelty alone is not architectural significance.
+| Choice | Home |
+|---|---|
+| Enterprise policy — security, secrets, identity, data protection, observability, deployment | the shared decision repository the project references, if any; propose changes there |
+| Stack conventions — language, libraries, style, profile selection | the installed rules and the lock file; recorded once with the stack decision |
+| Feature-local choices — a field, a format, a validation rule, an event, a layout | the feature's work document under `.work/` and its PR |
+| Product and design rules | the PRD, `DESIGN.md`, `EXPERIENCE.md`, domain documents |
+
+A deviation from a rule is an **in-place exception with its reason**, next to the
+code it excuses, like a `nolint` with a justification. It is not an ADR. When the
+same deviation recurs, the rule is wrong: propose the change to the rule.
+
+Local, reversible choices belong to the implementer. Explain relevant dependency
+trade-offs in the change summary and run the supply-chain checks. Novelty alone is
+not architectural significance, and neither is the wish to stop an agent from
+changing something later.
 
 ## The ceremony stops at the ADR
 
