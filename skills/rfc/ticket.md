@@ -10,13 +10,16 @@ them, so the body never carries history.
 
 ## Per tool
 
-| Store | The RFC | A round | Status | Who set `ready` |
-|---|---|---|---|---|
-| `gh <owner/repo>` | a GitHub issue, via `gh` | a comment | label `rfc:<status>` | the issue timeline's actor on `rfc:ready` |
-| `plane <workspace/project>` | a Plane work item, via the Plane MCP server | a comment | state group: draft = backlog, ready = unstarted, implementing = started, done = completed | the activity's actor on the state change |
+| Store | The RFC | Act as | A round | Status | Who set `ready` |
+|---|---|---|---|---|---|
+| `gh <owner/repo>` | a GitHub issue, via `gh` | a bot account or GitHub App token (`GH_TOKEN`), not the human's login | a comment | label `rfc:<status>` | the issue timeline's actor on `rfc:ready` |
+| `plane <workspace/project>` | a Plane work item, via the Plane MCP server | a bot member (e.g. `rfc-agent`) whose API key the MCP server uses, not the human's key | a comment | state group: draft = backlog, ready = unstarted, implementing = started, done = completed | the activity's actor on the state change |
 
 Another tracker follows the same mapping once it offers a body, comments, a status
 and an activity history.
+
+Check which account the tool acts as before the first write (`gh api user`, the MCP
+server's current-user call). If it is the human's, you are in the signed fallback.
 
 ## The body
 
@@ -25,7 +28,8 @@ holds — a `## Blocked on the human` section.
 
 ## A round
 
-1. **Rebuild the context.** Read the body, then the comments since your last one.
+1. **Rebuild the context.** Read the body, then the comments since your last one —
+   yours are those from your account, or starting with the 🤖 line.
    When that is not enough — an unexplained change, a reference to an earlier
    exchange — read the older comments and the activity history. Never resume from
    memory.
@@ -33,7 +37,7 @@ holds — a `## Blocked on the human` section.
 3. **Post one comment** saying what you did:
 
    ```markdown
-   **RFC round N**
+   🤖 **RFC round N** — <agent>[ on behalf of <user>]
    - Changed: <what changed in the body, one line each>
    - Answered: <comment> → <answer, or where the body now answers it>
    - Assumed: <question settled without asking — the answer taken, and why>
@@ -41,6 +45,11 @@ holds — a `## Blocked on the human` section.
    ```
 
 One round, one comment. Do not reply piecemeal to each comment.
+
+**Every comment you post starts with the 🤖 line** — rounds, step outcomes,
+escalations. Under the human's identity, `on behalf of <user>` is mandatory, and a
+comment without it is never posted: it would read as the human's own words, and the
+next run would take it as their decision.
 
 ## Implementation
 

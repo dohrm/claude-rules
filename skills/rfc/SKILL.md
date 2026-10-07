@@ -57,11 +57,19 @@ Both ways work on the same RFC, under four rules:
   your revisions go everywhere else.
 - **Escalate where the human looks** — the mode file says where.
 
-**`ready` must come from an account other than the one you act as.** Unattended, you
-act as a service account: read who set `ready` (the mode file says where) and refuse
-to implement if it is that account. On the human's workstation you act under their
-identity, so the record cannot tell you apart: the guard is then yours to keep — never
-set `ready`, even when asked in the chat: the human moves it.
+**Every write must be attributable — yours or the human's, never ambiguous.** The
+record is the audit trail and the next run's context, so it must show who wrote what.
+
+- **Act under your own account** — a bot user or service account for the tracker,
+  distinct from the human's token — in both ways in, attended included. Then every
+  comment, edit and status change is attributable, and the rule below is checkable.
+- **If you only have the human's identity, sign** every comment as the mode file
+  says, and never post unsigned. A signature protects the reading, not `ready`.
+
+**`ready` must come from an account other than the one you act as.** Read who set it
+(the mode file says where) and refuse to implement if it is your account. Under the
+human's identity the record cannot tell you apart: the guard is then yours to keep —
+never set `ready`, even when asked in the chat: the human moves it.
 
 ## 1. Granularity verdict — first, before any draft
 
