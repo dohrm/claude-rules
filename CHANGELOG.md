@@ -19,8 +19,11 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   a stopping condition. You iterate on it with the agent, mark it `ready`, and the
   agent implements it under the declared autonomy level. Larger work splits into
   ordered RFCs. The RFC lives where `> RFC store:` in `docs/ARCHITECTURE.md` says:
-  `local` (default), `gh` (GitHub issue) or `plane` (Plane work item, via its MCP
-  server). Install with `update` on a `product` profile.
+  `local` (default) or a ticket in any tracker. The project's `## RFC store` section
+  is the adapter: tracker, access (CLI first, then REST, an MCP server last), bot
+  account, status mapping. A webhook dispatcher may pre-fetch the ticket into
+  `.work/<slug>/ticket-context.md` to save the agent the reads. Install with `update`
+  on a `product` profile.
 
 - **`/goal-setup` for Codex.** It frames one durable `/goal` with a bounded
   objective, stopping condition, checkpoints, progress proof and pause causes.

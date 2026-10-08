@@ -1,25 +1,69 @@
 # RFC — ticket mode
 
 The RFC is **a ticket**. Its **body is the current state**, rewritten every round.
-Its **comments and activity history are the audit trail** — the ticket system keeps
-them, so the body never carries history.
+Its **comments and activity history are the audit trail** — the tracker keeps them,
+so the body never carries history.
 
 - Never write history into the body: no revision list, no log, no "previously".
 - Never leave state only in a comment: a point settled in a comment exists once it
   is folded into the body. The next run reads the body first.
 
-## Per tool
+## The tracker contract
 
-| Store | The RFC | Act as | A round | Status | Who set `ready` |
-|---|---|---|---|---|---|
-| `gh <owner/repo>` | a GitHub issue, via `gh` | a bot account or GitHub App token (`GH_TOKEN`), not the human's login | a comment | label `rfc:<status>` | the issue timeline's actor on `rfc:ready` |
-| `plane <workspace/project>` | a Plane work item, via the Plane MCP server | a bot member (e.g. `rfc-agent`) whose API key the MCP server uses, not the human's key | a comment | state group: draft = backlog, ready = unstarted, implementing = started, done = completed | the activity's actor on the state change |
+This skill names no tracker. It needs seven operations, and any tracker that offers
+them works:
 
-Another tracker follows the same mapping once it offers a body, comments, a status
-and an activity history.
+| Operation | Used for |
+|---|---|
+| **whoami** — the account you act as | attribution, the `ready` rule |
+| **read** — body, status, assignee | every round |
+| **comments** — with author and date | rebuilding the context |
+| **write body** | revising the RFC |
+| **comment** | the audit trail |
+| **set status, assign** | implementation |
+| **status history** — who changed the status | checking who set `ready` |
 
-Check which account the tool acts as before the first write (`gh api user`, the MCP
-server's current-user call). If it is the human's, you are in the signed fallback.
+**The project's adapter says how.** `docs/ARCHITECTURE.md` carries a `## RFC store`
+section, written by `/architect`:
+
+```markdown
+## RFC store
+- Tracker: <tool>, <project or repository>
+- Access: <CLI command> — else <REST base URL>, token in `$<VAR>`
+- Act as: <bot account>
+- Status: draft = <…>, ready = <…>, implementing = <…>, done = <…>
+- Who set ready: <where the status history names the actor>
+```
+
+Example, a GitHub issue: access `gh`, token in `$GH_TOKEN`; status labels
+`rfc:<status>`; who set ready = the issue timeline's actor on `rfc:ready`.
+
+**Access, in this order of preference:**
+
+1. **A CLI** (`gh`, `glab`, `tea`, …): fast, scriptable, the same under every agent.
+2. **The REST API** with `curl` and the token from the declared variable.
+3. **An MCP server**, only when nothing else exists: it loads many tools into the
+   context, is slow, and must be configured in every runner.
+
+Learn the commands from the tool (`--help`, the API reference), not from memory. If
+the section is missing, ask once and write it. If the declared access fails, stop and
+say so; never fall back to another tracker or store.
+
+Check **whoami** before the first write. If it is the human's account, you are in
+`SKILL.md`'s signed fallback.
+
+## Pre-fetched context
+
+A dispatcher that already received the ticket through its webhooks may hand it to
+you instead of letting you fetch it: a file named in the invocation (by default
+`.work/<slug>/ticket-context.md`) holding any of the read operations — body, status,
+assignee, the comments since your last round, the event's author, who set `ready`,
+the account you act as.
+
+- **Trust it.** It was collected outside the model, deterministically: do not fetch
+  again to verify it. Who set `ready`, given there, is the record.
+- **Fetch only what it lacks.**
+- **Writes still go through the adapter** — body, comment, status.
 
 ## The body
 
@@ -31,7 +75,7 @@ holds — a `## Blocked on the human` section.
 1. **Rebuild the context.** Read the body, then the comments since your last one —
    yours are those from your account, or starting with the 🤖 line.
    When that is not enough — an unexplained change, a reference to an earlier
-   exchange — read the older comments and the activity history. Never resume from
+   exchange — read the older comments and the status history. Never resume from
    memory.
 2. **Revise the body** with every change the comments call for.
 3. **Post one comment** saying what you did:
@@ -65,8 +109,8 @@ whenever it changes. Never copy the body there.
 
 ## `ready` and escalation
 
-- Read who set `ready` in the activity history (table above), then apply `SKILL.md`'s
-  account rule.
+- Take who set `ready` from the pre-fetched context, else from the status history,
+  then apply `SKILL.md`'s account rule.
 - Escalate in two places: a `## Blocked on the human` section in the body, and a
   comment mentioning the human. Remove the section once unblocked. A runner's `.work/`
   is read by nobody.

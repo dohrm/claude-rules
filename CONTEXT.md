@@ -99,8 +99,8 @@ A decision record under `docs/adr/`. `Proposed` by an agent; `Accepted` /
 _Avoid_: design doc
 
 **RFC**:
-One feature framed by `/rfc` — in `.work/<slug>/rfc.md`, a GitHub issue or a Plane
-work item, per the project's RFC store: its local decisions,
+One feature framed by `/rfc` — in `.work/<slug>/rfc.md` or a ticket in the project's
+tracker, per the project's RFC store: its local decisions,
 execution steps and stopping condition, iterated until the human marks it `ready`,
 then implemented. A capability too large for one is split into ordered RFCs.
 Ephemeral; deleted once its PR merges. Not a decision record — a

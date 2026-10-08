@@ -54,7 +54,7 @@ else**, and why the tree says that. Brownfield: **respect existing choices**.
 A change is a migration with a cost, named, not a rewrite.
 
 Shared decision repository and RFC store — ask which repository the organization
-keeps (`none` is an answer) and where RFCs live (`local`, `gh`, `plane`), and record
+keeps (`none` is an answer) and where RFCs live (`local`, or a tracker and how it is reached), and record
 both in the hand-off; `/architect` writes it into
 `docs/ARCHITECTURE.md` (`agent/decisions.md` § Shared decisions).
 

@@ -140,7 +140,7 @@ The durable decisions here (routes, schema shape, key model names, auth, boundar
 
 > Source PRD: `docs/PRD.md`
 > Shared decisions: <the organization's shared decision repository URL, or `none`>
-> RFC store: <local | gh <owner/repo> | plane <workspace/project>>
+> RFC store: <local | <tracker> — see § RFC store>
 
 ## Shape & profiles
 
@@ -171,6 +171,15 @@ Auth/authz, observability, error contract, config & secrets, egress posture. (Mo
 ## Boundaries & third parties
 
 External services, the contract with each, the blast radius if it fails.
+
+## RFC store
+
+<!-- Only when RFCs live in a tracker; the contract is in the rfc skill's ticket.md. -->
+- Tracker: <tool>, <project or repository>
+- Access: <CLI command> — else <REST base URL>, token in `$<VAR>`; an MCP server only when nothing else exists
+- Act as: <bot account, not a human's token>
+- Status: draft = <…>, ready = <…>, implementing = <…>, done = <…>
+- Who set ready: <where the status history names the actor>
 
 ## Decision log
 

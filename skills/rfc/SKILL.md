@@ -1,6 +1,6 @@
 ---
 name: rfc
-description: "Frame ONE feature as an iterated RFC — granularity verdict, local decisions, execution steps with proofs, stopping condition — then implement it once the human marks it ready. Kept in `.work/` (local) or on a ticket (GitHub issue, Plane work item). Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed feature to execution; repeated chores are /loop-setup."
+description: "Frame ONE feature as an iterated RFC — granularity verdict, local decisions, execution steps with proofs, stopping condition — then implement it once the human marks it ready. Kept in `.work/` (local) or on a ticket in the project's tracker. Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed feature to execution; repeated chores are /loop-setup."
 ---
 
 You and the human engineer **one feature** in one document, round after round, until
@@ -21,12 +21,12 @@ the project has no answer yet, ask once and write it there.
 | Store | Mode | Read |
 |---|---|---|
 | `local` | the RFC is a file in `.work/` that holds its own audit trail | `local.md` |
-| `gh <owner/repo>`, `plane <workspace/project>`, another tracker | the RFC is a ticket; its comments and activity are the audit trail | `ticket.md` |
+| `<tracker>` — see § RFC store | the RFC is a ticket; its comments and activity are the audit trail | `ticket.md` |
 
-Read the file of your mode before anything else, and only that one. Learn the tool
-from the tool — `gh --help`, the MCP server's tool list — not from these files. If the
-declared tool is not available or not authenticated, stop and say so; never fall back
-to another store silently.
+Read the file of your mode before anything else, and only that one. A tracker is
+reached the way the project's `## RFC store` section says — the skill names none. If
+it is not available or not authenticated, stop and say so; never fall back to another
+store silently.
 
 ## Two ways in
 
@@ -39,7 +39,8 @@ to another store silently.
   OpenCode) in a checkout of the repository, so the rules, gates and this skill apply.
   Each run starts from a blank memory: rebuild the state from the RFC, do the one thing
   the event calls for — verdict and draft, or a revision answering new comments — then
-  stop. Ticket mode only.
+  stop. Ticket mode only. The dispatcher may hand you the ticket it already collected
+  (`ticket.md` § Pre-fetched context): use it instead of fetching again.
 
 **Refining is the default; implementing is asked for.** `/rfc <ticket or slug>` drafts
 or runs one refinement round. Implementation starts only on `/rfc implement <ticket or
