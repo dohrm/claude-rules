@@ -23,11 +23,11 @@ Cadence — none of these is "wait for the human" or "wait for the PR":
 | When | Command | What it answers |
 |---|---|---|
 | Per iteration | `just check` (Tier 1-2) | fmt, lint, tests, deny — seconds |
-| Per RFC, before push | `just code-review` (Tier 3) | judgment a gate cannot make — minutes |
+| Per RFC phase, before its push | `just code-review` (Tier 3) | judgment a gate cannot make — minutes |
 | Per push | CI | a **witness**, same tools on the PR diff |
 | Per pull request | `mutate-diff` in CI (Tier 4) | do the tests *assert*? — **the gate**, not a witness |
 
-**The coherent block is the RFC**, not the step. Say it plainly because the
+**The coherent block is the RFC phase** — one PR — not the step. Say it plainly because the
 drift is one-way: a loop that commits per task starts running Tier 3 per task, and
 then Tier 3 is a tax somebody eventually removes.
 
@@ -104,9 +104,9 @@ Every tree on the machine lives under one root (`$CR_WORKTREES`, default
 repo is one every tool scans. **One tree, one branch, one RFC**: `.work/<slug>/` is per-tree and holds that
 RFC, so any other split puts one work unit in two trees.
 
-**Parallelise across RFCs that touch disjoint code, never across ordered ones.** When
-a granularity verdict splits a feature into ordered RFCs, they traverse the same
-layers and collide by construction: run them in sequence.
+**Parallelise across RFCs that touch disjoint code, never across phases.** The
+phases of one RFC traverse the same layers and collide by construction: they run in
+sequence, in its tree.
 
 The tree dies with the work. `tree-rm` removes nothing unless the tree is clean and
 the branch is merged, so a forest of detached branches is something you have to

@@ -72,7 +72,7 @@ slash-command notation.
 | Define the initial architecture and write ADRs | `/architect` |
 | Explore a proposed solution or architectural limit | `/solution-exploration`: assess options before reading affected ADRs |
 | Untangle a large ADR corpus | `/adr-review`: map active decisions, conflicts and consolidation options |
-| Engineer a feature, then let the agent build it | `/rfc`: iterate on one document until you mark it ready; large work splits into ordered RFCs |
+| Engineer a change, then let the agent build it | `/rfc`: iterate on one document until you mark it ready; a large change is decomposed into phases and holds inside it, then run to the end at L3 |
 | Run a repeated chore to a measurable end | `/loop-setup` |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |

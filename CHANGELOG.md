@@ -14,11 +14,12 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
-- **`/rfc`, the execution path** (ADR-0006, ADR-0007). One feature is framed in
-  `.work/<slug>/rfc.md`: granularity verdict, local decisions, steps with proofs and
-  a stopping condition. You iterate on it with the agent, mark it `ready`, and the
-  agent implements it under the declared autonomy level. Larger work splits into
-  ordered RFCs. The RFC lives where `> RFC store:` in `docs/ARCHITECTURE.md` says:
+- **`/rfc`, the execution path** (ADR-0006, ADR-0007). One request for change is
+  framed in one RFC: verdict, local decisions, steps with proofs and a stopping
+  condition. A large change is decomposed into phases (one PR each) and holds (a
+  migration to finish, a deploy) inside the same RFC. You iterate on it with the
+  agent, mark it `ready`, and the agent implements it under the declared autonomy
+  level — at L3, every phase, stopping only at holds and hard checkpoints. The RFC lives where `> RFC store:` in `docs/ARCHITECTURE.md` says:
   `local` (default) or a ticket in any tracker. The project's `## RFC store` section
   is the adapter: tracker, access (CLI first, then REST, an MCP server last), bot
   account, status mapping. A webhook dispatcher may pre-fetch the ticket into

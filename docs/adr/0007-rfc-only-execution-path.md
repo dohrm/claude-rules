@@ -21,6 +21,12 @@ We will make `/rfc` the only path from a framed feature to autonomous execution.
   ordered list of RFCs from the granularity verdict, recorded in the first RFC.
 - The coherent block of `agent/autonomy.md` is the RFC, not the sprint. Tier 3 runs
   once per RFC, before the push.
+
+> **Amended 2026-10-08.** One RFC covers the whole request for change. Capability-scale
+> work is decomposed into phases (one PR each) and holds inside that RFC, not into
+> ordered RFCs; at L3 the agent runs every phase, stopping only at holds and hard
+> checkpoints. Tier 3 runs once per phase. Several RFCs only for independent changes,
+> on the human's decision.
 - On Codex, `/rfc` at L3 starts a `/goal` whose stopping condition is the RFC's.
 - `/loop-setup` stays for repeated work with a measurable done-command, independent
   of any RFC. Its state file no longer extends a worklist.

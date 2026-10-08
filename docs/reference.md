@@ -41,7 +41,7 @@ flowchart LR
 | **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
-| **Engineer one feature** | `/rfc` | the RFC — `.work/<slug>/rfc.md` or a ticket in the project's tracker: granularity verdict, local decisions, steps with proofs; iterated, then implemented | **human marks it `ready`** |
+| **Engineer one change** | `/rfc` | the RFC — `.work/<slug>/rfc.md` or a ticket in the project's tracker: the whole request in phases and holds, local decisions, steps with proofs; iterated, then implemented to the end | **human marks it `ready`** |
 | **Build** | (no command — rules auto-load) | code + tests, `just check` green | **the gate**, not an opinion |
 | **Gate** | `/ci-setup` | the pipeline, calling the same `just` recipes | human sets branch protection |
 | **Ship** | — | a tag | **human pushes the tag** |

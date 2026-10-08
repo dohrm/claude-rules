@@ -99,10 +99,11 @@ A decision record under `docs/adr/`. `Proposed` by an agent; `Accepted` /
 _Avoid_: design doc
 
 **RFC**:
-One feature framed by `/rfc` — in `.work/<slug>/rfc.md` or a ticket in the project's
+One request for change framed by `/rfc` — in `.work/<slug>/rfc.md` or a ticket in the project's
 tracker, per the project's RFC store: its local decisions,
 execution steps and stopping condition, iterated until the human marks it `ready`,
-then implemented. A capability too large for one is split into ordered RFCs.
+then implemented to the end. A large change is decomposed into phases (one PR each)
+and holds inside the one RFC, never split into several.
 Ephemeral; deleted once its PR merges. Not a decision record — a
 choice that earns an ADR leaves the RFC as a `Proposed` ADR.
 _Avoid_: spec, plan, sprint (the retired `/plan` → `/tasks` units it replaced)

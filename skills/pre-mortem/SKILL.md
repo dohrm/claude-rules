@@ -62,7 +62,7 @@ You own `docs/premortem/`. When a mitigation changes the design, emit a **precis
 
 - PRD change → *"Delta for `docs/PRD.md`: add to Out of Scope — `<text>`. Run `/prd` to apply?"*
 - Architecture change → *"Delta: supersede ADR-NNNN with a new ADR — `<decision>`. Run `/architect` to apply?"*
-- RFC change → *"Delta: insert a hardening step before step 2, or a hardening RFC first in the sequence — `<slice>`. Run `/rfc` to apply?"*
+- RFC change → *"Delta: insert a hardening step before step 2, or a hardening phase first — `<slice>`. Run `/rfc` to apply?"*
 - Code/config change → *"Delta: wire `ts-check` into the `check` target; create `deny.toml`. Want me to apply these now, or leave them as tickets?"* — a bundle of code changes lands only on an explicit go-ahead, never as a silent side effect of the analysis.
 
 Track every pending delta in the register so nothing is silently lost.

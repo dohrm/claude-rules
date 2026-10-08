@@ -109,4 +109,4 @@ What this capability deliberately does not do, one line each — distinct from t
 - No named technology, no gaps, no file path, no code snippet in the PRD.
 - User Stories must be numbered: US-1, US-2 … and the numbering is **global**, never restarted per capability.
 - The spine stays one screen, and stays stable. Growth is a new capability unit — never a longer section, never a `(continued)` heading.
-- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, the delivery order is the (ephemeral) RFC sequence. The PRD carries what, why-anyone-cares, and whether it has shipped — and links to the rest.
+- **One home per fact** (`product/documents.md`): why-this-technical-choice is an ADR, what-it-looks-like is `EXPERIENCE.md`/`DATA-MODEL.md`, the delivery order is the (ephemeral) RFC's phases. The PRD carries what, why-anyone-cares, and whether it has shipped — and links to the rest.

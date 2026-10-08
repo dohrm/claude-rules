@@ -102,6 +102,10 @@ step in the body as its proof passes, and post one comment per finished step
 (outcome, proof result, `changed: …` when a local decision moved). The PR references
 the ticket and closes it on merge; the closed ticket keeps the decisions afterwards.
 
+Phases may be mirrored as sub-tickets when the tracker has them, for the board only:
+each holds a link to the RFC and its phase's PR, never state. The parent body stays
+the RFC, and a sub-ticket event is an event on the RFC.
+
 `.work/<slug>/rfc.md` is only a pointer, so the tree's tools still see the RFC: the
 header lines `Status`, `Autonomy`, `Repository`, `Base branch`, plus
 `**Ticket**: <URL>`, and `## Blocked on the human` while blocked. Mirror the status

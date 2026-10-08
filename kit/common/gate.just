@@ -336,9 +336,9 @@ worktree_root := env_var_or_default('CR_WORKTREES', env_var_or_default('HOME', '
 # file, so any other arrangement splits one work unit across trees
 # (rules/agent/autonomy.md, "One tree, one writer").
 #
-# Parallelise across RFCs that touch disjoint code, never across RFCs the
-# granularity verdict ordered: those traverse the same layers and collide by
-# construction, so they run one after the other.
+# Parallelise across RFCs that touch disjoint code, never across the phases of
+# one RFC: those traverse the same layers and collide by construction, so they run
+# one after the other, in its tree.
 #
 # git refuses to check out a branch that is already live in another tree. That is
 # the invariant, enforced by the tool rather than by prose — leave it that way.
