@@ -177,6 +177,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
+- Merge PR #23 (phase 1) into `next`: phases 2–4 edit the same review contract and
+  branch from `next` once it lands. Then `/rfc implement review-reliability`.
+
 ## Revisions
 
 - round 1: draft — verdict, four phases, local decisions, pilot hold on temper-altern.
