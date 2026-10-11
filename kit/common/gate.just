@@ -95,6 +95,9 @@ review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slu
 # is bigger, or split the change — a 700 KB diff is a review problem before it is a
 # budget problem.
 review_max_bytes := "400000"
+# The same number sizes an RFC phase (skills/rfc § Draft): a phase whose diff does not fit
+# one review was cut too big, so the failure names the cut before the knobs.
+review_too_large := "prompt too large: %s > %s bytes — cut the change smaller (an RFC phase must fit one review), or extend review_exclude / review_max_bytes\n"
 
 # Folder trust is a gate SEPARATE from the permission flags below, and neither claude
 # nor codex has a CLI flag to skip or pre-seed it inline — it is persisted state, keyed
@@ -236,6 +239,14 @@ review-cursor:
 # `rm -f {{review_out}}` runs before dispatch, so `mv` either moves a file this run
 # produced or fails and takes the recipe with it. Deleting the TEMP is safe in a way
 # deleting the report is not — a dead CLI still leaves the previous report standing.
+#
+# Completeness is checked on the TEMP report, before `mv`: the reviewer must name every
+# file of `.work/review-files.txt` under `### Files reviewed`, and every `Location` must
+# exist at HEAD (review-guard.mjs `--expect-files`). An incomplete report is not
+# promoted — the previous one stands, the marker stays, the recipe fails — except one
+# that still blocks (a CRITICAL, or unreadable markers), promoted anyway (exit 3): a
+# CRITICAL is never hidden, and a truncated report blocks as malformed. One shell line,
+# because just runs each line in its own `sh -c` without `-e`.
 code-review reviewer=reviewer:
     case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
@@ -248,9 +259,10 @@ code-review reviewer=reviewer:
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
     git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} >> {{review_in}}
-    n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} > .work/review-files.txt
+    n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review-{{reviewer}}
-    mv {{review_out}} .work/review-report.md
+    rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
     node {{kit}}/review-guard.mjs --require-report
     {{diff_since}} review --mark "$(git rev-parse HEAD)" {{since_scope}}
 
@@ -281,7 +293,7 @@ review-with reviewer=reviewer topic="":
     git diff --stat=200 {{base}}...HEAD >> .work/adhoc-prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md
     git diff {{base}}...HEAD -- . {{review_exclude}} >> .work/adhoc-prompt.md
-    n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review_in='.work/adhoc-prompt.md' review_out='.work/adhoc-review.tmp' review-{{reviewer}}
     cat .work/adhoc-review.tmp
 
