@@ -203,7 +203,9 @@ suggestion, say) is prose about the contract, not a second verdict. Nothing afte
 Each issue: **Location** `path:line` or `path:start-end`, as of the commit under review
 · **Problem** (what & why) · **Fix** (concrete, snippet if useful). Skip empty sections
 — except **Files reviewed**, which is mandatory: a file of the diff it does not name,
-or a Location that does not exist, gets the report rejected as incomplete. Don't pad.
+or a Location that does not exist, gets the report rejected as incomplete. A finding
+about removed code points at the line that still depends on it, or names the deleted
+file without a line. Don't pad.
 
 Your verdict is a **report, not a decision** — a `CLEAN` does not authorize a
 merge; the human and the deterministic gates do. A review can be gamed by

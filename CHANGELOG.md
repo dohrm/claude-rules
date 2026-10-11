@@ -25,9 +25,9 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 - **The review proves what it read.** A report must name every file of the diff under
   `### Files reviewed`, and its `Location`s must exist (`path:line` as of the reviewed
   commit). `code-review` rejects an incomplete report before promoting it: the previous
-  one stands and the marker stays — except a `CRITICAL`, which is promoted anyway. A
-  repo-specific `review_prompt` must ask for the same section, or every review fails.
-  An oversized prompt now says to cut the RFC phase smaller; `/rfc` sizes phases to fit.
+  one stands and the marker stays — except one that still blocks (a `CRITICAL`, or
+  unreadable markers), which is promoted anyway. An oversized prompt now says to cut
+  the RFC phase smaller; `/rfc` sizes phases to fit.
 
 - **The review contract follows ADR-0005.** An accepted shared decision binds like an
   Accepted ADR (🔴). An in-place rule exception with its reason is compliant; without
@@ -102,6 +102,12 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   selected profiles do not require an ADR merely because they are new.
 
 ### Breaking
+
+- **A custom `review_prompt` must ask for `### Files reviewed`.** `code-review` now
+  rejects a report that does not name every file of the diff there, or whose
+  `Location`s do not exist. A repo that overrides `review_prompt` fails every review
+  until its prompt asks for the section and for `path:line` Locations: copy both from
+  `.dev/kit/common/review-prompt.md` § Output format.
 
 - **`/plan`, `/tasks` and `/goal-setup` are removed** (ADR-0007), and so is the
   `goal-setup` profile. `update` drops `goal-setup` from an existing lock (it says

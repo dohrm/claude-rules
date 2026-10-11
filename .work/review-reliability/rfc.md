@@ -218,3 +218,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   incomplete CRITICAL is promoted anyway (exit 3): leaving the previous report standing
   would hide a CRITICAL behind an older CLEAN`. `--require-report` now also applies to
   the temp report, so an empty one is never promoted.
+- Phase 3 review at c6eaea3: WARNINGS — a failed `mv` no longer failed the line; coverage
+  by substring; quoted non-ASCII paths; Location shapes (`:col`, `**Location:**`, en
+  dash, `\`); trimmed and 1 MB-capped line counts; a truncated report left an older CLEAN
+  standing; the custom-prompt break filed under Added. All fixed with tests.
+  `changed: coverage failure — exit 3 also for unreadable markers, so a truncated report
+  still blocks as malformed`.

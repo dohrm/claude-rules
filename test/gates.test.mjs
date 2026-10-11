@@ -251,7 +251,7 @@ test('an oversized prompt fails before dispatch instead of truncating the review
 const VERDICT_STUB = (verdict = 'CLEAN', { skip = '', body = '' } = {}) =>
   'review-claude:\n'
   + '    cp {{review_in}} .work/seen-prompt.md\n'
-  + `    { printf '%s\\n### Files reviewed\\n\\n' '${body}'; grep -vxF '${skip}' .work/review-files.txt; `
+  + `    { printf '%s\\n### Files reviewed\\n\\n' '${body}'; tr '\\0' '\\n' < .work/review-files.txt | grep -vxF '${skip}'; `
   + `printf '\\n<!-- CI_VERDICT: ${verdict} -->\\n<!-- REVIEWED: %s -->\\n' "$(git rev-parse HEAD)"; } > {{review_out}}\n`
 // A fixed trunk: `base := "HEAD~1"` moves with HEAD, so it cannot tell "the whole
 // branch" from "the last commit" — which is the very distinction under test.
@@ -839,7 +839,7 @@ test('review-guard --expect-files: names, sections and ranges', () => {
     write(dir, 'a.rs', 'l1\nl2\nl3\n')
     git(dir, 'add', '-A'); git(dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'a')
     const sha = git(dir, 'rev-parse', 'HEAD')
-    write(dir, 'files.txt', 'a.rs\nf0.txt\n')
+    write(dir, 'files.txt', 'a.rs\0f0.txt\0')
     const check = (text) => {
       write(dir, 'r.md', text)
       return run(REVIEW_GUARD, ['r.md', '--require-report', '--expect-files', 'files.txt'], dir)
@@ -852,6 +852,35 @@ test('review-guard --expect-files: names, sections and ranges', () => {
       /gone\.rs does not exist as of HEAD/)
     // A file named only below the section does not count as reviewed.
     assert.equal(check('### Files reviewed\n\n- `a.rs`\n\n### Verdict\n\nf0.txt\n' + report('CLEAN', sha)).status, 1)
+  })
+})
+
+test('review-guard --expect-files: whole paths, real line counts, the shapes models write', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    write(dir, 'src/lib.rs', '\n\nfn a() {}\n\n\n')
+    write(dir, 'crates/x/src/lib.rs', 'x\n')
+    git(dir, 'add', '-A'); git(dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'b')
+    const sha = git(dir, 'rev-parse', 'HEAD')
+    write(dir, 'files.txt', 'src/lib.rs\0crates/x/src/lib.rs\0')
+    const check = (text) => {
+      write(dir, 'r.md', text)
+      return run(REVIEW_GUARD, ['r.md', '--expect-files', 'files.txt'], dir)
+    }
+    const both = '### Files reviewed\n\n- `src/lib.rs`\n- `crates/x/src/lib.rs`\n\n'
+    // A nested path with the same tail does not name the shorter one.
+    assert.match(check('### Files reviewed\n\n- `crates/x/src/lib.rs`\n\n' + report('CLEAN', sha)).out,
+      /does not name src\/lib\.rs/)
+    // Blank lines at the edges count (5 lines), a trailing :col is ignored, `**Location:**`
+    // and an en-dash range parse.
+    for (const loc of ['**Location** `src/lib.rs:5`', '**Location** `src/lib.rs:3:9`',
+                       '**Location:** `src/lib.rs:1–5`', '**Location** `src\\lib.rs:2`'])
+      assert.equal(check(`- ${loc} · p\n\n` + both + report('WARNINGS', sha)).status, 0, loc)
+    assert.equal(check('- **Location:** `src/lib.rs:6` · p\n\n' + both + report('WARNINGS', sha)).status, 1)
+    // A report cut short (no section, no markers) still blocks: promoted, then malformed.
+    assert.equal(check('## Code Review: x\n\n### 🔴 Critical\n\n- something broke').status, 3)
+    // --expect-files implies --require-report: an empty temp is never promoted.
+    assert.equal(check('').status, 1)
   })
 })
 

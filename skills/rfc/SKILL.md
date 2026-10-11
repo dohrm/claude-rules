@@ -101,8 +101,9 @@ code you read: name the files and symbols it touches, and the proof it leaves be
 
 **Decompose into phases** when the change does not land in one reviewable PR. Reviewable
 has a number: the phase's diff must fit one `just code-review` (`review_max_bytes`, about
-400 KB of prompt), which fails a larger one. A phase is one PR, with its own proof; the phases run in order inside the same RFC. A tracker
-may mirror them as sub-tickets (`ticket.md`); the RFC stays the only state.
+400 KB of prompt), which fails a larger one. A phase is one PR, with its own proof;
+the phases run in order inside the same RFC. A tracker may mirror them as sub-tickets
+(`ticket.md`); the RFC stays the only state.
 
 **Holds** are pauses the change itself needs — a migration that must finish, a
 deploy, a date, an external sign-off — before the next phase may start (a dismantling

@@ -51,7 +51,7 @@ const reportPath = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '-
 // I just ran produce a verdict?" — and that second question is what advances the
 // `.latest_review` marker, so a CLI that exits 0 having written an empty file would
 // otherwise mark code nobody read as cleared.
-const requireReport = args.includes('--require-report')
+const requireReport = args.includes('--require-report') || args.includes('--expect-files')
 
 const RERUN = 'Run `just code-review` to produce a fresh one.'
 
@@ -101,8 +101,15 @@ function malformations(verdict, sha) {
 // CLEAN through. Exit codes, for the recipe:
 //   0  complete — promote it
 //   1  incomplete — do not promote: the previous report stands, the marker stays
-//   3  incomplete, but CRITICAL — promote it anyway (a CRITICAL is never hidden), then fail
-const LOCATION = /\*\*Location\*\*:?[ \t]*`?([^\s`]+?):(\d+)(?:-(\d+))?`?(?=[\s·,.;)]|$)/g
+//   3  incomplete, but CRITICAL or with unreadable markers — promote it anyway, then
+//      fail: a CRITICAL is never hidden, and a truncated report still BLOCKS as
+//      malformed instead of leaving an older CLEAN standing
+// `--expect-files` implies `--require-report`: an empty temp report is never promoted.
+//
+// A Location is `path:line` or `path:start-end`; a trailing `:col` is ignored, `**Location:**`
+// and an en-dash range are accepted, `\` separators are read as `/`. A Location that does
+// not parse is not checked — a floor, not a parser of every way a model writes a place.
+const LOCATION = /\*\*Location:?\*\*:?[ \t]*`?([^\s`:]+?):(\d+)(?:[-–](\d+))?(?::\d+)?`?(?=[\s·,.;)]|$)/g
 
 /** The text of the `### Files reviewed` section, or null when there is none. */
 function filesReviewed(text) {
@@ -110,11 +117,31 @@ function filesReviewed(text) {
   return m ? m[1] : null
 }
 
+/** Whether `section` names `path` as a whole path: `src/lib.rs` must not be "named" by
+ *  `crates/x/src/lib.rs`, nor `a.rs` by `data.rs`. */
+function names(section, path) {
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![\\w./-])${escaped}(?![\\w/-]|\\.\\w)`).test(section)
+}
+
+/** The number of lines of `path` as of HEAD, or null when it does not exist there.
+ *  Untrimmed and unbounded: blank edges count, and a large file is not "missing". */
+function linesAtHead(path) {
+  let body
+  try {
+    body = execFileSync('git', ['cat-file', '-p', `HEAD:${path}`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 30 })
+  } catch {
+    return null
+  }
+  if (body === '') return 0
+  return body.split('\n').length - (body.endsWith('\n') ? 1 : 0)
+}
+
 /** Why a `path:line` does not exist as of HEAD, or null when it does. */
 function badLocation(path, start, end) {
-  const body = git('show', `HEAD:${path}`)
-  if (body === null) return `${path} does not exist as of HEAD`
-  const lines = body === '' ? 0 : body.split('\n').length
+  const lines = linesAtHead(path)
+  if (lines === null) return `${path} does not exist as of HEAD`
   const last = Number(end ?? start)
   if (Number(start) < 1 || last > lines || last < Number(start))
     return `${path}:${start}${end ? `-${end}` : ''} is outside the file (${lines} lines)`
@@ -126,24 +153,27 @@ function completeness(text, listPath) {
     console.error(`review-guard: no file list at ${listPath} — nothing to check the report against.`)
     return 1
   }
-  const expected = readFileSync(listPath, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean)
+  // NUL-separated (`git diff --name-only -z`): a path may hold any byte but NUL.
+  const expected = readFileSync(listPath, 'utf8').split(/\0|\n/).filter(Boolean)
   const problems = []
   const section = filesReviewed(text)
   if (section === null) problems.push('no `### Files reviewed` section.')
-  else for (const f of expected) if (!section.includes(f)) problems.push(`Files reviewed does not name ${f}.`)
+  else for (const f of expected) if (!names(section, f)) problems.push(`Files reviewed does not name ${f}.`)
   for (const [, path, start, end] of text.matchAll(LOCATION)) {
-    const why = badLocation(path, start, end)
+    const why = badLocation(path.replaceAll('\\', '/'), start, end)
     if (why) problems.push(`Location ${why}.`)
   }
   if (problems.length === 0) return 0
 
-  const critical = lastMarker(text, VERDICT_MARKER) === 'CRITICAL'
+  const verdict = lastMarker(text, VERDICT_MARKER)
+  const blocking = verdict === 'CRITICAL'
+    || malformations(verdict, lastMarker(text, REVIEWED_MARKER)).length > 0
   console.error(`review-guard: ${reportPath} is incomplete — a verdict over files nobody read clears nothing.`)
   for (const p of problems) console.error(`  ${p}`)
-  console.error(critical
-    ? '  It still reports a CRITICAL, so it replaces the standing report: a CRITICAL is never hidden.'
+  console.error(blocking
+    ? '  It still blocks (CRITICAL, or markers nobody can read), so it replaces the standing report.'
     : '  It is not promoted: the previous report stands and the marker does not move. Re-run the review.')
-  return critical ? 3 : 1
+  return blocking ? 3 : 1
 }
 
 /** How far HEAD has drifted from the reviewed commit, in prose. */
