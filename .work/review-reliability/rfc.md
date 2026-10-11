@@ -200,3 +200,4 @@ consuming repo running Tier 3, first piloted on temper-altern.
 - Phase 1 review (sub-agent, review-prompt.md contract) at 2447e27: WARNINGS — ambiguous
   branch reviewed as "no RFC", unguarded reads, cache without sha, ignore pattern not
   guaranteed at first write, stale comments; header-only field matching (🔵). All fixed.
+- Phase 1 re-review at 0d9f78d: CLEAN. Pushed `rfc/review-reliability-1`, PR to `next`.
