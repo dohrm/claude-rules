@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-1
+- **Branch**: rfc/review-reliability-2
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -120,11 +120,11 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ### Phase 2 — The contract catches up with ADR-0005 → proof: `node --test test/registry.test.mjs`
 
-- [ ] An Accepted shared decision named in the RFC context binds like an Accepted ADR (🔴,
+- [x] An Accepted shared decision named in the RFC context binds like an Accepted ADR (🔴,
   cite the record) — touches the shared block → proof: registry test
-- [ ] In-place exceptions: with its reason → compliant; without → 🟡; the same exception
+- [x] In-place exceptions: with its reason → compliant; without → 🟡; the same exception
   recurring → 🔵 "the rule is wrong" — touches the shared block → proof: registry test
-- [ ] Code contradicting an RFC local decision → 🟡 at most, citing the decision — touches
+- [x] Code contradicting an RFC local decision → 🟡 at most, citing the decision — touches
   the shared block → proof: registry test
 
 ### Phase 3 — Coverage and locations are checked → proof: `node --test test/gates.test.mjs`
@@ -177,8 +177,8 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
-- Merge PR #23 (phase 1) into `next`: phases 2–4 edit the same review contract and
-  branch from `next` once it lands. Then `/rfc implement review-reliability`.
+- Merge the phase 2 PR into `next`: phase 3 edits the same review contract and
+  branches from `next` once it lands. Then `/rfc implement review-reliability`.
 
 ## Revisions
 
@@ -204,3 +204,14 @@ consuming repo running Tier 3, first piloted on temper-altern.
   branch reviewed as "no RFC", unguarded reads, cache without sha, ignore pattern not
   guaranteed at first write, stale comments; header-only field matching (🔵). All fixed.
 - Phase 1 re-review at 0d9f78d: CLEAN. Pushed `rfc/review-reliability-1`, PR to `next`.
+- Phase 2: shared decisions, in-place exceptions, RFC local decisions in the shared
+  contract (+ output-format section labels) — registry test green.
+- Phase 2 review at 5a466ea: WARNINGS — `changed:` entries invisible once `## Log` is cut;
+  shared-decision 🔴 on an unread record; "do not flag" contradicting evidence-not-claims;
+  🔵 label. Fixed: Log's `changed:` bullets kept under `## Changed decisions`, 🔴 only
+  once read (unread named record → 🟡), waivers still checked and never waive an ADR.
+- Phase 2 re-review at dc0c3a5: WARNINGS — a log line ABOUT `changed:` kept as a change;
+  `*`/`1.` bullets, loose continuations and headings mishandled; two wording nits. Fixed:
+  only the backticked `changed: <decision>` form counts, any list marker, a heading ends
+  an entry; test per shape. Not re-reviewed: WARNINGS do not block, and each finding has
+  its test. Pushed `rfc/review-reliability-2`, PR to `next`.

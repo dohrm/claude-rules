@@ -538,6 +538,37 @@ test('review-context: only the header list counts, and a broken rfc.md never blo
   })
 })
 
+test('review-context: a Log entry that changed a decision survives the history cut', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', '- **Branch**: work\n\n## Local decisions\n\n- D1 — why\n\n'
+      + '## Log\n\n- step 1: done\n- step 2: done. `changed: D1 — the code\n  disagreed`\n- step 3: done\n')
+    const out = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(out, /## Changed decisions \(from ## Log\)\n\n- step 2: done\. `changed: D1 — the code\n  disagreed`/)
+    assert.ok(!out.includes('step 1') && !out.includes('step 3'), 'the rest of the log is history')
+  })
+})
+
+test('review-context: only a recorded change survives, in any list shape', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', '- **Branch**: work\n\n## Log\n\n'
+      + '- review: WARNINGS — `changed:` entries were invisible\n'
+      + '* star: `changed: D2 — reason`\n'
+      + '1. numbered: `changed: D3 — reason`\n'
+      + '- loose: `changed: D4 — short`\n\n  LOOSE_WHY\n'
+      + '### Phase 2\n'
+      + '- after heading\n')
+    const out = run(REVIEW_CONTEXT, [], dir).out
+    const kept = out.split('## Changed decisions (from ## Log)')[1] ?? ''
+    assert.ok(!kept.includes('review: WARNINGS'), 'a line about `changed:` is not a change')
+    for (const want of ['D2', 'D3', 'D4', 'LOOSE_WHY']) assert.ok(kept.includes(want), `missing ${want}`)
+    assert.ok(!kept.includes('### Phase 2') && !kept.includes('after heading'), 'a heading ends the entry')
+  })
+})
+
 test('review-context: work_slug overrides the Branch header', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)

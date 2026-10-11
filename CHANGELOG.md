@@ -22,6 +22,11 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   header, so the review marker lands beside it instead of in a directory named after
   the branch. Install with `update`; existing RFCs gain the header at their next phase.
 
+- **The review contract follows ADR-0005.** An accepted shared decision binds like an
+  Accepted ADR (🔴). An in-place rule exception with its reason is compliant; without
+  one it is a 🟡, and the same exception repeated is a 🔵 against the rule. Departing
+  from an RFC local decision is a 🟡 at most, unless the RFC records the change.
+
 - **`/rfc`, the execution path** (ADR-0006, ADR-0007). One request for change is
   framed in one RFC: verdict, local decisions, steps with proofs and a stopping
   condition. A large change is decomposed into phases (one PR each) and holds (a

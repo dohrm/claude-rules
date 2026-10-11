@@ -15,7 +15,7 @@
 // | no `.work/<slug>/rfc.md`                 | "No RFC for this branch." — not a defect:   |
 // |                                          | loops and ad hoc work have none             |
 // | local `rfc.md`                           | its body, minus `## Revisions` and `## Log` |
-// |                                          | (history, not state)                        |
+// |                                          | (history), keeping Log's `changed:` entries |
 // | ticket pointer + `review-context.md`     | the pointer header, then the cache, with    |
 // |                                          | the time it was written                     |
 // | ticket pointer, no cache; several RFCs   | "RFC context not available: …" — declared,  |
@@ -30,17 +30,56 @@ import { ensureWorkIgnored, headerOf, resolveSlug } from './work-slug.mjs'
 const HISTORY = new Set(['revisions', 'log'])
 const TICKET_HEADER = /^[ \t]*-[ \t]*\*\*Ticket\*\*:[ \t]*(\S+)/m
 
+// A recorded change, in the form `/rfc` writes it: `changed: <decision> — <why>` in
+// backticks. The bare word is not enough — a log line ABOUT `changed:` entries is not one.
+const CHANGED = /`changed: [^`\s][^`]*`/
+const BULLET = /^([-*+]|\d+[.)])\s/
+const HEADING = /^#{1,6}\s/
+
 /** The document without its history sections: a `## ` heading named in HISTORY runs to
- *  the next `## ` heading or the end. */
+ *  the next `## ` heading or the end. A `changed:` entry of `## Log` is history that
+ *  still binds — it is how a local decision moved — so those top-level bullets are kept
+ *  whole (continuations and sub-bullets included, a loose paragraph after a blank line
+ *  too) under a heading of their own: without them the reviewer flags a recorded change
+ *  as a departure. */
 function withoutHistory(text) {
   const out = []
-  let skipping = false
+  const changed = []
+  let section = null
+  let bullet = null
+  let blank = false
+  const flush = () => {
+    if (bullet && CHANGED.test(bullet.join('\n'))) changed.push(...bullet)
+    bullet = null
+    blank = false
+  }
   for (const line of text.split('\n')) {
     const h2 = line.match(/^##\s+(.+?)\s*$/)
-    if (h2) skipping = HISTORY.has(h2[1].toLowerCase())
-    if (!skipping) out.push(line)
+    if (h2) {
+      flush()
+      section = h2[1].toLowerCase()
+    }
+    if (!HISTORY.has(section)) {
+      out.push(line)
+      continue
+    }
+    if (section !== 'log' || h2) continue
+    if (BULLET.test(line) || HEADING.test(line)) {
+      flush()
+      if (BULLET.test(line)) bullet = [line]
+    } else if (line.trim() === '') {
+      blank = true
+    } else if (bullet && (!blank || /^\s/.test(line))) {
+      if (blank) bullet.push('')
+      bullet.push(line)
+      blank = false
+    } else {
+      flush()
+    }
   }
-  return out.join('\n').replace(/\n+$/, '\n')
+  flush()
+  const body = out.join('\n').replace(/\n+$/, '\n')
+  return changed.length ? `${body}\n## Changed decisions (from ## Log)\n\n${changed.join('\n')}\n` : body
 }
 
 function reviewContext({ slug = '', cwd = '.' } = {}) {
