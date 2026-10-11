@@ -177,6 +177,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
+- Merge the phase 2 PR into `next`: phase 3 edits the same review contract and
+  branches from `next` once it lands. Then `/rfc implement review-reliability`.
+
 ## Revisions
 
 - round 1: draft — verdict, four phases, local decisions, pilot hold on temper-altern.
@@ -207,3 +210,8 @@ consuming repo running Tier 3, first piloted on temper-altern.
   shared-decision 🔴 on an unread record; "do not flag" contradicting evidence-not-claims;
   🔵 label. Fixed: Log's `changed:` bullets kept under `## Changed decisions`, 🔴 only
   once read (unread named record → 🟡), waivers still checked and never waive an ADR.
+- Phase 2 re-review at dc0c3a5: WARNINGS — a log line ABOUT `changed:` kept as a change;
+  `*`/`1.` bullets, loose continuations and headings mishandled; two wording nits. Fixed:
+  only the backticked `changed: <decision>` form counts, any list marker, a heading ends
+  an entry; test per shape. Not re-reviewed: WARNINGS do not block, and each finding has
+  its test. Pushed `rfc/review-reliability-2`, PR to `next`.

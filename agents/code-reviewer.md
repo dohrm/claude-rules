@@ -98,10 +98,10 @@ change was cut against. "No RFC for this branch" is not a finding. Then:
 - **An in-place exception with its reason is compliant**: a `nolint`, an allow
   attribute or a comment next to the code it excuses, saying why. Do not flag the
   waiver itself — but a reason the code contradicts, or a waived check hiding a
-  correctness or security defect, is still a finding. Without a reason it is 🟡 —
-  name the rule. The same exception repeated across the diff is a 🔵: the rule is
-  wrong, propose changing it. A comment never waives an `Accepted` ADR or shared
-  decision: that takes a superseding record.
+  correctness or security defect, is still a finding. An exception without a reason
+  is 🟡 — name the rule. The same exception repeated across the diff is a 🔵: the rule is
+  wrong, propose changing it. A comment never waives an `Accepted` ADR or `Accepted`
+  shared decision: that takes a superseding record.
 - **An RFC's local decision binds less than an ADR.** Code that departs from one is
   🟡 at most — cite the decision — unless the RFC records the change (`changed:`)
   with its reason.
