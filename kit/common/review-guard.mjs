@@ -121,7 +121,8 @@ function filesReviewed(text) {
  *  `crates/x/src/lib.rs`, nor `a.rs` by `data.rs`. */
 function names(section, path) {
   const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?<![\\w./-])${escaped}(?![\\w/-]|\\.\\w)`).test(section)
+  return new RegExp(`(?<![\\p{L}\\p{N}_./-])(?:\\./)?${escaped}(?![\\p{L}\\p{N}_/-]|\\.[\\p{L}\\p{N}_])`, 'u')
+    .test(section)
 }
 
 /** The number of lines of `path` as of HEAD, or null when it does not exist there.
@@ -154,7 +155,7 @@ function completeness(text, listPath) {
     return 1
   }
   // NUL-separated (`git diff --name-only -z`): a path may hold any byte but NUL.
-  const expected = readFileSync(listPath, 'utf8').split(/\0|\n/).filter(Boolean)
+  const expected = readFileSync(listPath, 'utf8').split('\0').filter(Boolean)
   const problems = []
   const section = filesReviewed(text)
   if (section === null) problems.push('no `### Files reviewed` section.')

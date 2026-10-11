@@ -177,6 +177,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
+- Merge the phase 3 PR into `next`: phase 4 edits the same recipe and contract and
+  branches from `next` once it lands. Then `/rfc implement review-reliability`.
+
 ## Revisions
 
 - round 1: draft — verdict, four phases, local decisions, pilot hold on temper-altern.
@@ -224,3 +227,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   standing; the custom-prompt break filed under Added. All fixed with tests.
   `changed: coverage failure — exit 3 also for unreadable markers, so a truncated report
   still blocks as malformed`.
+- Phase 3 re-review at c51b667: WARNINGS — README still said "unless CRITICAL"; the `mv`
+  and raw-path fixes had no test (the earlier "all fixed with tests" was wrong for those
+  two). Fixed: README; a test per fix, each checked to fail with the fix reverted; list
+  split on NUL only; `./` prefix and Unicode letters in whole-path matching; removed-line
+  Locations point at the nearest surviving line. Pushed `rfc/review-reliability-3`, PR
+  to `next`.
