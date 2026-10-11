@@ -466,10 +466,10 @@ test('ocr=1: candidates reach the reviewer, sorted, framed as leads, on the same
     const args = readFileSync(join(dir, '.work/ocr-args.txt'), 'utf8').split('\n')
     assert.equal(args[args.indexOf('--from') + 1], 'trunk', 'OCR reviews the range our reviewer does')
     assert.equal(args[args.indexOf('--to') + 1], 'HEAD')
-    assert.equal(args[args.indexOf('--background-file') + 1], '.work/review-rfc.md')
+    assert.equal(args[args.indexOf('--background-file') + 1], '.work/ocr-background.md')
     assert.match(args[args.indexOf('--exclude') + 1], /^\*\*\/\*\.lock,.*\.work\/\*\*/, 'OCR skips what our reviewer skips, nested too')
     assert.match(prompt, /LOW_ONE\n=== END OCR CANDIDATES ===\n/)
-    assert.match(readFileSync(join(dir, '.work/review-rfc.md'), 'utf8'), /^=== RFC ===/)
+    assert.match(readFileSync(join(dir, '.work/ocr-background.md'), 'utf8'), /^=== RFC ===\n\nNo RFC for this branch/)
   })
 })
 
@@ -744,6 +744,26 @@ test('review-context: only a recorded change survives, in any list shape', () =>
     assert.ok(!kept.includes('review: WARNINGS'), 'a line about `changed:` is not a change')
     for (const want of ['D2', 'D3', 'D4', 'LOOSE_WHY']) assert.ok(kept.includes(want), `missing ${want}`)
     assert.ok(!kept.includes('### Phase 2') && !kept.includes('after heading'), 'a heading ends the entry')
+  })
+})
+
+test('review-context --brief: the frame OCR can take — title, Goal, Scope, decisions, capped', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    // Ticket mode, shaped like the first real one: pointer, then the cached body, then
+    // a long comment thread (27,530 characters there — OCR aborted at 8,000).
+    write(dir, '.work/x/rfc.md', POINTER)
+    write(dir, '.work/x/review-context.md', '# RFC — Deliver it\n\n- **Status**: implementing\n\n'
+      + '## Request\n\nREQUEST_TEXT\n\n## Goal\n\nGOAL_TEXT\n\n## Scope\n\n- In: SCOPE_TEXT\n\n'
+      + '## Local decisions\n\n- DECISION_TEXT\n\n## Steps\n\nSTEPS_TEXT\n\n' + 'comment '.repeat(5000))
+    const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
+    assert.ok(Array.from(out.trim()).length <= 2000, `${Array.from(out).length} characters`)
+    for (const want of ['# RFC — X', 'GOAL_TEXT', 'SCOPE_TEXT', 'DECISION_TEXT']) assert.ok(out.includes(want), want)
+    for (const not of ['REQUEST_TEXT', 'STEPS_TEXT', 'comment comment']) assert.ok(!out.includes(not), not)
+    // Over the cap: cut, never rejected.
+    const cut = run(REVIEW_CONTEXT, ['--brief', '30'], dir).out
+    assert.equal(Array.from(cut.trim()).length, 30)
   })
 })
 

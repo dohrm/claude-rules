@@ -113,8 +113,8 @@ understood.
 ## An optional second reviewer: OCR
 
 `just ocr=1 code-review` first runs [Open Code Review](https://github.com/alibaba/open-code-review)
-(`ocr_cmd`, pinned by `ocr_version`; `ocr_cmd := "ocr"` uses a global install instead) on the same range, with the same RFC section as
-background, and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
+(`ocr_cmd`, pinned by `ocr_version`; `ocr_cmd := "ocr"` uses a global install instead) on the same range, with a brief of the RFC as background
+(`ocr_background_chars`, 2,000: OCR aborts past 8,000), and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
 it confirms against the code or drops, never a verdict of their own. OCR trades recall
 for precision with a deterministic pipeline; ours is one strict pass that also judges
 ADRs, experience contracts and AI slop — the two complement each other.

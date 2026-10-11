@@ -21,7 +21,12 @@
 // | ticket pointer, no cache; several RFCs   | "RFC context not available: …" — declared,  |
 // | claiming the branch; a read error        | for the reviewer to report as a 🟡          |
 //
-//   node review-context.mjs [--slug <s>]    prints the section on stdout.
+//   node review-context.mjs [--slug <s>]                prints the section on stdout.
+//   node review-context.mjs [--slug <s>] --brief <n>    prints at most <n> characters of
+//       it for OCR's `--background-file`: the RFC's title, Goal, Scope and Local
+//       decisions. OCR warns past 2,000 characters and aborts past 8,000 (1.12.13,
+//       cmd/opencodereview/background_file.go) — the full section, a ticket's comments
+//       included, ran 27,530 on the first real RFC.
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -114,12 +119,40 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
     + `Pointer:\n\n${withoutHistory(rfc)}\nTicket:\n\n${readFileSync(join(cwd, cachePath), 'utf8')}`
 }
 
+const BRIEF_SECTIONS = /^##\s+(goal|scope|local decisions)\s*$/i
+
+/** What a second reviewer needs of the frame, in at most `max` characters: the title and
+ *  the first Goal, Scope and Local decisions sections found (the ticket body carries them
+ *  in ticket mode); else the start of the text. Cut, never rejected. */
+function brief(text, max) {
+  const lines = text.split('\n')
+  const out = []
+  const title = lines.find((l) => /^#\s+RFC\b/.test(l))
+  if (title) out.push(title, '')
+  const seen = new Set()
+  let keep = false
+  for (const l of lines) {
+    const h2 = l.match(/^##\s+(.+?)\s*$/)
+    if (h2) {
+      const name = h2[1].toLowerCase()
+      keep = BRIEF_SECTIONS.test(l) && !seen.has(name)
+      if (keep) seen.add(name)
+    }
+    if (keep) out.push(l)
+  }
+  const chars = Array.from((seen.size ? out.join('\n') : text).trim())
+  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…\n` : `${chars.join('')}\n`
+}
+
 // Context is the reviewer's input, never a gate: whatever goes wrong here is declared in
 // the section and the review still runs.
 const argv = process.argv.slice(2)
-const i = argv.indexOf('--slug')
+const flag = (name) => (argv.includes(name) ? (argv[argv.indexOf(name) + 1] ?? '') : null)
+let section
 try {
-  process.stdout.write(reviewContext({ slug: i === -1 ? '' : (argv[i + 1] ?? '') }))
+  section = reviewContext({ slug: flag('--slug') ?? '' })
 } catch (err) {
-  process.stdout.write(`=== RFC ===\n\nRFC context not available: ${err.message}\n`)
+  section = `=== RFC ===\n\nRFC context not available: ${err.message}\n`
 }
+const max = Number(flag('--brief'))
+process.stdout.write(flag('--brief') !== null && max > 0 ? brief(section, max) : section)

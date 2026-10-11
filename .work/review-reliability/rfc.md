@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-4
+- **Branch**: rfc/review-reliability-4b
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -263,3 +263,15 @@ consuming repo running Tier 3, first piloted on temper-altern.
   `core.quotepath=false` in `file_find` (still git reads only); `jsonOutput`,
   `LlmComment`, `--from`/`--exclude`/`--background-file` identical. `ocr_cmd := "ocr"`
   documented for a global install.
+- Pilot on temper-altern `rfc/19-deliver-composition` (by the human, 2026-10-11):
+  - without OCR: cache holds #19 (body + 12 comments), `=== RFC ===` in the prompt, the
+    RFC found among three by `**Branch**`, 70/70 files named, marker in
+    `.work/19-deliver-composition/` at HEAD, prompt 286 KB — all hold checks pass.
+  - whole branch (`origin/main`), with `ocr=1`: the reviewer named 56 of 70 files (it
+    skipped tests and ADRs) and signed WARNINGS — rejected as incomplete, not promoted,
+    marker unmoved: the gate caught the failure it was built for.
+  - OCR aborted: `background content is 27530 characters, exceeding the hard limit of
+    8000`. `changed: OCR background — a brief of the RFC (title, Goal, Scope, Local
+    decisions), capped at `ocr_background_chars` = 2,000 (OCR warns past 2,000, aborts
+    past 8,000); the reviewer keeps the full section`. The phase 4 review had read the
+    1 MB file cap as the only limit.
