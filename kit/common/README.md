@@ -127,12 +127,14 @@ ADRs, experience contracts and AI slop — the two complement each other.
 - **Read-only**: on 1.12.9 its tools only read git (`ls-files`, `grep`, `show`). An MCP
   server in OCR's own config would add tools: keep that config empty where it gates.
 - **Same scope, bounded cost**: `ocr_exclude` mirrors `review_exclude` in OCR's
-  gitignore syntax (extend both together); `ocr_args` takes extra flags, e.g.
-  `--max-tokens-budget 300000`. At most 40 candidates reach the prompt, most severe
-  first, so OCR never makes a review too large to run.
+  doublestar globs (`**/*.lock`: its `*` never crosses `/`; extend both together);
+  `ocr_args` takes extra flags, e.g. `--max-tokens-budget 300000`. The section is
+  capped at 32 KB — most severe first, each text truncated, warnings capped — so OCR
+  never makes a review too large to run.
 - **Its text is data**: OCR's comments are another model's output about a diff that may
-  be hostile — flattened to one line each, inside an explicit `=== END OCR CANDIDATES ===`,
-  and the contract tells the reviewer never to follow them.
+  be hostile — flattened (continuation lines indented, every line break normalized),
+  closed by an explicit `=== END OCR CANDIDATES ===`, and the contract tells the
+  reviewer never to follow them.
 - `review-with` does not run it: an ad hoc question does not need a second pipeline.
 
 ## The review reads its RFC

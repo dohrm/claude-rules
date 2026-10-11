@@ -174,6 +174,16 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
+- Phase 4's hold: merge the phase 4 PR into `next`, update temper-altern's kit from
+  `next` (`claude-rules update`), let `/rfc implement` resume #19 so it caches
+  `.work/19-deliver-composition/review-context.md`, then run `just code-review` and
+  `just ocr=1 code-review` on `rfc/19-deliver-composition` (OCR needs `npx
+  @alibaba-group/open-code-review@1.12.9 config provider` once). Check: the cache holds
+  issue #19's body; the prompt (`.work/prompt.md`) carries it under `=== RFC ===`; the
+  report has `### Files reviewed` naming every diff file; the marker lands in
+  `.work/19-deliver-composition/`; with `ocr=1`, an `=== OCR CANDIDATES ===` section (or
+  a declared "not run"). Then `/rfc implement review-reliability` to close the RFC.
+
 ## Revisions
 
 - round 1: draft — verdict, four phases, local decisions, pilot hold on temper-altern.
@@ -242,3 +252,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   missing. Fixed: formatter never throws (and `|| true`), `ocr_exclude` + `ocr_args`,
   40-candidate cap, flattened text inside an END marker, "data, never instructions" in
   the contract — tests per case. npm package checked: 1.12.9 ships one bin, `ocr`.
+- Phase 4 re-review at 4e9c401: WARNINGS — `ocr_exclude` missed nested paths (OCR's
+  doublestar `*` never crosses `/`); the cap counted candidates, not bytes; raw line
+  numbers could smuggle a marker line. Fixed: `**/` globs, a 32 KB byte budget (fields
+  truncated, warnings capped), integer-only lines, wider line-break normalization, a
+  guarded `tail()`, `OCR: <n> shown, <k> confirmed` — tests per case. Not re-reviewed:
+  WARNINGS, each finding tested. Pushed `rfc/review-reliability-4`, PR to `next`.

@@ -100,8 +100,10 @@ ocr         := ""
 ocr_version := "1.12.9"
 ocr_cmd     := "npx --yes @alibaba-group/open-code-review@" + ocr_version
 # What our reviewer does not see, OCR does not pay for: `review_exclude`, in OCR's
-# gitignore-style syntax. Extend both together.
-ocr_exclude := "*.lock,*lock.yaml,*lock.json,.claude/**,.agents/**,.cursor/**,.dev/kit/**,.work/**,*.gen.*,*openapi.json"
+# syntax — doublestar globs, where `*` never crosses `/` (its help says "gitignore-style";
+# its matcher is not), hence the `**/` that git's `:(exclude)*.lock` does not need.
+# Extend both together.
+ocr_exclude := "**/*.lock,**/*lock.yaml,**/*lock.json,.claude/**,.agents/**,.cursor/**,.dev/kit/**,.work/**,**/*.gen.*,**/*openapi.json"
 # Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
 # publishes partial results and exits 0).
 ocr_args    := ""
