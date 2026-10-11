@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-3
+- **Branch**: rfc/review-reliability-4
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -143,16 +143,16 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ### Phase 4 — Optional OCR pass → proof: `npm test`
 
-- [ ] Confirm, on the pinned release's source, that OCR's review tools cannot write or run
+- [x] Confirm, on the pinned release's source, that OCR's review tools cannot write or run
   a shell — touches nothing; recorded in `## Log` → proof: the tool list read from the tag
-- [ ] `ocr`, `ocr_version`, `ocr_cmd` variables; with `ocr=1`, `code-review` runs
+- [x] `ocr`, `ocr_version`, `ocr_cmd` variables; with `ocr=1`, `code-review` runs
   `review --audience agent --format json --output .work/ocr.json --from <review_from> --to
   HEAD --background-file <context>`, and `kit/common/ocr-candidates.mjs` appends
   `=== OCR CANDIDATES ===` or `OCR pass not run: <reason>` — touches
   `kit/common/gate.just` → proof: tests with an `ocr_cmd` shim (findings, failure, off)
-- [ ] Contract: candidates are leads to verify; one line states candidates read and
+- [x] Contract: candidates are leads to verify; one line states candidates read and
   confirmed — touches the shared block → proof: registry test
-- [ ] Wiring doc: opt-in, own LLM provider (`ocr config provider`), API cost — touches
+- [x] Wiring doc: opt-in, own LLM provider (`ocr config provider`), API cost — touches
   `kit/common/README.md`, `registry.json` (`kit/common` wire) → proof: `npm test`
 - [ ] ⏸ hold until the human updates temper-altern's kit from this branch and runs `just
   code-review` (then `just ocr=1 code-review`) on `rfc/19-deliver-composition`, after
@@ -162,9 +162,6 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Open questions
 
-- Does OCR's `--from` accept a commit sha in merge-base mode, as our incremental marker
-  needs? — the pinned CLI, at Phase 4 step 2; fallback: pass `base` and let our reviewer
-  scope.
 
 ## Assumptions
 
@@ -176,9 +173,6 @@ consuming repo running Tier 3, first piloted on temper-altern.
   binds.
 
 ## Blocked on the human
-
-- Merge the phase 3 PR into `next`: phase 4 edits the same recipe and contract and
-  branches from `next` once it lands. Then `/rfc implement review-reliability`.
 
 ## Revisions
 
@@ -233,3 +227,12 @@ consuming repo running Tier 3, first piloted on temper-altern.
   split on NUL only; `./` prefix and Unicode letters in whole-path matching; removed-line
   Locations point at the nearest surviving line. Pushed `rfc/review-reliability-3`, PR
   to `next`.
+- Phase 4 step 1: OCR 1.12.9 (newest release ≥ 14 days old on 2026-10-11) read from the
+  tag — its tools are `task_done`, `code_comment`, `file_read`, `file_read_diff`,
+  `file_find`, `code_search`: fixed git reads (`ls-tree`/`ls-files`, `grep -e`, `show`,
+  `--end-of-options`), no write, no shell. An MCP server in OCR's own config adds tools:
+  documented. Open question closed: `--from` takes any commit (`rev-parse ^{commit}`,
+  then `merge-base`), so the incremental marker's sha works.
+- Phase 4 steps 2–4: `ocr`/`ocr_version`/`ocr_cmd`, the pass in `code-review` only (not
+  `review-with`), `ocr-candidates.mjs`, contract clause, README/registry/CHANGELOG — gate
+  tests with a shim (off, candidates, failure).

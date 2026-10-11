@@ -22,6 +22,12 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   header, so the review marker lands beside it instead of in a directory named after
   the branch. Install with `update`; existing RFCs gain the header at their next phase.
 
+- **An optional OCR pass.** `just ocr=1 code-review` runs Open Code Review
+  (alibaba/open-code-review, pinned `ocr_version := "1.12.9"`) on the same range first;
+  its findings reach the reviewer as candidates to confirm or drop, never as a verdict.
+  It needs its own LLM provider and costs its tokens; a failed pass is declared and the
+  review runs without it. Off by default.
+
 - **The review proves what it read.** A report must name every file of the diff under
   `### Files reviewed`, and its `Location`s must exist (`path:line` as of the reviewed
   commit). `code-review` rejects an incomplete report before promoting it: the previous

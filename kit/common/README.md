@@ -39,7 +39,7 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
 `docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs`,
-`review-context.mjs` and `publish-summary.mjs` all run on it (that's the reason they're Node rather
+`review-context.mjs`, `ocr-candidates.mjs` and `publish-summary.mjs` all run on it (that's the reason they're Node rather
 than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
 shell out to `npx`.
 
@@ -54,7 +54,7 @@ shell out to `npx`.
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
 `worktree-status.mjs`, `publish-summary.mjs`, `diff-since.mjs`, `review-context.mjs`,
-`work-slug.mjs`, `review-prompt.md`) ship **in this directory** and are called
+`work-slug.mjs`, `ocr-candidates.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
 
@@ -109,6 +109,24 @@ previous one stands, the marker stays, the recipe fails — unless it still bloc
 so that it still blocks the push. The check is a
 floor, not a reading: it proves a file was named and a line exists, not that either was
 understood.
+
+## An optional second reviewer: OCR
+
+`just ocr=1 code-review` first runs [Open Code Review](https://github.com/alibaba/open-code-review)
+(`ocr_cmd`, pinned by `ocr_version`) on the same range, with the same RFC section as
+background, and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
+it confirms against the code or drops, never a verdict of their own. OCR trades recall
+for precision with a deterministic pipeline; ours is one strict pass that also judges
+ADRs, experience contracts and AI slop — the two complement each other.
+
+- **Setup, once per machine**: `npx @alibaba-group/open-code-review@<ocr_version> config
+  provider`. OCR calls its own LLM and spends that provider's tokens, on top of the
+  reviewer's.
+- **Failure never blocks**: no key, rate limit, network — the prompt says "OCR pass not
+  run" with the tail of `.work/ocr.log`, and the review runs without it.
+- **Read-only**: on 1.12.9 its tools only read git (`ls-files`, `grep`, `show`). An MCP
+  server in OCR's own config would add tools: keep that config empty where it gates.
+- `review-with` does not run it: an ad hoc question does not need a second pipeline.
 
 ## The review reads its RFC
 
