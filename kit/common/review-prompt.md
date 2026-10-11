@@ -96,9 +96,12 @@ acceptance is still required before adopting the replacement.
 For code changes, distinguish compliance from fitness:
 
 Read the ADRs that bear on the changed files: the decision log in
-`docs/ARCHITECTURE.md` indexes them, and the `.work/<slug>/rfc.md` being built names
-the ones it was framed against under **Constrained by**. Its local decisions are not
-ADRs. Then:
+`docs/ARCHITECTURE.md` indexes them, and the RFC the change was framed in names the
+ones it was cut against under **Constrained by**. That RFC is the `=== RFC ===` section
+of your input when there is one, else the `.work/*/rfc.md` whose `**Branch**` header is
+the branch under review. Its local decisions are not ADRs. When that section says the
+RFC context is not available, report it as a 🟡: the review ran without the frame the
+change was cut against. "No RFC for this branch" is not a finding. Then:
 
 - **Code that contradicts an `Accepted` ADR is 🔴** — name the record and the
   section it breaks. That is a fact the author can check, and it is the ONLY

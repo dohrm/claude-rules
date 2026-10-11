@@ -132,7 +132,8 @@ Only the human moves the status to `ready`.
 
 Take the RFC (one writer), set `implementing`. Each phase branches from
 `**Base branch**` (once the previous phase is merged, if they build on each other) and
-ends in its PR. Run the steps in order, each closed by its proof, inside the loop of
+ends in its PR. Write the phase's branch into `**Branch**` when you create it: the gates
+find the RFC by that header, so the review reads it and its marker lands beside it. Run the steps in order, each closed by its proof, inside the loop of
 `agent/autonomy.md`: `just check` green per step, `just code-review` once the phase
 stands, before its push. Record each step's outcome the way your mode says.
 
@@ -158,6 +159,7 @@ fresh run.
 - **Autonomy**: L1 | L2 | L3 — absent means L1
 - **Repository**: <origin URL>
 - **Base branch**: <branch the RFC was started on>
+- **Branch**: <the branch of the phase being implemented — set at implementation>
 - **Stopping condition**: `<command, test or observable state>` — the end of the whole request
 - **Serves**: <PRD capability / acceptance criterion, if any>
 - **Constrained by**: <ADR-NNNN § section, shared decision — only those that bind>

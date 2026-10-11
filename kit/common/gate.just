@@ -80,6 +80,11 @@ since_scope := "--slug " + quote(work_slug) + " --incremental " + quote(incremen
 review_from := diff_since + " review --base " + quote(base) + " " + since_scope
 mutate_from := diff_since + " mutate --base " + quote(base) + " " + since_scope
 
+# The frame the change was cut against — the RFC the slug resolves to, or why there is
+# none — handed to the reviewer as `=== RFC ===` rather than left for it to find: a
+# read-only reviewer cannot follow a ticket RFC's pointer (review-context.mjs).
+review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slug)
+
 # A diff that does not fit the reviewer's context does not produce a smaller review: it
 # produces a review of an unknown subset that still returns a verdict — a `CLEAN` over
 # code the reviewer never received, which is the one failure this gate exists to
@@ -237,6 +242,7 @@ code-review reviewer=reviewer:
     rm -f {{review_out}}
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
+    printf '\n\n' >> {{review_in}}; {{review_context}} >> {{review_in}}
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
@@ -269,6 +275,7 @@ review-with reviewer=reviewer topic="":
     rm -f .work/adhoc-review.tmp
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/adhoc-prompt.md
     printf '\n\n=== FOCUS ===\n\n%s\n' {{quote(topic)}} >> .work/adhoc-prompt.md
+    printf '\n\n' >> .work/adhoc-prompt.md; {{review_context}} >> .work/adhoc-prompt.md
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> .work/adhoc-prompt.md
     git diff --stat=200 {{base}}...HEAD >> .work/adhoc-prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md

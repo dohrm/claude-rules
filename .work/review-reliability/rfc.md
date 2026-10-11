@@ -1,9 +1,10 @@
 # RFC — Make Tier 3 review reliable on `next`: deterministic RFC context, checked coverage, optional OCR pass
 
-- **Status**: ready
+- **Status**: implementing
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
+- **Branch**: rfc/review-reliability-1
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —

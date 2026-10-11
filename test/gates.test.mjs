@@ -119,7 +119,8 @@ function withReviewRepo(stub, fn) {
     git('add', '-A'); git('commit', '-q', '-m', 'init')
 
     mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
-    for (const f of ['gate.just', 'review-prompt.md', 'diff-since.mjs', 'review-guard.mjs'])
+    for (const f of ['gate.just', 'review-prompt.md', 'diff-since.mjs', 'review-guard.mjs',
+                     'work-slug.mjs', 'review-context.mjs'])
       writeFileSync(join(dir, '.dev/kit/common', f), readFileSync(join(REPO, 'kit/common', f), 'utf8'))
     // `base := "HEAD"` keeps `git diff {{base}}...HEAD` valid with one commit and no remote.
     writeFileSync(join(dir, 'justfile'),
@@ -288,7 +289,7 @@ test('the marker is per developer: it gitignores itself even where .work/ is com
     commitAll(dir)
     assert.equal(just('code-review', 'claude').status, 0)
     const ignore = readFileSync(join(dir, '.work/.gitignore'), 'utf8')
-    for (const pattern of ['*/.latest_review', '*/.latest_mutate'])
+    for (const pattern of ['*/.latest_review', '*/.latest_mutate', '*/review-context.md'])
       assert.ok(ignore.split('\n').includes(pattern), `${pattern} must never be shared`)
   })
 })
@@ -331,6 +332,48 @@ test('nothing new since the last pass is refused before dispatch, never reviewed
     const full = spawnSync('just', ['incremental=0', 'code-review', 'claude'], { cwd: dir, encoding: 'utf8' })
     assert.equal(full.status, 0, full.stderr)
     assert.ok(promptOf(dir).includes('FIRST_BLOCK'))
+  })
+})
+
+// ------------------------------------------------- the RFC the review is framed in
+// The shape a consuming repo hit: branch `rfc/19-deliver-composition`, RFC in
+// `.work/19-deliver-composition/`, and the gates slugging the branch name instead — so
+// the marker went to a third directory and the reviewer never saw the RFC.
+const RFC_POINTER = (branch, extra = '') =>
+  `# RFC — Deliver\n\n- **Status**: implementing\n- **Branch**: ${branch}\n${extra}\n## Steps\n\n- [ ] x\n`
+
+test('code-review finds the RFC by its Branch header, and the marker lands beside it',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo('base := "trunk"\n' + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    spawnSync('git', ['checkout', '-q', '-b', 'rfc/19-deliver-composition'], { cwd: dir })
+    write(dir, '.work/19-deliver-composition/rfc.md',
+      RFC_POINTER('rfc/19-deliver-composition') + '\n## Log\n\n- LOG_LINE\n')
+    write(dir, '.work/03-other/rfc.md', RFC_POINTER('rfc/03-other'))
+    write(dir, 'src/a.rs', 'fn a() {}\n')
+    commitAll(dir)
+
+    assert.equal(just('code-review', 'claude').status, 0)
+    assert.ok(existsSync(join(dir, '.work/19-deliver-composition/.latest_review')),
+      'the marker belongs next to the RFC it was reviewed against')
+    assert.ok(!existsSync(join(dir, '.work/rfc-19-deliver-composition')))
+    const prompt = promptOf(dir)
+    assert.match(prompt, /=== RFC ===\n\nSource: \.work\/19-deliver-composition\/rfc\.md \(local RFC\)/)
+    assert.ok(prompt.indexOf('\n=== RFC ===\n') < prompt.lastIndexOf('\n=== DIFF UNDER REVIEW ===\n'),
+      'the frame comes before the diff, which runs to the end of the prompt')
+    assert.ok(!prompt.includes('LOG_LINE'), 'history is not state')
+  })
+})
+
+test('review-with carries the same RFC section',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(BASE_PREV + COPY_STUB, (dir, just) => {
+    spawnSync('git', ['checkout', '-q', '-b', 'phase-2'], { cwd: dir })
+    write(dir, '.work/feat/rfc.md', RFC_POINTER('phase-2'))
+    write(dir, 'src/a.rs', 'fn a() {}\n')
+    commitAll(dir)
+    assert.equal(just('review-with', 'claude', '').status, 0)
+    assert.match(readFileSync(join(dir, '.work/adhoc-prompt.md'), 'utf8'), /Source: \.work\/feat\/rfc\.md/)
   })
 })
 
@@ -406,6 +449,72 @@ test('diff-since: with no --slug the marker follows the branch, sanitized into o
     assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
     assert.ok(existsSync(join(dir, '.work/feat-big-thing/.latest_review')),
       'a branch name is a path here — its slashes must not become directories')
+  })
+})
+
+test('diff-since: an RFC whose Branch header names this branch owns the marker', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'rfc/19-deliver-composition')
+    write(dir, '.work/19-deliver-composition/rfc.md', '- **Branch**: `rfc/19-deliver-composition`\n')
+    assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/19-deliver-composition/.latest_review')))
+
+    // Two RFCs claiming one branch: not ours to arbitrate — the branch name hides nothing.
+    write(dir, '.work/20-copy/rfc.md', '- **Branch**: rfc/19-deliver-composition\n')
+    assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/rfc-19-deliver-composition/.latest_review')))
+  })
+})
+
+// ------------------------------------------------------------- review-context.mjs
+const REVIEW_CONTEXT = join(REPO, 'kit', 'common', 'review-context.mjs')
+const POINTER = '# RFC — X\n\n- **Status**: implementing\n- **Branch**: work\n'
+  + '- **Ticket**: https://example.test/issues/19\n\n## Revisions\n\n- REVISION_LINE\n'
+
+test('review-context: no RFC for the branch is said plainly, not as a defect', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    const r = run(REVIEW_CONTEXT, [], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /^=== RFC ===\n\nNo RFC for this branch \(slug `work`, from the branch name\)/)
+  })
+})
+
+test('review-context: a ticket RFC with no cache is declared unavailable, with the pointer', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', POINTER)
+    const r = run(REVIEW_CONTEXT, [], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /RFC context not available: \.work\/x\/rfc\.md points to https:\/\/example\.test\/issues\/19/)
+    assert.ok(!r.out.includes('REVISION_LINE'))
+  })
+})
+
+test('review-context: a cached ticket is handed over whole, and kept private', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', POINTER)
+    write(dir, '.work/x/review-context.md', 'TICKET_BODY\n')
+    const r = run(REVIEW_CONTEXT, [], dir)
+    assert.match(r.out, /Source: https:\/\/example\.test\/issues\/19, cached in \.work\/x\/review-context\.md at \d{4}-/)
+    assert.match(r.out, /Ticket:\n\nTICKET_BODY/)
+    assert.ok(readFileSync(join(dir, '.work/.gitignore'), 'utf8').split('\n').includes('*/review-context.md'),
+      'the cache holds ticket comments — it must never be committed')
+  })
+})
+
+test('review-context: work_slug overrides the Branch header', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', '- **Branch**: work\n')
+    write(dir, '.work/pinned/rfc.md', 'PINNED\n')
+    assert.match(run(REVIEW_CONTEXT, ['--slug', 'pinned'], dir).out, /Source: \.work\/pinned\/rfc\.md[\s\S]*PINNED/)
   })
 })
 

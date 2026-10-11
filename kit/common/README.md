@@ -38,8 +38,8 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 | Node.js >= 18 | `brew install node` | your distro's package manager, or [nvm](https://github.com/nvm-sh/nvm) | `winget install OpenJS.NodeJS.LTS` (or `scoop install nodejs`) |
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
-`docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs` and
-`publish-summary.mjs` all run on it (that's the reason they're Node rather
+`docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs`,
+`review-context.mjs` and `publish-summary.mjs` all run on it (that's the reason they're Node rather
 than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
 shell out to `npx`.
 
@@ -53,7 +53,8 @@ shell out to `npx`.
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
-`worktree-status.mjs`, `publish-summary.mjs`, `diff-since.mjs`, `review-prompt.md`) ship **in this directory** and are called
+`worktree-status.mjs`, `publish-summary.mjs`, `diff-since.mjs`, `review-context.mjs`,
+`work-slug.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
 
@@ -91,10 +92,21 @@ diffs from there:
 | `.work/<slug>/.latest_review` | what `code-review` cleared |
 | `.work/<slug>/.latest_mutate` | what `mutate-diff` cleared, once you wire it |
 
-`<slug>` is the branch name unless you set `work_slug` (a `/loop-setup` or
-`/rfc` slug parks the marker next to its state file). Both files are per developer —
-`diff-since.mjs` keeps `.work/.gitignore` carrying the patterns, so they stay private
-even in a repo that commits its `.work/` RFCs.
+`<slug>` is, first answer wins: `work_slug` if you set it; else the `.work/*/rfc.md`
+whose `**Branch**` header is the current branch (`/rfc` writes it per phase), so the
+marker lands next to its RFC; else the branch name (`work-slug.mjs`). Both files are per
+developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
+in a repo that commits its `.work/` RFCs.
+
+## The review reads its RFC
+
+`code-review` and `review-with` put an `=== RFC ===` section before the diff
+(`review-context.mjs`): the local RFC of that slug without its `## Revisions` and
+`## Log`, or, for a ticket RFC, the ticket the implementing agent cached raw in
+`.work/<slug>/review-context.md` before the review (`skills/rfc/ticket.md`). A ticket RFC
+with no cache is declared as "RFC context not available", and the reviewer reports it —
+it never reviews without its frame silently. The cache holds ticket comments, so it is
+gitignored with the markers.
 
 Three properties, none of them optional:
 

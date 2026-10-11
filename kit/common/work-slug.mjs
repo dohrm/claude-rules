@@ -1,0 +1,92 @@
+// Which `.work/<slug>/` directory the current branch works in — one answer for every gate
+// script, so a gate's marker and the RFC it reviews against land in the same directory.
+//
+// The bug it closes was measured in a consuming repo: branch `rfc/19-deliver-composition`,
+// RFC in `.work/19-deliver-composition/`, and the review marker in
+// `.work/rfc-19-deliver-composition/` — because the gates slugged the branch name while
+// `/rfc` slugged the request. A naming convention cannot fix that (a phase branch keeps its
+// own name, and one tree may hold several committed RFCs, more than one `implementing`), so
+// the RFC says which branch it is on, in its `**Branch**` header, and this reads it.
+//
+// Order, first answer wins:
+//   1. an explicit slug (the justfile's `work_slug`);
+//   2. the `.work/*/rfc.md` whose `**Branch**` header names the current branch;
+//   3. the branch name, sanitized into one path segment (the gates' original behavior).
+//
+// A module, not a command: `diff-since.mjs` and `review-context.mjs` import it, and its
+// `ensureWorkIgnored` keeps their per-developer files out of a committed `.work/`.
+
+import { execFileSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+// A slug becomes a PATH. Anything outside the safe set collapses to `-`, which also
+// flattens the `/` of `feat/thing` and makes `..` unwritable — a branch cannot contain
+// `..`, an overridden `work_slug` can.
+export const sanitize = (s) => s.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+/, '') || 'detached'
+
+const BRANCH_HEADER = /^\s*-\s*\*\*Branch\*\*:\s*`?([^`\s]+)`?/m
+
+export function currentBranch(cwd = '.') {
+  try {
+    return execFileSync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'],
+      { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null
+  } catch {
+    return null
+  }
+}
+
+/** The RFC directories under `.work/` whose `**Branch**` header is `branch`. */
+function rfcsOn(branch, cwd) {
+  const root = join(cwd, '.work')
+  let entries = []
+  try {
+    entries = readdirSync(root, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .filter((name) => {
+      const file = join(root, name, 'rfc.md')
+      if (!existsSync(file)) return false
+      return readFileSync(file, 'utf8').match(BRANCH_HEADER)?.[1] === branch
+    })
+    .sort()
+}
+
+/** `{ slug, from }` — `from` says which rule answered, for the diagnostics. */
+export function resolveSlug({ slug = '', cwd = '.' } = {}) {
+  if (slug.trim()) return { slug: sanitize(slug.trim()), from: 'work_slug' }
+  const branch = currentBranch(cwd)
+  if (!branch) return { slug: 'detached', from: 'detached HEAD' }
+  const matches = rfcsOn(branch, cwd)
+  if (matches.length === 1) return { slug: sanitize(matches[0]), from: `.work/${matches[0]}/rfc.md **Branch**` }
+  if (matches.length > 1) {
+    // Two RFCs claiming one branch is a tree that contradicts its state files — not ours
+    // to arbitrate. The branch name is the answer that hides nothing.
+    return { slug: sanitize(branch), from: `branch name (ambiguous: ${matches.join(', ')} all claim ${branch})` }
+  }
+  return { slug: sanitize(branch), from: 'branch name' }
+}
+
+// `.work/` is gitignored in most installs and committed in some (that is why
+// `review_exclude` drops it from the diff). The markers must be private either way, and
+// so must a ticket RFC's cached `review-context.md` (it holds the ticket's comments), so
+// the patterns are written where they hold in both cases, and only what is missing is
+// appended — a `.gitignore` the repo already owns is never rewritten.
+const PATTERNS = ['*/.latest_review', '*/.latest_mutate', '*/review-context.md']
+export function ensureWorkIgnored(cwd = '.') {
+  const file = join(cwd, '.work', '.gitignore')
+  const have = existsSync(file) ? readFileSync(file, 'utf8') : null
+  const lines = have === null ? [] : have.split(/\r?\n/)
+  const missing = PATTERNS.filter((p) => !lines.includes(p))
+  if (missing.length === 0) return
+  const header = have === null
+    ? '# Per-developer gate state: what THIS clone has already reviewed / mutated, and the\n'
+      + '# ticket context it reviewed against.\n'
+      + '# Never shared — a teammate\'s HEAD is not yours, and neither is their verdict.\n'
+    : ''
+  writeFileSync(file, (have === null ? '' : have.replace(/\n*$/, '\n')) + header + missing.join('\n') + '\n')
+}

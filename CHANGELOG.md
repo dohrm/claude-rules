@@ -14,6 +14,14 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Added
 
+- **The review reads its RFC.** `code-review` and `review-with` put an `=== RFC ===`
+  section before the diff: the local RFC without its history, or the ticket the
+  implementing agent cached raw in `.work/<slug>/review-context.md` (gitignored) —
+  a ticket RFC without a cache is declared, and reported as a 🟡, never reviewed
+  silently without its frame. The gates now find the RFC by its new `**Branch**`
+  header, so the review marker lands beside it instead of in a directory named after
+  the branch. Install with `update`; existing RFCs gain the header at their next phase.
+
 - **`/rfc`, the execution path** (ADR-0006, ADR-0007). One request for change is
   framed in one RFC: verdict, local decisions, steps with proofs and a stopping
   condition. A large change is decomposed into phases (one PR each) and holds (a

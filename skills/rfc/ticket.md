@@ -62,6 +62,8 @@ the account you act as.
 
 - **Trust it.** It was collected outside the model, deterministically: do not fetch
   again to verify it. Who set `ready`, given there, is the record.
+- **`review-context.md` is not it.** That file is the review's cache of the ticket,
+  written by an earlier run (§ Implementation): never read it as the current state.
 - **Fetch only what it lacks.**
 - **Writes still go through the adapter** — body, comment, status.
 
@@ -107,9 +109,15 @@ each holds a link to the RFC and its phase's PR, never state. The parent body st
 the RFC, and a sub-ticket event is an event on the RFC.
 
 `.work/<slug>/rfc.md` is only a pointer, so the tree's tools still see the RFC: the
-header lines `Status`, `Autonomy`, `Repository`, `Base branch`, plus
+header lines `Status`, `Autonomy`, `Repository`, `Base branch`, `Branch`, plus
 `**Ticket**: <URL>`, and `## Blocked on the human` while blocked. Mirror the status
 whenever it changes. Never copy the body there.
+
+The reviewer is read-only and cannot follow that pointer. Before each phase's
+`just code-review`, cache the ticket for it in `.work/<slug>/review-context.md`: the
+adapter's read output — body, then comments — redirected **raw** into the file, never
+summarized or rewritten, since you are the author under review. Refresh it every time:
+the body moved since the last phase. It is gitignored; never commit it.
 
 ## `ready` and escalation
 
