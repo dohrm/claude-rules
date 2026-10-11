@@ -423,7 +423,7 @@ test('a Location that does not exist rejects the report',
 
 // ------------------------------------------------- the optional OCR pass
 // OCR runs through `ocr_cmd`; the shim stands in for it, logs its arguments, and writes
-// the JSON shape OCR 1.12.9 emits (cmd/opencodereview/output.go jsonOutput).
+// the JSON shape OCR 1.12.9–1.12.13 emits (cmd/opencodereview/output.go jsonOutput).
 const OCR_SHIM = `#!/bin/sh
 printf '%s\\n' "$@" > .work/ocr-args.txt
 [ -n "$OCR_FAIL" ] && { echo "LLM connection refused" >&2; exit 1; }

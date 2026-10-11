@@ -86,9 +86,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   promoted report would let the pre-push guard pass an incomplete `CLEAN`.
 - A `Location` is valid when its file exists at HEAD and its line is within the file — a
   deterministic floor, not a content match.
-- OCR runs through `npx @alibaba-group/open-code-review@<pin>`, pinned to the newest
-  release at least 14 days old when implemented (1.12.11 or older as of 2026-10-11), behind
-  an `ocr_cmd` variable so tests substitute a shim.
+- OCR runs through `npx @alibaba-group/open-code-review@<pin>`, pinned to 1.12.13 (the
+  human's choice — see `## Log`), behind an `ocr_cmd` variable so tests substitute a shim
+  and a global install can replace npx.
 - OCR findings are candidates: the reviewer confirms each against the code or drops it; it
   stays the only verdict. `--background-file` gets the same RFC context.
 
@@ -177,8 +177,8 @@ consuming repo running Tier 3, first piloted on temper-altern.
 - Phase 4's hold: merge the phase 4 PR into `next`, update temper-altern's kit from
   `next` (`claude-rules update`), let `/rfc implement` resume #19 so it caches
   `.work/19-deliver-composition/review-context.md`, then run `just code-review` and
-  `just ocr=1 code-review` on `rfc/19-deliver-composition` (OCR needs `npx
-  @alibaba-group/open-code-review@1.12.9 config provider` once). Check: the cache holds
+  `just ocr=1 code-review` on `rfc/19-deliver-composition` (OCR needs its
+  provider once: `ocr config provider` with the global install). Check: the cache holds
   issue #19's body; the prompt (`.work/prompt.md`) carries it under `=== RFC ===`; the
   report has `### Files reviewed` naming every diff file; the marker lands in
   `.work/19-deliver-composition/`; with `ocr=1`, an `=== OCR CANDIDATES ===` section (or
@@ -258,3 +258,8 @@ consuming repo running Tier 3, first piloted on temper-altern.
   truncated, warnings capped), integer-only lines, wider line-break normalization, a
   guarded `tail()`, `OCR: <n> shown, <k> confirmed` — tests per case. Not re-reviewed:
   WARNINGS, each finding tested. Pushed `rfc/review-reliability-4`, PR to `next`.
+- `changed: OCR pin — 1.12.13, not 1.12.9: the human installed and chose it, overriding
+  the "≥ 14 days old" rule`. Re-checked on the v1.12.13 tag: tools unchanged but for
+  `core.quotepath=false` in `file_find` (still git reads only); `jsonOutput`,
+  `LlmComment`, `--from`/`--exclude`/`--background-file` identical. `ocr_cmd := "ocr"`
+  documented for a global install.

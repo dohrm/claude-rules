@@ -113,7 +113,7 @@ understood.
 ## An optional second reviewer: OCR
 
 `just ocr=1 code-review` first runs [Open Code Review](https://github.com/alibaba/open-code-review)
-(`ocr_cmd`, pinned by `ocr_version`) on the same range, with the same RFC section as
+(`ocr_cmd`, pinned by `ocr_version`; `ocr_cmd := "ocr"` uses a global install instead) on the same range, with the same RFC section as
 background, and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
 it confirms against the code or drops, never a verdict of their own. OCR trades recall
 for precision with a deterministic pipeline; ours is one strict pass that also judges
@@ -124,7 +124,7 @@ ADRs, experience contracts and AI slop — the two complement each other.
   reviewer's.
 - **Failure never blocks**: no key, rate limit, network — the prompt says "OCR pass not
   run" with the tail of `.work/ocr.log`, and the review runs without it.
-- **Read-only**: on 1.12.9 its tools only read git (`ls-files`, `grep`, `show`). An MCP
+- **Read-only**: on 1.12.9 and 1.12.13 its tools only read git (`ls-files`, `grep`, `show`). An MCP
   server in OCR's own config would add tools: keep that config empty where it gates.
 - **Same scope, bounded cost**: `ocr_exclude` mirrors `review_exclude` in OCR's
   doublestar globs (`**/*.lock`: its `*` never crosses `/`; extend both together);

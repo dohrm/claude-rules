@@ -93,11 +93,13 @@ review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slu
 # (ocr-candidates.mjs). It needs its own provider (`npx @alibaba-group/open-code-review@<ver>
 # config provider`, once per machine) and costs that provider's tokens; a failure is
 # declared in the prompt and the review runs without it. Its tools only read git
-# (ls-files, grep, show — checked on 1.12.9); an MCP server added to OCR's own config
+# (ls-files, grep, show — checked on 1.12.9 and 1.12.13); an MCP server added to OCR's own config
 # would give it more, so keep that config empty on a machine that gates with it.
 # Pinned like everything else — raise `ocr_version` deliberately, after reading the diff.
+# A global install (`npm i -g @alibaba-group/open-code-review@<ocr_version>`) is used with
+# `ocr_cmd := "ocr"` in the root justfile; its version is then yours to keep in step.
 ocr         := ""
-ocr_version := "1.12.9"
+ocr_version := "1.12.13"
 ocr_cmd     := "npx --yes @alibaba-group/open-code-review@" + ocr_version
 # What our reviewer does not see, OCR does not pay for: `review_exclude`, in OCR's
 # syntax — doublestar globs, where `*` never crosses `/` (its help says "gitignore-style";
