@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-4
+- **Branch**: rfc/review-reliability-4b
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
