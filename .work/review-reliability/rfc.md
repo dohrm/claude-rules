@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-2
+- **Branch**: rfc/review-reliability-3
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -129,15 +129,15 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ### Phase 3 — Coverage and locations are checked → proof: `node --test test/gates.test.mjs`
 
-- [ ] Contract: a `### Files reviewed` section listing every file of the diff under
+- [x] Contract: a `### Files reviewed` section listing every file of the diff under
   review, and `Location` as `path:line` or `path:start-end` — touches the shared block →
   proof: registry test
-- [ ] `review-guard.mjs --expect-files <file>`: a missing file or an unresolvable
+- [x] `review-guard.mjs --expect-files <file>`: a missing file or an unresolvable
   `Location` fails as incomplete; `code-review` writes the reviewed file list and runs the
   check on `review_out` before `mv` — touches `kit/common/review-guard.mjs`,
   `kit/common/gate.just` → proof: one test per arm (complete, missing file, bad location,
   promoted report untouched on failure)
-- [ ] The size failure names the phase cut; `/rfc` sizes a phase so its diff fits
+- [x] The size failure names the phase cut; `/rfc` sizes a phase so its diff fits
   `review_max_bytes` — touches `kit/common/gate.just`, `skills/rfc/SKILL.md` § Draft →
   proof: `npm test`
 
@@ -177,9 +177,6 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
-- Merge the phase 2 PR into `next`: phase 3 edits the same review contract and
-  branches from `next` once it lands. Then `/rfc implement review-reliability`.
-
 ## Revisions
 
 - round 1: draft — verdict, four phases, local decisions, pilot hold on temper-altern.
@@ -215,3 +212,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   only the backticked `changed: <decision>` form counts, any list marker, a heading ends
   an entry; test per shape. Not re-reviewed: WARNINGS do not block, and each finding has
   its test. Pushed `rfc/review-reliability-2`, PR to `next`.
+- Phase 3: `### Files reviewed` + `path:line` Locations in the contract; `review-guard
+  --expect-files` on the temp report before `mv`; the size failure names the phase cut,
+  and `/rfc` § Draft sizes phases by `review_max_bytes`. `changed: coverage failure — an
+  incomplete CRITICAL is promoted anyway (exit 3): leaving the previous report standing
+  would hide a CRITICAL behind an older CLEAN`. `--require-report` now also applies to
+  the temp report, so an empty one is never promoted.

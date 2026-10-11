@@ -98,6 +98,17 @@ marker lands next to its RFC; else the branch name (`work-slug.mjs`). Both files
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
 
+## The review proves what it read
+
+The report names every file of the diff under `### Files reviewed`, and each finding
+points at a `path:line` (or `path:start-end`) as of the commit under review.
+`code-review` checks both on the temp report before promoting it (`review-guard.mjs
+--expect-files .work/review-files.txt`): an incomplete report is not promoted — the
+previous one stands, the marker stays, the recipe fails — unless it reports a
+`CRITICAL`, which is promoted anyway, so that it still blocks the push. The check is a
+floor, not a reading: it proves a file was named and a line exists, not that either was
+understood.
+
 ## The review reads its RFC
 
 `code-review` and `review-with` put an `=== RFC ===` section before the diff

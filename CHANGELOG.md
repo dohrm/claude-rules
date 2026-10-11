@@ -22,6 +22,13 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   header, so the review marker lands beside it instead of in a directory named after
   the branch. Install with `update`; existing RFCs gain the header at their next phase.
 
+- **The review proves what it read.** A report must name every file of the diff under
+  `### Files reviewed`, and its `Location`s must exist (`path:line` as of the reviewed
+  commit). `code-review` rejects an incomplete report before promoting it: the previous
+  one stands and the marker stays — except a `CRITICAL`, which is promoted anyway. A
+  repo-specific `review_prompt` must ask for the same section, or every review fails.
+  An oversized prompt now says to cut the RFC phase smaller; `/rfc` sizes phases to fit.
+
 - **The review contract follows ADR-0005.** An accepted shared decision binds like an
   Accepted ADR (🔴). An in-place rule exception with its reason is compliant; without
   one it is a 🟡, and the same exception repeated is a 🔵 against the rule. Departing

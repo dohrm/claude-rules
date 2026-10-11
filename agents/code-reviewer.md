@@ -157,6 +157,9 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 ### Experience evidence (when UI is in scope)
 [contract + actor · property · evidence read/observed · remaining unverified checks]
 
+### Files reviewed
+[every file of the diff under review, one line each: `path` — what you checked]
+
 ### ✅ What works
 [genuinely good decisions only — no padding]
 
@@ -173,8 +176,10 @@ above says where to get it — because a verdict that does not name its code can
 judged stale. Both lines are mandatory and they go at the VERY END: `review-guard`
 takes the LAST of each marker in the report, so a verdict quoted mid-report (in a fix
 suggestion, say) is prose about the contract, not a second verdict. Nothing after them.
-Each issue: **Location** (file+line) · **Problem** (what & why) · **Fix** (concrete,
-snippet if useful). Skip empty sections. Don't pad.
+Each issue: **Location** `path:line` or `path:start-end`, as of the commit under review
+· **Problem** (what & why) · **Fix** (concrete, snippet if useful). Skip empty sections
+— except **Files reviewed**, which is mandatory: a file of the diff it does not name,
+or a Location that does not exist, gets the report rejected as incomplete. Don't pad.
 
 Your verdict is a **report, not a decision** — a `CLEAN` does not authorize a
 merge; the human and the deterministic gates do. A review can be gamed by

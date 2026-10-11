@@ -246,10 +246,13 @@ test('an oversized prompt fails before dispatch instead of truncating the review
 // `COPY_STUB` cannot serve here — its "report" is the prompt, which carries no verdict
 // markers, so the guard blocks and nothing is ever marked. These need a reviewer that
 // files a real verdict AND keeps the prompt it was handed.
-const VERDICT_STUB = (verdict = 'CLEAN') =>
+// It names every file it was handed under `### Files reviewed` (the gate rejects a report
+// that does not); `skip` leaves one out, `body` adds findings above the section.
+const VERDICT_STUB = (verdict = 'CLEAN', { skip = '', body = '' } = {}) =>
   'review-claude:\n'
   + '    cp {{review_in}} .work/seen-prompt.md\n'
-  + `    printf '<!-- CI_VERDICT: ${verdict} -->\\n<!-- REVIEWED: %s -->\\n' "$(git rev-parse HEAD)" > {{review_out}}\n`
+  + `    { printf '%s\\n### Files reviewed\\n\\n' '${body}'; grep -vxF '${skip}' .work/review-files.txt; `
+  + `printf '\\n<!-- CI_VERDICT: ${verdict} -->\\n<!-- REVIEWED: %s -->\\n' "$(git rev-parse HEAD)"; } > {{review_out}}\n`
 // A fixed trunk: `base := "HEAD~1"` moves with HEAD, so it cannot tell "the whole
 // branch" from "the last commit" — which is the very distinction under test.
 const TRUNK = 'base := "trunk"\nwork_slug := "cap"\n'
@@ -332,6 +335,54 @@ test('nothing new since the last pass is refused before dispatch, never reviewed
     const full = spawnSync('just', ['incremental=0', 'code-review', 'claude'], { cwd: dir, encoding: 'utf8' })
     assert.equal(full.status, 0, full.stderr)
     assert.ok(promptOf(dir).includes('FIRST_BLOCK'))
+  })
+})
+
+// ------------------------------------------------- completeness (Files reviewed)
+// The failure OCR's authors measured on general-purpose agents: on a large diff the
+// reviewer reads some files, skips others, and still signs CLEAN.
+test('a report that skips a file is not promoted: the previous one stands, the marker stays',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB('CLEAN', { skip: 'second.rs' }), (dir, just) => {
+    trunkAt(dir)
+    write(dir, '.work/review-report.md', 'PREVIOUS_REPORT\n')
+    write(dir, 'first.rs', 'fn a() {}\n')
+    write(dir, 'second.rs', 'fn b() {}\n')
+    commitAll(dir)
+
+    const r = just('code-review', 'claude')
+    assert.notEqual(r.status, 0, 'an incomplete review fails the gate')
+    assert.match(r.stderr, /Files reviewed does not name second\.rs/)
+    assert.equal(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), 'PREVIOUS_REPORT\n')
+    assert.ok(!existsSync(join(dir, MARKER)), 'nothing was cleared')
+  })
+})
+
+test('an incomplete CRITICAL is promoted anyway: a CRITICAL is never hidden',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB('CRITICAL', { skip: 'second.rs' }), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'fn a() {}\n')
+    write(dir, 'second.rs', 'fn b() {}\n')
+    commitAll(dir)
+
+    assert.notEqual(just('code-review', 'claude').status, 0)
+    assert.match(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), /CI_VERDICT: CRITICAL/)
+    assert.ok(!existsSync(join(dir, MARKER)))
+  })
+})
+
+test('a Location that does not exist rejects the report',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB('WARNINGS', { body: '- **Location** `first.rs:40` · bad' }), (dir, just) => {
+    trunkAt(dir)
+    write(dir, 'first.rs', 'fn a() {}\n')
+    commitAll(dir)
+
+    const r = just('code-review', 'claude')
+    assert.notEqual(r.status, 0)
+    assert.match(r.stderr, /Location first\.rs:40 is outside the file \(1 lines\)/)
+    assert.ok(!existsSync(join(dir, '.work/review-report.md')))
   })
 })
 
@@ -781,6 +832,28 @@ const commits = (dir, n = 1) => {
 }
 const report = (verdict, sha) =>
   `## Code Review: x\n\n### Verdict\n\nfine.\n\n<!-- CI_VERDICT: ${verdict} -->\n<!-- REVIEWED: ${sha} -->\n`
+
+test('review-guard --expect-files: names, sections and ranges', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    write(dir, 'a.rs', 'l1\nl2\nl3\n')
+    git(dir, 'add', '-A'); git(dir, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'a')
+    const sha = git(dir, 'rev-parse', 'HEAD')
+    write(dir, 'files.txt', 'a.rs\nf0.txt\n')
+    const check = (text) => {
+      write(dir, 'r.md', text)
+      return run(REVIEW_GUARD, ['r.md', '--require-report', '--expect-files', 'files.txt'], dir)
+    }
+    const listed = '### Files reviewed\n\n- `a.rs` — x\n- `f0.txt` — y\n\n'
+    assert.equal(check('- **Location** `a.rs:2-3` · p\n\n' + listed + report('WARNINGS', sha)).status, 0)
+    assert.match(check(report('CLEAN', sha)).out, /no `### Files reviewed` section/)
+    assert.equal(check('- **Location** `a.rs:2-4`\n\n' + listed + report('CLEAN', sha)).status, 1)
+    assert.match(check('- **Location** `gone.rs:1`\n\n' + listed + report('CLEAN', sha)).out,
+      /gone\.rs does not exist as of HEAD/)
+    // A file named only below the section does not count as reviewed.
+    assert.equal(check('### Files reviewed\n\n- `a.rs`\n\n### Verdict\n\nf0.txt\n' + report('CLEAN', sha)).status, 1)
+  })
+})
 
 test('review-guard: an absent report is declared, never simulated', () => {
   withTmpRepo((dir) => {
