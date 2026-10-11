@@ -23,7 +23,7 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   the branch. Install with `update`; existing RFCs gain the header at their next phase.
 
 - **An optional OCR pass.** `just ocr=1 code-review` runs Open Code Review
-  (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first;
+  (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first, with a 2,000-character brief of the RFC;
   its findings reach the reviewer as candidates to confirm or drop, never as a verdict.
   It needs its own LLM provider and costs its tokens; a failed pass is declared and the
   review runs without it. Off by default.

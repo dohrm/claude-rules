@@ -88,7 +88,7 @@ review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slu
 
 # ── Optional OCR pass (opt-in: `just ocr=1 code-review`) ─────────────────────
 # Open Code Review (alibaba/open-code-review) reviews the same diff first, with its own
-# deterministic pipeline and its own LLM, and its findings reach OUR reviewer as
+# deterministic pipeline, its own LLM and a brief of the RFC, and its findings reach OUR reviewer as
 # `=== OCR CANDIDATES ===` — leads to confirm or drop, never a verdict
 # (ocr-candidates.mjs). It needs its own provider (`npx @alibaba-group/open-code-review@<ver>
 # config provider`, once per machine) and costs that provider's tokens; a failure is
@@ -109,6 +109,9 @@ ocr_exclude := "**/*.lock,**/*lock.yaml,**/*lock.json,.claude/**,.agents/**,.cur
 # Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
 # publishes partial results and exits 0).
 ocr_args    := ""
+# OCR's background is a brief of the RFC (title, Goal, Scope, Local decisions), not the
+# reviewer's full section: OCR warns past 2,000 characters and aborts past 8,000.
+ocr_background_chars := "2000"
 
 # A diff that does not fit the reviewer's context does not produce a smaller review: it
 # produces a review of an unknown subset that still returns a verdict — a `CLEAN` over
@@ -279,7 +282,7 @@ code-review reviewer=reviewer:
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
     {{review_context}} > .work/review-rfc.md; printf '\n\n' >> {{review_in}}; cat .work/review-rfc.md >> {{review_in}}
-    case {{quote(ocr)}} in ''|0|false|no|off) ;; *) rm -f .work/ocr.json; rc=0; {{ocr_cmd}} review --audience agent --format json --output .work/ocr.json --from "$({{review_from}} 2>/dev/null)" --to HEAD --background-file .work/review-rfc.md --exclude {{quote(ocr_exclude)}} {{ocr_args}} > .work/ocr.log 2>&1 || rc=$?; printf '\n\n' >> {{review_in}}; node {{kit}}/ocr-candidates.mjs .work/ocr.json "$rc" .work/ocr.log >> {{review_in}} || true ;; esac
+    case {{quote(ocr)}} in ''|0|false|no|off) ;; *) rm -f .work/ocr.json; {{review_context}} --brief {{quote(ocr_background_chars)}} > .work/ocr-background.md; rc=0; {{ocr_cmd}} review --audience agent --format json --output .work/ocr.json --from "$({{review_from}} 2>/dev/null)" --to HEAD --background-file .work/ocr-background.md --exclude {{quote(ocr_exclude)}} {{ocr_args}} > .work/ocr.log 2>&1 || rc=$?; printf '\n\n' >> {{review_in}}; node {{kit}}/ocr-candidates.mjs .work/ocr.json "$rc" .work/ocr.log >> {{review_in}} || true ;; esac
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
