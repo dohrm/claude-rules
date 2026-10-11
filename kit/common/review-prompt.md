@@ -104,14 +104,26 @@ RFC context is not available, report it as a 🟡: the review ran without the fr
 change was cut against. "No RFC for this branch" is not a finding. Then:
 
 - **Code that contradicts an `Accepted` ADR is 🔴** — name the record and the
-  section it breaks. That is a fact the author can check, and it is the ONLY
-  architectural finding that earns a 🔴.
+  section it breaks. An accepted record of the organization's shared decision
+  repository (`> Shared decisions:` in `docs/ARCHITECTURE.md`) binds the same way
+  when the RFC names it under **Constrained by** or you can read it. That is a fact
+  the author can check, and it is the ONLY architectural finding that earns a 🔴.
 - **Every other architectural finding is 🔵**, however strongly you hold it. A
   `Proposed` ADR binds nothing. Architectural preferences in `ARCHITECTURE.md` are
   not accepted decisions. Experience regressions and supplied visual requirements
   have their own contract below; they do not need an ADR.
 - A diff that makes an `Accepted` ADR look plainly wrong is worth a 🔵 saying so.
   Superseding it is a human's act (`agent/decisions.md`), never a review's.
+
+### Rule exceptions and local decisions — not ADRs
+
+- **An in-place exception with its reason is compliant**: a `nolint`, an allow
+  attribute or a comment next to the code it excuses, saying why. Do not flag the
+  rule it waives. Without a reason it is 🟡 — name the rule. The same exception
+  repeated across the diff is a 🔵: the rule is wrong, propose changing it.
+- **An RFC's local decision binds less than an ADR.** Code that departs from one is
+  🟡 at most — cite the decision — unless the RFC records the change (`changed:`)
+  with its reason.
 
 ### Experience — preserve the selected journey, not an imagined uniform portal
 
@@ -153,10 +165,10 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 ## Code Review: [file(s) or feature]
 
 ### 🔴 Critical (must fix)
-[bugs, security, correctness, contradicted Accepted ADR or retained experience requirement]
+[bugs, security, correctness, contradicted Accepted ADR or shared decision, or retained experience requirement]
 
 ### 🟡 Warnings (should fix)
-[bad patterns, lint, AI slop, YAGNI]
+[bad patterns, lint, AI slop, YAGNI, unexplained rule exception, departed local decision]
 
 ### 🔵 Design notes (worth discussing)
 [architecture with no ADR against it, alternatives, testability]
