@@ -99,6 +99,12 @@ review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slu
 ocr         := ""
 ocr_version := "1.12.9"
 ocr_cmd     := "npx --yes @alibaba-group/open-code-review@" + ocr_version
+# What our reviewer does not see, OCR does not pay for: `review_exclude`, in OCR's
+# gitignore-style syntax. Extend both together.
+ocr_exclude := "*.lock,*lock.yaml,*lock.json,.claude/**,.agents/**,.cursor/**,.dev/kit/**,.work/**,*.gen.*,*openapi.json"
+# Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
+# publishes partial results and exits 0).
+ocr_args    := ""
 
 # A diff that does not fit the reviewer's context does not produce a smaller review: it
 # produces a review of an unknown subset that still returns a verdict — a `CLEAN` over
@@ -269,7 +275,7 @@ code-review reviewer=reviewer:
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
     {{review_context}} > .work/review-rfc.md; printf '\n\n' >> {{review_in}}; cat .work/review-rfc.md >> {{review_in}}
-    case {{quote(ocr)}} in ''|0|false|no|off) ;; *) rm -f .work/ocr.json; rc=0; {{ocr_cmd}} review --audience agent --format json --output .work/ocr.json --from "$({{review_from}} 2>/dev/null)" --to HEAD --background-file .work/review-rfc.md > .work/ocr.log 2>&1 || rc=$?; printf '\n\n' >> {{review_in}}; node {{kit}}/ocr-candidates.mjs .work/ocr.json "$rc" .work/ocr.log >> {{review_in}} ;; esac
+    case {{quote(ocr)}} in ''|0|false|no|off) ;; *) rm -f .work/ocr.json; rc=0; {{ocr_cmd}} review --audience agent --format json --output .work/ocr.json --from "$({{review_from}} 2>/dev/null)" --to HEAD --background-file .work/review-rfc.md --exclude {{quote(ocr_exclude)}} {{ocr_args}} > .work/ocr.log 2>&1 || rc=$?; printf '\n\n' >> {{review_in}}; node {{kit}}/ocr-candidates.mjs .work/ocr.json "$rc" .work/ocr.log >> {{review_in}} || true ;; esac
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}

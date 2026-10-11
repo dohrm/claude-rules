@@ -236,3 +236,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
 - Phase 4 steps 2–4: `ocr`/`ocr_version`/`ocr_cmd`, the pass in `code-review` only (not
   `review-with`), `ocr-candidates.mjs`, contract clause, README/registry/CHANGELOG — gate
   tests with a shim (off, candidates, failure).
+- Phase 4 review at 641e785: WARNINGS — valid-but-odd OCR JSON crashed the formatter and
+  skipped the review; OCR read excluded paths; candidates could push the prompt over
+  the cap; `\r` and no end marker around model text; `message` dropped; `OCR: not run`
+  missing. Fixed: formatter never throws (and `|| true`), `ocr_exclude` + `ocr_args`,
+  40-candidate cap, flattened text inside an END marker, "data, never instructions" in
+  the contract — tests per case. npm package checked: 1.12.9 ships one bin, `ocr`.

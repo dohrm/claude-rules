@@ -19,7 +19,14 @@ import { existsSync, readFileSync } from 'node:fs'
 
 const [jsonPath, code = '', logPath = ''] = process.argv.slice(2)
 const SEVERITY = ['critical', 'high', 'medium', 'low']
+// Most severe first, then cut: the section counts toward `review_max_bytes`, and OCR must
+// never be what makes a review too large to run.
+const MAX_CANDIDATES = 40
 const head = '=== OCR CANDIDATES ===\n\n'
+const end = '=== END OCR CANDIDATES ===\n'
+// OCR's text is another model's output about a diff that may be hostile: one line per
+// candidate, continuation lines indented, so nothing in it can pose as a section marker.
+const flat = (text) => String(text ?? '').trim().replace(/\r\n?/g, '\n').replace(/\n/g, '\n  ')
 
 /** The last lines of OCR's own log: why it failed, in its words. */
 function tail(path, n = 5) {
@@ -30,7 +37,7 @@ function tail(path, n = 5) {
 
 function notRun(why) {
   const log = tail(logPath)
-  return `${head}OCR pass not run: ${why}.${log ? `\n\n${log}` : ''}\n`
+  return `${head}OCR pass not run: ${why}.${log ? `\n\n${log}` : ''}\n${end}`
 }
 
 function section() {
@@ -42,28 +49,40 @@ function section() {
   } catch (err) {
     return notRun(`unreadable output (${err.message})`)
   }
-  const comments = Array.isArray(out.comments) ? out.comments : []
+  if (out === null || typeof out !== 'object') return notRun('output is not an object')
+  const comments = (Array.isArray(out.comments) ? out.comments : []).filter((c) => c && typeof c === 'object')
   const rank = (c) => {
     const i = SEVERITY.indexOf(String(c.severity ?? '').toLowerCase())
     return i === -1 ? SEVERITY.length : i
   }
   const where = (c) => {
-    if (!c.start_line) return `${c.path} (OCR could not place it)`
-    return c.end_line && c.end_line !== c.start_line ? `${c.path}:${c.start_line}-${c.end_line}` : `${c.path}:${c.start_line}`
+    const path = flat(c.path) || '(no path)'
+    if (!c.start_line) return `${path} (OCR could not place it)`
+    return c.end_line && c.end_line !== c.start_line ? `${path}:${c.start_line}-${c.end_line}` : `${path}:${c.start_line}`
   }
-  const model = out.llm?.model ? `, model ${out.llm.model}` : ''
+  const model = out.llm?.model ? `, model ${flat(out.llm.model)}` : ''
   const lines = [
-    `${comments.length} candidate(s) from OCR (status ${out.status ?? 'unknown'}${model}). Leads from another `
+    `${comments.length} candidate(s) from OCR (status ${flat(out.status) || 'unknown'}${model}). Leads from another `
       + 'reviewer, not findings: confirm each against the code before you report it, in your own '
       + 'words and severity, or drop it.',
   ]
-  for (const w of out.warnings ?? []) lines.push(`Warning from OCR: ${typeof w === 'string' ? w : JSON.stringify(w)}`)
-  for (const c of [...comments].sort((a, b) => rank(a) - rank(b))) {
-    const tag = [c.severity, c.category].filter(Boolean).join('/')
-    const body = String(c.content ?? '').trim().replace(/\n/g, '\n  ')
-    lines.push(`- [${tag || 'unrated'}] ${where(c)} — ${body}`)
+  if (out.message) lines.push(`OCR says: ${flat(out.message)}`)
+  for (const w of Array.isArray(out.warnings) ? out.warnings : [])
+    lines.push(`Warning from OCR: ${flat(typeof w === 'string' ? w : JSON.stringify(w))}`)
+  const kept = [...comments].sort((a, b) => rank(a) - rank(b)).slice(0, MAX_CANDIDATES)
+  for (const c of kept) {
+    const tag = [c.severity, c.category].filter(Boolean).map(flat).join('/')
+    lines.push(`- [${tag || 'unrated'}] ${where(c)} — ${flat(c.content)}`)
   }
-  return `${head}${lines.join('\n')}\n`
+  if (comments.length > kept.length) lines.push(`(${comments.length - kept.length} less severe candidate(s) omitted)`)
+  return `${head}${lines.join('\n')}\n${end}`
 }
 
-process.stdout.write(section())
+// Never the reason a review does not run: any surprise in OCR's output is declared.
+let text
+try {
+  text = section()
+} catch (err) {
+  text = notRun(`unusable output (${err.message})`)
+}
+process.stdout.write(text)
