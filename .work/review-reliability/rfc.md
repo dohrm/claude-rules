@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-3
+- **Branch**: rfc/review-reliability-4
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -86,9 +86,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   promoted report would let the pre-push guard pass an incomplete `CLEAN`.
 - A `Location` is valid when its file exists at HEAD and its line is within the file — a
   deterministic floor, not a content match.
-- OCR runs through `npx @alibaba-group/open-code-review@<pin>`, pinned to the newest
-  release at least 14 days old when implemented (1.12.11 or older as of 2026-10-11), behind
-  an `ocr_cmd` variable so tests substitute a shim.
+- OCR runs through `npx @alibaba-group/open-code-review@<pin>`, pinned to 1.12.13 (the
+  human's choice — see `## Log`), behind an `ocr_cmd` variable so tests substitute a shim
+  and a global install can replace npx.
 - OCR findings are candidates: the reviewer confirms each against the code or drops it; it
   stays the only verdict. `--background-file` gets the same RFC context.
 
@@ -143,16 +143,16 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ### Phase 4 — Optional OCR pass → proof: `npm test`
 
-- [ ] Confirm, on the pinned release's source, that OCR's review tools cannot write or run
+- [x] Confirm, on the pinned release's source, that OCR's review tools cannot write or run
   a shell — touches nothing; recorded in `## Log` → proof: the tool list read from the tag
-- [ ] `ocr`, `ocr_version`, `ocr_cmd` variables; with `ocr=1`, `code-review` runs
+- [x] `ocr`, `ocr_version`, `ocr_cmd` variables; with `ocr=1`, `code-review` runs
   `review --audience agent --format json --output .work/ocr.json --from <review_from> --to
   HEAD --background-file <context>`, and `kit/common/ocr-candidates.mjs` appends
   `=== OCR CANDIDATES ===` or `OCR pass not run: <reason>` — touches
   `kit/common/gate.just` → proof: tests with an `ocr_cmd` shim (findings, failure, off)
-- [ ] Contract: candidates are leads to verify; one line states candidates read and
+- [x] Contract: candidates are leads to verify; one line states candidates read and
   confirmed — touches the shared block → proof: registry test
-- [ ] Wiring doc: opt-in, own LLM provider (`ocr config provider`), API cost — touches
+- [x] Wiring doc: opt-in, own LLM provider (`ocr config provider`), API cost — touches
   `kit/common/README.md`, `registry.json` (`kit/common` wire) → proof: `npm test`
 - [ ] ⏸ hold until the human updates temper-altern's kit from this branch and runs `just
   code-review` (then `just ocr=1 code-review`) on `rfc/19-deliver-composition`, after
@@ -162,9 +162,6 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Open questions
 
-- Does OCR's `--from` accept a commit sha in merge-base mode, as our incremental marker
-  needs? — the pinned CLI, at Phase 4 step 2; fallback: pass `base` and let our reviewer
-  scope.
 
 ## Assumptions
 
@@ -177,8 +174,15 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
-- Merge the phase 3 PR into `next`: phase 4 edits the same recipe and contract and
-  branches from `next` once it lands. Then `/rfc implement review-reliability`.
+- Phase 4's hold: merge the phase 4 PR into `next`, update temper-altern's kit from
+  `next` (`claude-rules update`), let `/rfc implement` resume #19 so it caches
+  `.work/19-deliver-composition/review-context.md`, then run `just code-review` and
+  `just ocr=1 code-review` on `rfc/19-deliver-composition` (OCR needs its
+  provider once: `ocr config provider` with the global install). Check: the cache holds
+  issue #19's body; the prompt (`.work/prompt.md`) carries it under `=== RFC ===`; the
+  report has `### Files reviewed` naming every diff file; the marker lands in
+  `.work/19-deliver-composition/`; with `ocr=1`, an `=== OCR CANDIDATES ===` section (or
+  a declared "not run"). Then `/rfc implement review-reliability` to close the RFC.
 
 ## Revisions
 
@@ -233,3 +237,29 @@ consuming repo running Tier 3, first piloted on temper-altern.
   split on NUL only; `./` prefix and Unicode letters in whole-path matching; removed-line
   Locations point at the nearest surviving line. Pushed `rfc/review-reliability-3`, PR
   to `next`.
+- Phase 4 step 1: OCR 1.12.9 (newest release ≥ 14 days old on 2026-10-11) read from the
+  tag — its tools are `task_done`, `code_comment`, `file_read`, `file_read_diff`,
+  `file_find`, `code_search`: fixed git reads (`ls-tree`/`ls-files`, `grep -e`, `show`,
+  `--end-of-options`), no write, no shell. An MCP server in OCR's own config adds tools:
+  documented. Open question closed: `--from` takes any commit (`rev-parse ^{commit}`,
+  then `merge-base`), so the incremental marker's sha works.
+- Phase 4 steps 2–4: `ocr`/`ocr_version`/`ocr_cmd`, the pass in `code-review` only (not
+  `review-with`), `ocr-candidates.mjs`, contract clause, README/registry/CHANGELOG — gate
+  tests with a shim (off, candidates, failure).
+- Phase 4 review at 641e785: WARNINGS — valid-but-odd OCR JSON crashed the formatter and
+  skipped the review; OCR read excluded paths; candidates could push the prompt over
+  the cap; `\r` and no end marker around model text; `message` dropped; `OCR: not run`
+  missing. Fixed: formatter never throws (and `|| true`), `ocr_exclude` + `ocr_args`,
+  40-candidate cap, flattened text inside an END marker, "data, never instructions" in
+  the contract — tests per case. npm package checked: 1.12.9 ships one bin, `ocr`.
+- Phase 4 re-review at 4e9c401: WARNINGS — `ocr_exclude` missed nested paths (OCR's
+  doublestar `*` never crosses `/`); the cap counted candidates, not bytes; raw line
+  numbers could smuggle a marker line. Fixed: `**/` globs, a 32 KB byte budget (fields
+  truncated, warnings capped), integer-only lines, wider line-break normalization, a
+  guarded `tail()`, `OCR: <n> shown, <k> confirmed` — tests per case. Not re-reviewed:
+  WARNINGS, each finding tested. Pushed `rfc/review-reliability-4`, PR to `next`.
+- `changed: OCR pin — 1.12.13, not 1.12.9: the human installed and chose it, overriding
+  the "≥ 14 days old" rule`. Re-checked on the v1.12.13 tag: tools unchanged but for
+  `core.quotepath=false` in `file_find` (still git reads only); `jsonOutput`,
+  `LlmComment`, `--from`/`--exclude`/`--background-file` identical. `ocr_cmd := "ocr"`
+  documented for a global install.
