@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-4b
+- **Branch**: rfc/review-reliability-5
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -275,3 +275,14 @@ consuming repo running Tier 3, first piloted on temper-altern.
     decisions), capped at `ocr_background_chars` = 2,000 (OCR warns past 2,000, aborts
     past 8,000); the reviewer keeps the full section`. The phase 4 review had read the
     1 MB file cap as the only limit.
+- Feedback from the session implementing temper #19 (forwarded by the human): the full
+  pass found three real defects no earlier review had (a send race ending both programs,
+  an OIDC discovery error pointing at the wrong place, a stale E2E message) — the RFC
+  context was used (holds, local decisions, comments). Two kit issues: (1) OCR aborted on
+  the 27.5 KB ticket — already fixed by #27; the reviewer wrote `OCR: not run` without
+  the reason. (2) The coverage check rejected that very pass (15 files missing) and the
+  recipe dropped it silently into `.work/review.tmp`. `changed: an incomplete report is
+  kept as `.work/review-incomplete.md` and the failure says its findings stand — only
+  its verdict is not promoted`; the contract asks to build `Files reviewed` from the
+  `diff --git` headers before the Verdict, and `OCR: not run — <reason>`. Relaxing the
+  check for tests/ADRs left to the human (a policy call). Phase 5 PR to `next`.

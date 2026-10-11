@@ -104,7 +104,9 @@ The report names every file of the diff under `### Files reviewed`, and each fin
 points at a `path:line` (or `path:start-end`) as of the commit under review.
 `code-review` checks both on the temp report before promoting it (`review-guard.mjs
 --expect-files .work/review-files.txt`): an incomplete report is not promoted — the
-previous one stands, the marker stays, the recipe fails — unless it still blocks (a
+previous one stands, the marker stays, the recipe fails, and the report is kept as
+`.work/review-incomplete.md`, because its findings are real even when its verdict is
+not trusted — unless it still blocks (a
 `CRITICAL`, or markers nobody can read: a truncated report), which is promoted anyway,
 so that it still blocks the push. The check is a
 floor, not a reading: it proves a file was named and a line exists, not that either was

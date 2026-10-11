@@ -270,7 +270,10 @@ review-cursor:
 # Completeness is checked on the TEMP report, before `mv`: the reviewer must name every
 # file of `.work/review-files.txt` under `### Files reviewed`, and every `Location` must
 # exist at HEAD (review-guard.mjs `--expect-files`). An incomplete report is not
-# promoted — the previous one stands, the marker stays, the recipe fails — except one
+# promoted — the previous one stands, the marker stays, the recipe fails, and the
+# report is kept as `.work/review-incomplete.md`: its VERDICT is not trusted, its
+# findings are (the first real run of this check rejected a pass that had found three
+# real defects — throwing it away would have lost them) — except one
 # that still blocks (a CRITICAL, or unreadable markers), promoted anyway (exit 3): a
 # CRITICAL is never hidden, and a truncated report blocks as malformed. One shell line,
 # because just runs each line in its own `sh -c` without `-e`.
@@ -278,7 +281,7 @@ code-review reviewer=reviewer:
     case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
     if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_exclude}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
-    rm -f {{review_out}}
+    rm -f {{review_out}} .work/review-incomplete.md
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
     {{review_context}} > .work/review-rfc.md; printf '\n\n' >> {{review_in}}; cat .work/review-rfc.md >> {{review_in}}
@@ -290,7 +293,7 @@ code-review reviewer=reviewer:
     git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} > .work/review-files.txt
     n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review-{{reviewer}}
-    rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
+    rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then mv {{review_out}} .work/review-incomplete.md; exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
     node {{kit}}/review-guard.mjs --require-report
     {{diff_since}} review --mark "$(git rev-parse HEAD)" {{since_scope}}
 

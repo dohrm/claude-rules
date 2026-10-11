@@ -355,6 +355,9 @@ test('a report that skips a file is not promoted: the previous one stands, the m
     assert.match(r.stderr, /Files reviewed does not name second\.rs/)
     assert.equal(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), 'PREVIOUS_REPORT\n')
     assert.ok(!existsSync(join(dir, MARKER)), 'nothing was cleared')
+    // Its verdict is not trusted, its findings are: they are kept, and said to be.
+    assert.match(readFileSync(join(dir, '.work/review-incomplete.md'), 'utf8'), /### Files reviewed\n\nfirst\.rs/)
+    assert.match(r.stderr, /review-incomplete\.md/)
   })
 })
 

@@ -173,7 +173,9 @@ function completeness(text, listPath) {
   for (const p of problems) console.error(`  ${p}`)
   console.error(blocking
     ? '  It still blocks (CRITICAL, or markers nobody can read), so it replaces the standing report.'
-    : '  It is not promoted: the previous report stands and the marker does not move. Re-run the review.')
+    : '  It is not promoted: the previous report stands and the marker does not move. Its\n'
+      + '  findings still stand — `code-review` keeps it as .work/review-incomplete.md: fix what\n'
+      + '  it found, then re-run the review.')
   return blocking ? 3 : 1
 }
 
