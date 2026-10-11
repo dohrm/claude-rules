@@ -538,6 +538,18 @@ test('review-context: only the header list counts, and a broken rfc.md never blo
   })
 })
 
+test('review-context: a Log entry that changed a decision survives the history cut', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/x/rfc.md', '- **Branch**: work\n\n## Local decisions\n\n- D1 — why\n\n'
+      + '## Log\n\n- step 1: done\n- step 2: done. `changed: D1 — the code\n  disagreed`\n- step 3: done\n')
+    const out = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(out, /## Changed decisions \(from ## Log\)\n\n- step 2: done\. `changed: D1 — the code\n  disagreed`/)
+    assert.ok(!out.includes('step 1') && !out.includes('step 3'), 'the rest of the log is history')
+  })
+})
+
 test('review-context: work_slug overrides the Branch header', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)

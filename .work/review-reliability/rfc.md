@@ -203,3 +203,7 @@ consuming repo running Tier 3, first piloted on temper-altern.
 - Phase 1 re-review at 0d9f78d: CLEAN. Pushed `rfc/review-reliability-1`, PR to `next`.
 - Phase 2: shared decisions, in-place exceptions, RFC local decisions in the shared
   contract (+ output-format section labels) — registry test green.
+- Phase 2 review at 5a466ea: WARNINGS — `changed:` entries invisible once `## Log` is cut;
+  shared-decision 🔴 on an unread record; "do not flag" contradicting evidence-not-claims;
+  🔵 label. Fixed: Log's `changed:` bullets kept under `## Changed decisions`, 🔴 only
+  once read (unread named record → 🟡), waivers still checked and never waive an ADR.

@@ -80,10 +80,12 @@ RFC context is not available, report it as a 🟡: the review ran without the fr
 change was cut against. "No RFC for this branch" is not a finding. Then:
 
 - **Code that contradicts an `Accepted` ADR is 🔴** — name the record and the
-  section it breaks. An accepted record of the organization's shared decision
+  section it breaks. An `Accepted` record of the organization's shared decision
   repository (`> Shared decisions:` in `docs/ARCHITECTURE.md`) binds the same way
-  when the RFC names it under **Constrained by** or you can read it. That is a fact
-  the author can check, and it is the ONLY architectural finding that earns a 🔴.
+  once you have read it — in a local checkout or in your input. A record the RFC
+  names under **Constrained by** that you could not read is a 🟡: name it and say
+  what you could not confirm. These are facts the author can check, and the ONLY
+  architectural findings that earn a 🔴.
 - **Every other architectural finding is 🔵**, however strongly you hold it. A
   `Proposed` ADR binds nothing. Architectural preferences in `ARCHITECTURE.md` are
   not accepted decisions. Experience regressions and supplied visual requirements
@@ -91,12 +93,15 @@ change was cut against. "No RFC for this branch" is not a finding. Then:
 - A diff that makes an `Accepted` ADR look plainly wrong is worth a 🔵 saying so.
   Superseding it is a human's act (`agent/decisions.md`), never a review's.
 
-### Rule exceptions and local decisions — not ADRs
+### Rule exceptions and RFC local decisions
 
 - **An in-place exception with its reason is compliant**: a `nolint`, an allow
   attribute or a comment next to the code it excuses, saying why. Do not flag the
-  rule it waives. Without a reason it is 🟡 — name the rule. The same exception
-  repeated across the diff is a 🔵: the rule is wrong, propose changing it.
+  waiver itself — but a reason the code contradicts, or a waived check hiding a
+  correctness or security defect, is still a finding. Without a reason it is 🟡 —
+  name the rule. The same exception repeated across the diff is a 🔵: the rule is
+  wrong, propose changing it. A comment never waives an `Accepted` ADR or shared
+  decision: that takes a superseding record.
 - **An RFC's local decision binds less than an ADR.** Code that departs from one is
   🟡 at most — cite the decision — unless the RFC records the change (`changed:`)
   with its reason.
@@ -141,13 +146,13 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 ## Code Review: [file(s) or feature]
 
 ### 🔴 Critical (must fix)
-[bugs, security, correctness, contradicted Accepted ADR or shared decision, or retained experience requirement]
+[bugs, security, correctness, contradicted Accepted ADR or Accepted shared decision, or retained experience requirement]
 
 ### 🟡 Warnings (should fix)
 [bad patterns, lint, AI slop, YAGNI, unexplained rule exception, departed local decision]
 
 ### 🔵 Design notes (worth discussing)
-[architecture with no ADR against it, alternatives, testability]
+[architecture with no ADR against it, alternatives, testability, recurring exception (rule to change)]
 
 ### Experience evidence (when UI is in scope)
 [contract + actor · property · evidence read/observed · remaining unverified checks]
