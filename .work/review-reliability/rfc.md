@@ -96,26 +96,26 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ### Phase 1 — The review finds its RFC and reads it → proof: `node --test test/gates.test.mjs`
 
-- [ ] Shared slug resolver (`kit/common/work-slug.mjs`, used by `diff-since.mjs`) —
+- [x] Shared slug resolver (`kit/common/work-slug.mjs`, used by `diff-since.mjs`) —
   touches `kit/common/diff-since.mjs` (`slug`, `sanitize`), `kit/common/gate.just`
   (`since_scope`) → proof: a test with temper's shape puts the marker in
   `.work/19-deliver-composition/`
-- [ ] `**Branch**` header in `<rfc-body>`, set per phase at implementation, and in the
+- [x] `**Branch**` header in `<rfc-body>`, set per phase at implementation, and in the
   ticket-mode pointer header — touches `skills/rfc/SKILL.md`, `skills/rfc/ticket.md`
   § Implementation → proof: `node --test test/skills.test.mjs`
-- [ ] Ticket mode writes and refreshes `review-context.md` (at `/rfc implement`, then
+- [x] Ticket mode writes and refreshes `review-context.md` (at `/rfc implement`, then
   before each phase's review); `ensureIgnored` adds `*/review-context.md` — touches
   `skills/rfc/SKILL.md` § Implement, `skills/rfc/ticket.md` § Implementation,
   `kit/common/diff-since.mjs` → proof: `npm test`, and `.work/.gitignore` carries the
   pattern
-- [ ] `kit/common/review-context.mjs <slug>` prints the `=== RFC ===` section (local body,
+- [x] `kit/common/review-context.mjs <slug>` prints the `=== RFC ===` section (local body,
   else `review-context.md` with its fetch time, else the declared reason); `code-review`
   and `review-with` append it before the diff, inside `review_max_bytes` — touches
   `kit/common/gate.just` → proof: tests for local, ticket (fixture cache), missing cache
-- [ ] Contract: read the `=== RFC ===` section instead of opening `rfc.md`; unavailable
+- [x] Contract: read the `=== RFC ===` section instead of opening `rfc.md`; unavailable
   context is a 🟡 — touches the shared block of `agents/code-reviewer.md` and
   `kit/common/review-prompt.md` → proof: `node --test test/registry.test.mjs`
-- [ ] `ticket.md` § Pre-fetched context: say that `review-context.md` is a review cache,
+- [x] `ticket.md` § Pre-fetched context: say that `review-context.md` is a review cache,
   never pre-fetched context — touches `skills/rfc/ticket.md` → proof: `npm test`
 
 ### Phase 2 — The contract catches up with ADR-0005 → proof: `node --test test/registry.test.mjs`
@@ -186,3 +186,17 @@ consuming repo running Tier 3, first piloted on temper-altern.
   ready" question and the `/architect`/`/onboard` steps leave the RFC.
 
 ## Log
+
+- Phase 1 step 1: `work-slug.mjs` (resolver + `ensureWorkIgnored`), `diff-since.mjs` uses
+  it — temper-shape test green.
+- Phase 1 step 2: `**Branch**` in `<rfc-body>`, § Implement, ticket pointer header.
+- Phase 1 steps 3–6: `review-context.mjs`, injected in `code-review` and `review-with`;
+  contract reads `=== RFC ===`; `ticket.md` cache + not-pre-fetched note — `npm test`
+  352 pass. `changed: missing context — "No RFC for this branch" is said plainly and is
+  not a 🟡 (loops and ad hoc work have none); only a ticket without cache, several RFCs
+  claiming the branch, or a read error is "not available"`. `changed: cache header — the
+  agent writes a `Fetched <time> at <sha> from <URL>` line before the raw output (the
+  script cannot know the sha at fetch time)`.
+- Phase 1 review (sub-agent, review-prompt.md contract) at 2447e27: WARNINGS — ambiguous
+  branch reviewed as "no RFC", unguarded reads, cache without sha, ignore pattern not
+  guaranteed at first write, stale comments; header-only field matching (🔵). All fixed.

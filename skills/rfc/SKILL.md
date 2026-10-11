@@ -133,7 +133,8 @@ Only the human moves the status to `ready`.
 Take the RFC (one writer), set `implementing`. Each phase branches from
 `**Base branch**` (once the previous phase is merged, if they build on each other) and
 ends in its PR. Write the phase's branch into `**Branch**` when you create it: the gates
-find the RFC by that header, so the review reads it and its marker lands beside it. Run the steps in order, each closed by its proof, inside the loop of
+find the RFC by that header, so the review reads it and its marker lands beside it. In
+ticket mode, cache the ticket for the review first (`ticket.md` § Implementation). Run the steps in order, each closed by its proof, inside the loop of
 `agent/autonomy.md`: `just check` green per step, `just code-review` once the phase
 stands, before its push. Record each step's outcome the way your mode says.
 

@@ -69,9 +69,10 @@ review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.js
 # branch as a whole: `just incremental=0 code-review` is that pass, worth one run
 # before the PR.
 #
-# `work_slug` is the directory under `.work/` — empty means "the branch name", which is
-# right in a repo with one long-running run per branch. Set it to a `/loop-setup` or
-# `/rfc` slug to park the marker next to its state file.
+# `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` whose
+# `**Branch**` header is the current branch (`/rfc` writes it per phase), else the branch
+# name (`work-slug.mjs`). Set it to a `/loop-setup` slug to park the marker next to its
+# state file.
 work_slug   := ""
 incremental := "1"
 

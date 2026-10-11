@@ -114,10 +114,13 @@ header lines `Status`, `Autonomy`, `Repository`, `Base branch`, `Branch`, plus
 whenever it changes. Never copy the body there.
 
 The reviewer is read-only and cannot follow that pointer. Before each phase's
-`just code-review`, cache the ticket for it in `.work/<slug>/review-context.md`: the
+`just code-review`, cache the ticket for it in `.work/<slug>/review-context.md`: one
+line `Fetched <ISO time> at <git rev-parse HEAD> from <ticket URL>`, then the
 adapter's read output — body, then comments — redirected **raw** into the file, never
 summarized or rewritten, since you are the author under review. Refresh it every time:
-the body moved since the last phase. It is gitignored; never commit it.
+the body moved since the last phase. It holds the ticket's comments, so before the
+first write check that `.work/.gitignore` carries `*/review-context.md` (add the line
+if not) — never commit it.
 
 ## `ready` and escalation
 

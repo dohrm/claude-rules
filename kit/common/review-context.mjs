@@ -18,17 +18,17 @@
 // |                                          | (history, not state)                        |
 // | ticket pointer + `review-context.md`     | the pointer header, then the cache, with    |
 // |                                          | the time it was written                     |
-// | ticket pointer, no cache                 | "RFC context not available: …" — declared,  |
-// |                                          | for the reviewer to report as a 🟡          |
+// | ticket pointer, no cache; several RFCs   | "RFC context not available: …" — declared,  |
+// | claiming the branch; a read error        | for the reviewer to report as a 🟡          |
 //
 //   node review-context.mjs [--slug <s>]    prints the section on stdout.
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { ensureWorkIgnored, resolveSlug } from './work-slug.mjs'
+import { ensureWorkIgnored, headerOf, resolveSlug } from './work-slug.mjs'
 
 const HISTORY = new Set(['revisions', 'log'])
-const TICKET_HEADER = /^\s*-\s*\*\*Ticket\*\*:\s*(\S+)/m
+const TICKET_HEADER = /^[ \t]*-[ \t]*\*\*Ticket\*\*:[ \t]*(\S+)/m
 
 /** The document without its history sections: a `## ` heading named in HISTORY runs to
  *  the next `## ` heading or the end. */
@@ -49,12 +49,16 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
   const rfcPath = join(dir, 'rfc.md')
   const head = `=== RFC ===\n\n`
 
+  if (resolved.ambiguous) {
+    return `${head}RFC context not available: ${resolved.ambiguous.map((d) => `.work/${d}/rfc.md`).join(', ')} `
+      + 'all claim this branch in their **Branch** header — the tree contradicts its state files.\n'
+  }
   if (!existsSync(join(cwd, rfcPath))) {
     return `${head}No RFC for this branch (slug \`${resolved.slug}\`, from the ${resolved.from}).\n`
   }
 
   const rfc = readFileSync(join(cwd, rfcPath), 'utf8')
-  const ticket = rfc.match(TICKET_HEADER)?.[1]
+  const ticket = headerOf(rfc).match(TICKET_HEADER)?.[1]
   if (!ticket) return `${head}Source: ${rfcPath} (local RFC)\n\n${withoutHistory(rfc)}`
 
   const cachePath = join(dir, 'review-context.md')
@@ -71,6 +75,12 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
     + `Pointer:\n\n${withoutHistory(rfc)}\nTicket:\n\n${readFileSync(join(cwd, cachePath), 'utf8')}`
 }
 
+// Context is the reviewer's input, never a gate: whatever goes wrong here is declared in
+// the section and the review still runs.
 const argv = process.argv.slice(2)
 const i = argv.indexOf('--slug')
-process.stdout.write(reviewContext({ slug: i === -1 ? '' : (argv[i + 1] ?? '') }))
+try {
+  process.stdout.write(reviewContext({ slug: i === -1 ? '' : (argv[i + 1] ?? '') }))
+} catch (err) {
+  process.stdout.write(`=== RFC ===\n\nRFC context not available: ${err.message}\n`)
+}

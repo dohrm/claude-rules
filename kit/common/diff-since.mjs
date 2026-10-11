@@ -14,8 +14,9 @@
 // last cleared. Per developer, per worktree, never shared — a teammate's HEAD is not
 // yours, and neither is their verdict (rules/agent/autonomy.md, "One tree, one
 // writer"). It is written into `.work/` because that is already the gates' scratch
-// area, and this script keeps `.work/.gitignore` carrying the two patterns, so the
-// marker stays private even in a repo that COMMITS its `.work/` plans.
+// area, and `.work/.gitignore` is kept carrying its patterns (`ensureWorkIgnored` in
+// work-slug.mjs), so the marker stays private even in a repo that COMMITS its `.work/`
+// RFCs. The slug is the RFC's when one claims this branch (work-slug.mjs).
 //
 //   node diff-since.mjs <review|mutate> --base <ref> [--slug <s>] [--incremental 0|1]
 //       prints, on stdout and alone, the ref to diff FROM. Everything else is stderr,

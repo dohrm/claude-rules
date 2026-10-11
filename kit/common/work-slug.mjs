@@ -25,7 +25,11 @@ import { join } from 'node:path'
 // `..`, an overridden `work_slug` can.
 export const sanitize = (s) => s.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+/, '') || 'detached'
 
-const BRANCH_HEADER = /^\s*-\s*\*\*Branch\*\*:\s*`?([^`\s]+)`?/m
+// Header fields are read from the header list only — everything before the first `## ` —
+// so a step that quotes the format does not count, and `[ \t]*` keeps an empty field
+// from capturing the next line.
+export const headerOf = (text) => text.split(/^## /m)[0]
+const BRANCH_HEADER = /^[ \t]*-[ \t]*\*\*Branch\*\*:[ \t]*`?([^`\s]+)`?/m
 
 export function currentBranch(cwd = '.') {
   try {
@@ -49,14 +53,19 @@ function rfcsOn(branch, cwd) {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .filter((name) => {
-      const file = join(root, name, 'rfc.md')
-      if (!existsSync(file)) return false
-      return readFileSync(file, 'utf8').match(BRANCH_HEADER)?.[1] === branch
+      // An unreadable rfc.md (a directory, no permission) belongs to some other work:
+      // it must not crash the gate of this one.
+      try {
+        return headerOf(readFileSync(join(root, name, 'rfc.md'), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
+      } catch {
+        return false
+      }
     })
     .sort()
 }
 
-/** `{ slug, from }` — `from` says which rule answered, for the diagnostics. */
+/** `{ slug, from, ambiguous }` — `from` says which rule answered, for the diagnostics;
+ *  `ambiguous` lists the RFCs that all claim this branch, when more than one does. */
 export function resolveSlug({ slug = '', cwd = '.' } = {}) {
   if (slug.trim()) return { slug: sanitize(slug.trim()), from: 'work_slug' }
   const branch = currentBranch(cwd)
@@ -66,7 +75,7 @@ export function resolveSlug({ slug = '', cwd = '.' } = {}) {
   if (matches.length > 1) {
     // Two RFCs claiming one branch is a tree that contradicts its state files — not ours
     // to arbitrate. The branch name is the answer that hides nothing.
-    return { slug: sanitize(branch), from: `branch name (ambiguous: ${matches.join(', ')} all claim ${branch})` }
+    return { slug: sanitize(branch), from: 'branch name', ambiguous: matches }
   }
   return { slug: sanitize(branch), from: 'branch name' }
 }

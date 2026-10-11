@@ -508,6 +508,36 @@ test('review-context: a cached ticket is handed over whole, and kept private', (
   })
 })
 
+test('review-context: RFCs that all claim the branch are declared, never reviewed as none', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    write(dir, '.work/a/rfc.md', '- **Branch**: work\n')
+    write(dir, '.work/b/rfc.md', '- **Branch**: work\n')
+    const r = run(REVIEW_CONTEXT, [], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /RFC context not available: \.work\/a\/rfc\.md, \.work\/b\/rfc\.md all claim this branch/)
+  })
+})
+
+test('review-context: only the header list counts, and a broken rfc.md never blocks', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    // A local RFC quoting the pointer format in a step is still a local RFC.
+    write(dir, '.work/x/rfc.md', '- **Branch**: work\n- **Ticket**:\n\n## Steps\n\n- **Ticket**: https://quoted.test\n')
+    assert.match(run(REVIEW_CONTEXT, [], dir).out, /\(local RFC\)/)
+
+    // Another work's rfc.md that cannot be read is skipped by the resolver …
+    mkdirSync(join(dir, '.work/broken/rfc.md'), { recursive: true })
+    assert.match(run(REVIEW_CONTEXT, [], dir).out, /\(local RFC\)/)
+    // … and this work's own unreadable RFC is declared, with the review still fed.
+    const r = run(REVIEW_CONTEXT, ['--slug', 'broken'], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /RFC context not available: EISDIR/)
+  })
+})
+
 test('review-context: work_slug overrides the Branch header', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)
