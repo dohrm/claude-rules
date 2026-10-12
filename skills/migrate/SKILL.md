@@ -11,7 +11,7 @@ any severity jump, then compose the install. You do not change product code.
 pipeline after the justfile is true. If there is no `.claude-rules.lock`,
 stop and send them to `/onboard`.
 
-If this skill is missing on disk: `npx github:dohrm/claude-rules@<ref> add product`
+If this skill is missing on disk: `npx github:dohrm/claude-rules#<ref> add product`
 lands it. Do **not** `update` until step 3 has `--root` queued — a bare update
 replays unscoped globs.
 
@@ -39,7 +39,7 @@ proof: `.dev/kit/common/README.md` after the kit lands, else
 `ts-web` recipes are `ts-web-lint` / `ts-web-check`. Prefer a root-justfile
 **alias** (`ts-check: ts-web-check`) over a silent rename that 404s CI.
 
-Pin: `npx github:dohrm/claude-rules@<ref>`. Ask once for `<ref>` if the lock
+Pin: `npx github:dohrm/claude-rules#<ref>`. Ask once for `<ref>` if the lock
 says `main` and they did not name a tag. Same `--agent` set as the lock.
 
 ## Process
@@ -96,11 +96,11 @@ a severity jump that would turn CI red overnight.
 ### 3. Lock, then update, then init
 
 ```
-npx github:dohrm/claude-rules@<ref> add <alias-or-profiles> --root <dir> --level gates
+npx github:dohrm/claude-rules#<ref> add <alias-or-profiles> --root <dir> --level gates
 # repeat per module; add is additive
-npx github:dohrm/claude-rules@<ref> add agent testing cicd --level gates
-npx github:dohrm/claude-rules@<ref> update --ref <ref>
-npx github:dohrm/claude-rules@<ref> init
+npx github:dohrm/claude-rules#<ref> add agent testing cicd --level gates
+npx github:dohrm/claude-rules#<ref> update --ref <ref>
+npx github:dohrm/claude-rules#<ref> init
 ```
 
 `init` does not rewrite an existing justfile body. It reports missing
@@ -150,8 +150,8 @@ mode — do not bootstrap a second pipeline.
 
 ### 7. Done
 
-- `npx github:dohrm/claude-rules@<ref> doctor`
-- `npx github:dohrm/claude-rules@<ref> budget <one file per module>` —
+- `npx github:dohrm/claude-rules#<ref> doctor`
+- `npx github:dohrm/claude-rules#<ref> budget <one file per module>` —
   portal rules must **not** load on a mobile / non-portal TS file
 - `just check` — if red because stock gates are stricter, restore the
   override; do not mass-fix the codebase in this pass

@@ -32,11 +32,13 @@ Route first:
 
 ### 1. Update
 
-Same `--agent` set and ref as the lock (`npx github:dohrm/claude-rules@<ref>`;
-ask once for `<ref>` if the lock says `main` and they did not name one):
+Same `--agent` set and ref as the lock (`npx github:dohrm/claude-rules#<ref>`;
+ask once for `<ref>` if the lock says `main` and they did not name one). The
+`#<ref>` picks the CLI; `--ref` picks the assets and is what the lock records —
+without it, `update` falls back to `main`:
 
 ```
-npx github:dohrm/claude-rules@<ref> update
+npx github:dohrm/claude-rules#<ref> update --ref <ref>
 ```
 
 ### 2. Read what changed
@@ -73,7 +75,7 @@ no (keep today's behavior as an override, with the reason on the line).
 
 ### 5. Done
 
-- `npx github:dohrm/claude-rules@<ref> doctor`
+- `npx github:dohrm/claude-rules#<ref> doctor`
 - `just check` green.
 
 Hand back (and append to `.work/update.md`): entries applied, overrides kept

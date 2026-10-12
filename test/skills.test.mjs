@@ -26,6 +26,16 @@ test('every skill description carries its own /trigger', () => {
   }
 })
 
+// npm reads `github:owner/repo@ref` as part of the repo name: git clone fails and
+// npx exits 128 with no message. The ref goes after `#`.
+test('npx pins a ref with #, never @', () => {
+  const files = [...proseFiles(), ...['README.md', 'docs/reference.md'].map(f => join(REPO, f))]
+  for (const f of files) {
+    const hit = read(f).match(/github:[\w-]+\/[\w-]+@/)
+    assert.ok(!hit, `${rel(f)}: "${hit?.[0]}" — npx needs github:owner/repo#<ref>`)
+  }
+})
+
 // A rule reference is written `dir/file.md` (relative to rules/) or `rules/dir/file.md`.
 test('rule references resolve', () => {
   for (const file of proseFiles()) {
