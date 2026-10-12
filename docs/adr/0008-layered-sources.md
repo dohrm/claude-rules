@@ -1,6 +1,6 @@
 # ADR-0008: Install from layered sources, last path wins
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-12
 
 ## Context
