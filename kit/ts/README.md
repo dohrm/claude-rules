@@ -24,7 +24,7 @@ runs `just ts-check`.
 
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `just ts-lint` | 1 | pre-commit | `eslint .` (`recommended` + `no-explicit-any` + `no-non-null-assertion`) |
+| `just ts-lint` | 1 | pre-commit | `eslint .` (`recommended` + `no-explicit-any` + `no-non-null-assertion`; type-aware: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, `eqeqeq`) |
 | `just ts-check` | 2 | pre-push, `just check` | ts-lint · `tsc --noEmit` · `vitest run` |
 | `just ts-mutate` | 3 | coherent block, never a hook | `stryker run --incremental` |
 

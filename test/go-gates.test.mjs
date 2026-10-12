@@ -80,7 +80,8 @@ const GREEN = readFileSync(join(FIXTURE, 'add.go'), 'utf8')
 test('the shipped golangci config is v2 and names the jalon linters', () => {
   const yml = readFileSync(join(KIT_GO, 'golangci.base.yml'), 'utf8')
   assert.match(yml, /^version:\s*"2"/m)
-  for (const name of ['errcheck', 'govet', 'staticcheck', 'unused', 'gosec'])
+  for (const name of ['errcheck', 'govet', 'staticcheck', 'unused', 'gosec', 'bodyclose', 'sqlclosecheck',
+    'rowserrcheck', 'noctx', 'contextcheck', 'containedctx', 'errorlint', 'nilerr', 'exhaustive'])
     assert.match(yml, new RegExp(`- ${name}\\b`))
   assert.match(yml, /formatters:[\s\S]*- gofmt/)
 })
@@ -153,6 +154,32 @@ describe('go quality gates', { concurrency: 1 }, () => {
       assert.match(r.out, /unused|leftover/)
     })
   })
+
+  // One source per lifecycle/context linter: golangci names the linter in parentheses.
+  const PKG = 'package gateprobe\n\n'
+  const ADD = '\nfunc AddOne(n int) int {\n\treturn n + 1\n}\n'
+  const LINTED = [
+    ['bodyclose', 'import (\n\t"context"\n\t"net/http"\n)\n\nfunc Ping(ctx context.Context, url string) (int, error) {\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\tres, err := http.DefaultClient.Do(req)\n\tif err != nil {\n\t\treturn 0, err\n\t}\n\treturn res.StatusCode, nil\n}\n'],
+    ['noctx', 'import "net/http"\n\nfunc Ping() error {\n\tres, err := http.Get("http://localhost/health")\n\tif err != nil {\n\t\treturn err\n\t}\n\treturn res.Body.Close()\n}\n'],
+    ['sqlclosecheck', 'import (\n\t"context"\n\t"database/sql"\n)\n\nfunc Names(ctx context.Context, db *sql.DB) error {\n\trows, err := db.QueryContext(ctx, "SELECT name FROM t")\n\tif err != nil {\n\t\treturn err\n\t}\n\tfor rows.Next() {\n\t}\n\treturn rows.Err()\n}\n'],
+    ['rowserrcheck', 'import (\n\t"context"\n\t"database/sql"\n)\n\nfunc Names(ctx context.Context, db *sql.DB) error {\n\trows, err := db.QueryContext(ctx, "SELECT name FROM t")\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer rows.Close()\n\tfor rows.Next() {\n\t}\n\treturn nil\n}\n'],
+    ['contextcheck', 'import "context"\n\nfunc wait(ctx context.Context) error {\n\treturn ctx.Err()\n}\n\nfunc Run(ctx context.Context) error {\n\t_ = ctx\n\treturn wait(context.Background())\n}\n'],
+    ['errorlint', 'import (\n\t"fmt"\n\t"os"\n)\n\nfunc Open(p string) error {\n\tf, err := os.Open(p)\n\tif err != nil {\n\t\treturn fmt.Errorf("open %s: %v", p, err)\n\t}\n\treturn f.Close()\n}\n'],
+    ['containedctx', 'import "context"\n\ntype Job struct {\n\tCtx context.Context\n}\n\nfunc (j Job) Done() bool {\n\treturn j.Ctx.Err() != nil\n}\n'],
+    ['nilerr', 'import "os"\n\nfunc Exists(p string) error {\n\tf, err := os.Open(p)\n\tif err != nil {\n\t\treturn nil\n\t}\n\treturn f.Close()\n}\n'],
+    ['exhaustive', 'type Op int\n\nconst (\n\tInc Op = iota\n\tDec\n)\n\nfunc Apply(op Op, n int) int {\n\tswitch op {\n\tcase Inc:\n\t\treturn n + 1\n\tdefault:\n\t\treturn n\n\t}\n}\n'],
+  ]
+  for (const [linter, body] of LINTED) {
+    test(`just go-lint fails on ${linter}`, { skip: skipLint, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir)
+        write(dir, SRC, PKG + body + ADD)
+        const r = runJust(dir, 'go-lint')
+        assert.notEqual(r.status, 0, `${linter} must fail go-lint:\n${r.out}`)
+        assert.match(r.out, new RegExp(`\\(${linter}\\)`))
+      })
+    })
+  }
 
   test('just go-check fails when a unit test fails', {
     skip: skipCheck,

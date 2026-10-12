@@ -7,7 +7,8 @@ title: "React Quality Gates"
 React is TypeScript — the language gate applies (`just ts-web-check` or
 `just ts-tauri-check`; a shared package uses `just ts-check`). Rules of
 Hooks and the a11y floor (roles / labels) are `eslint-plugin-react-hooks`
-+ `eslint-plugin-jsx-a11y` in those recipes.
++ `eslint-plugin-jsx-a11y` in those recipes; `dangerouslySetInnerHTML` is
+banned there too.
 
 What they do not decide:
 

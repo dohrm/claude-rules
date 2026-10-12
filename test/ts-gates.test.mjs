@@ -219,6 +219,70 @@ describe('ts language floor', { concurrency: 1 }, () => {
   })
 })
 
+// The typed rules ship in all four configs: each flavor must catch a dropped promise,
+// or that flavor's config lost its `projectService`.
+const FLOATING = 'async function save(n: number): Promise<number> {\n  return n\n}\n\n'
+  + 'export function addOne(n: number): number {\n  save(n)\n  return n + 1\n}\n'
+describe('typed lint rules', { concurrency: 1 }, () => {
+  for (const [flavor, recipe, file] of [
+    ['ts', 'ts-lint', 'api/src/add.ts'],
+    ['node', 'ts-node-lint', 'api/src/add.ts'],
+    ['web', 'ts-web-lint', 'api/src/save.ts'],
+    ['tauri', 'ts-tauri-lint', 'api/src/save.ts'],
+  ]) {
+    test(`just ${recipe} fails on a floating promise`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir, flavor)
+        write(dir, file, FLOATING)
+        const r = runJust(dir, recipe)
+        assert.notEqual(r.status, 0, `a dropped promise must fail ${recipe}:\n${r.out}`)
+        assert.match(r.out, /no-floating-promises/)
+      })
+    })
+  }
+
+  const LINT_CASES = [
+    ['a non-exhaustive switch',
+      "type Op = 'inc' | 'dec'\n\nexport function addOne(n: number, op: Op = 'inc'): number {\n"
+        + "  switch (op) {\n    case 'inc':\n      return n + 1\n  }\n  return n\n}\n",
+      /switch-exhaustiveness-check/],
+    ['== against a non-null value',
+      'export function addOne(n: number): number {\n  if (n == 0) return 1\n  return n + 1\n}\n',
+      /eqeqeq/],
+  ]
+  for (const [what, body, signal] of LINT_CASES) {
+    test(`just ts-lint fails on ${what}`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir, 'ts')
+        write(dir, 'api/src/add.ts', body)
+        const r = runJust(dir, 'ts-lint')
+        assert.notEqual(r.status, 0, `${what} must fail ts-lint:\n${r.out}`)
+        assert.match(r.out, signal)
+      })
+    })
+  }
+
+  test('just ts-check fails on an unchecked index access', { skip, timeout: TIMEOUT }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir, 'ts')
+      write(dir, 'api/src/add.ts', 'export function addOne(n: number, xs: number[] = []): number {\n  const first: number = xs[0]\n  return n + first + 1 - first\n}\n')
+      const r = runJust(dir, 'ts-check')
+      assert.notEqual(r.status, 0, `xs[0] is number | undefined under noUncheckedIndexedAccess:\n${r.out}`)
+      assert.match(r.out, /undefined/)
+    })
+  })
+
+  test('just ts-web-lint fails on dangerouslySetInnerHTML', { skip, timeout: TIMEOUT }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir, 'web')
+      write(dir, 'api/src/raw.tsx', 'export function Raw({ html }: { html: string }) {\n  return <div dangerouslySetInnerHTML={{ __html: html }} />\n}\n')
+      const r = runJust(dir, 'ts-web-lint')
+      assert.notEqual(r.status, 0, `raw HTML must fail ts-web-lint:\n${r.out}`)
+      assert.match(r.out, /No raw HTML/)
+    })
+  })
+})
+
 describe('ts-web', { concurrency: 1 }, () => {
   test('just ts-web-check passes on the witness package', {
     skip,

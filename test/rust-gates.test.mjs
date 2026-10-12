@@ -192,6 +192,38 @@ describe('rust quality gates', { concurrency: 1 }, () => {
     })
   })
 
+  // One lib body per restriction lint rust-lint opts into: each must fail on its own.
+  const RESTRICTED = [
+    ['dbg!', '    dbg!(n) + 1', /dbg_macro|`dbg!`/],
+    ['todo!', '    if n < 0 {\n        todo!()\n    }\n    n + 1', /clippy::todo|`todo` should not be present/],
+    ['unimplemented!', '    if n < 0 {\n        unimplemented!()\n    }\n    n + 1', /unimplemented/],
+    ['panic! in the lib', '    if n < 0 {\n        panic!("negative")\n    }\n    n + 1', /clippy::panic|`panic` should not be present/],
+    ['a &str byte slice', '    let s = "héllo";\n    n + s[1..].len() as i32', /string_slice|indexing into a string/],
+    ['unsafe without SAFETY', '    let p = &n as *const i32;\n    unsafe { *p + 1 }', /undocumented_unsafe_blocks|unsafe block missing a safety comment/],
+  ]
+  for (const [what, body, signal] of RESTRICTED) {
+    test(`just rust-lint fails on ${what}`, { skip: skipLint, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir)
+        write(dir, LIB, GREEN_LIB.replace('    n + 1', body))
+        const r = runJust(dir, 'rust-lint')
+        assert.notEqual(r.status, 0, `${what} must fail rust-lint:\n${r.out}`)
+        assert.match(r.out, signal)
+      })
+    })
+  }
+
+  test('just rust-lint lets tests panic and documented unsafe pass', { skip: skipLint, timeout: TIMEOUT }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      write(dir, LIB, GREEN_LIB
+        .replace('    n + 1', '    let p = &n as *const i32;\n    // SAFETY: `p` points at `n`, alive for this whole call.\n    unsafe { *p + 1 }')
+        .replace('    #[test]\n    fn increments', '    #[test]\n    #[should_panic(expected = "boom")]\n    fn tests_may_panic() {\n        panic!("boom");\n    }\n\n    #[test]\n    fn increments'))
+      const r = runJust(dir, 'rust-lint')
+      assert.equal(r.status, 0, `panic! in a test and a SAFETY-commented unsafe must pass:\n${r.out}`)
+    })
+  })
+
   test('just rust-check fails when a unit test fails', {
     skip: skipCheck,
     timeout: TIMEOUT,

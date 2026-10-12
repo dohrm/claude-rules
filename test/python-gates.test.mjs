@@ -156,6 +156,26 @@ describe('python quality gates', { concurrency: 1 }, () => {
     })
   })
 
+  // One source per ruff family the snippet opts into beyond the floor.
+  const FAMILIES = [
+    ['ASYNC', 'import time\n\n\nasync def add_one(n: int) -> int:\n    time.sleep(1)\n    return n + 1\n'],
+    ['BLE', 'import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef add_one(n: int) -> int:\n    try:\n        return n + 1\n    except Exception as err:\n        logger.warning("failed: %s", err)\n        return n\n'],
+    ['DTZ', 'from datetime import datetime\n\n\ndef add_one(n: int) -> int:\n    return n + 1 + datetime.now().microsecond * 0\n'],
+    ['T20', 'def add_one(n: int) -> int:\n    print(n)\n    return n + 1\n'],
+    ['PERF', 'def add_one(n: int) -> list[int]:\n    out = []\n    for x in range(n):\n        out.append(x + 1)\n    return out\n'],
+  ]
+  for (const [family, body] of FAMILIES) {
+    test(`just python-lint fails on ${family}`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir)
+        write(dir, SRC, body)
+        const r = runJust(dir, 'python-lint')
+        assert.notEqual(r.status, 0, `${family} must fail python-lint:\n${r.out}`)
+        assert.match(r.out, new RegExp(`\\b${family}\\d+`))
+      })
+    })
+  }
+
   test('just python-check fails on a mypy error that lint does not see', {
     skip,
     timeout: TIMEOUT,

@@ -4,7 +4,7 @@ paths:
 title: "Python Logging"
 ---
 
-An f-string or `%` in the log *message*: `just python-lint` (ruff `G` / `LOG`). `print()` is not gated — never in application code.
+An f-string or `%` in the log *message*, and `print()` outside tests: `just python-lint` (ruff `G` / `LOG` / `T20`).
 
 | Level | Usage |
 |-------|-------|

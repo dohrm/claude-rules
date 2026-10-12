@@ -17,7 +17,7 @@ runs `just go-check`.
 
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `just go-lint` | 1 | pre-commit | `golangci-lint run ./...` (gofmt + errcheck + staticcheck + govet + unused + gosec) |
+| `just go-lint` | 1 | pre-commit | `golangci-lint run ./...` (gofmt + errcheck + staticcheck + govet + unused + gosec + lifecycle/context: bodyclose, sqlclosecheck, rowserrcheck, noctx, contextcheck, containedctx, errorlint, nilerr, exhaustive) |
 | `just go-check` | 2 | pre-push, `just check` | go-lint · `go test -race ./...` · `go build ./...` · `govulncheck ./...` |
 | `just go-cover` | 3 | coherent block, never a hook | `go test -coverprofile` + `go tool cover -func` — the map, not the verdict |
 

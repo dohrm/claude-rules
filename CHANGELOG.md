@@ -12,6 +12,40 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — stricter language gates
+
+The language rules' high-stakes lines (taken from Open Code Review's per-language
+checklists) are now **checked**, not just written: a gate that was green can go red.
+Fix the finding, or keep an exception with its reason on the same line. Each language
+says whether `update` delivers it or you merge it by hand — the configs are copies
+the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing else.
+
+- **Rust — delivered by `update`** (`rust.just`). `rust-lint` adds clippy
+  `dbg_macro`, `todo`, `unimplemented`, `undocumented_unsafe_blocks` on all targets,
+  and `panic`, `string_slice` on `--lib --bins` (tests stay free). An invariant keeps
+  `#[allow(clippy::panic, reason = "…")]`; a byte slice becomes `s.get(a..b)`. To
+  adopt later, override `rust-lint` in the root justfile with the old two lines.
+- **TypeScript — merge by hand**, from `.dev/kit/ts/eslint.base.js` (or the
+  `ts-web` / `ts-node` / `ts-tauri` overlay you copied) into `eslint.config.js`:
+  `parserOptions.projectService` (type-aware linting — slower), then
+  `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`,
+  `no-implied-eval`, `no-eval`, `eqeqeq: smart`; the React overlays also ban
+  `dangerouslySetInnerHTML`. From the matching `tsconfig.*.json` into `tsconfig.json`:
+  `noUncheckedIndexedAccess` — the largest churn (`xs[0]` becomes `T | undefined`);
+  merge it in its own commit.
+- **Go — merge by hand**, from `.dev/kit/go/golangci.base.yml` into `.golangci.yml`:
+  `bodyclose`, `sqlclosecheck`, `rowserrcheck`, `noctx`, `contextcheck`,
+  `containedctx`, `errorlint`, `nilerr`, `exhaustive` (a `default` does not make an
+  enum switch exhaustive).
+- **Python — merge by hand**, from `.dev/kit/python/pyproject.snippet.toml` into
+  `[tool.ruff.lint]`: `ASYNC`, `BLE`, `DTZ`, `T20`, `PERF` in `select`, and `T20` in
+  the `tests/**` per-file-ignores.
+- **Rules — delivered by `update`.** New `rules/go/concurrency.md` (goroutine
+  ownership, channel closing, `defer` in loops, writer `Close` errors, typed nil).
+  Rust gains task ownership, `spawn_blocking`, cancellation-safe `select!` and bounded
+  retries; TypeScript a deadline on every `fetch` and `Promise.all` for independent
+  awaits; Python `asyncio.to_thread` and no shared module-level state.
+
 ### Added
 
 - **The review reads its RFC.** `code-review` and `review-with` put an `=== RFC ===`

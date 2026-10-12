@@ -14,7 +14,7 @@ Wiring: `.dev/kit/go/README.md`. Needs **golangci-lint v2**.
 
 | Recipe | Command | Config |
 |---|---|---|
-| `go-lint` | `golangci-lint run ./...` | `.golangci.yml` ← `golangci.base.yml` (gofmt, errcheck, staticcheck, govet, unused, gosec) |
+| `go-lint` | `golangci-lint run ./...` | `.golangci.yml` ← `golangci.base.yml` (gofmt, errcheck, staticcheck, govet, unused, gosec, bodyclose, sqlclosecheck, rowserrcheck, noctx, contextcheck, containedctx, errorlint, nilerr, exhaustive) |
 | `go-check` | `go test -race ./...` | — |
 | `go-check` | `go build ./...` | — |
 | `go-check` | `govulncheck ./...` | — |
@@ -24,5 +24,5 @@ No `//nolint` or `staticcheck:ignore` without a reason on the same line.
 Never loosen `.golangci.yml` to pass.
 
 What golangci does not decide: prefer `internal/` (do not export at the
-module root unless intentional); wrap with `fmt.Errorf("context: %w", err)`.
-slog and proto / `pb.*`: sibling rules.
+module root unless intentional). Goroutine ownership, channels, slog and
+proto / `pb.*`: sibling rules.
