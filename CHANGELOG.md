@@ -22,6 +22,14 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   header, so the review marker lands beside it instead of in a directory named after
   the branch. Install with `update`; existing RFCs gain the header at their next phase.
 
+- **Credential files never reach the reviewer's model.** `.env*`, `.ssh/`, private keys
+  (`id_*`), `.netrc`, `.npmrc`, `.pypirc` and `.dockercfg` are withheld from the review
+  diff by `review_secrets` — kept even when a repo overrides `review_exclude` — and the
+  contract makes a committed private key a 🔴, any other such file a 🟡 to confirm.
+  `review_exclude` also drops build outputs, vendored dependencies and generated code
+  (`node_modules/`, `vendor/`, `dist/`, `target/`, `*.min.*`, `*.pb.go`, snapshots).
+  Both lists come from Open Code Review's defaults; its test exclusion was not taken.
+
 - **An optional OCR pass.** `just ocr=1 code-review` runs Open Code Review
   (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first, with a 2,000-character brief of the RFC;
   its findings reach the reviewer as candidates to confirm or drop, never as a verdict.

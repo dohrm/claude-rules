@@ -98,6 +98,17 @@ marker lands next to its RFC; else the branch name (`work-slug.mjs`). Both files
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
 
+## What the reviewer never sees
+
+`review_exclude` drops what a human reviewer skips too — lockfiles, the installed
+agent-rules tree, `.work/`, build outputs, vendored dependencies, generated code — and
+the reviewer is told each omission is deliberate (the `--stat` inventory stays whole).
+`review_secrets` withholds credential files (`.env*`, `.ssh/`, `id_*`, `.netrc`, `.npmrc`,
+`.pypirc`, `.dockercfg`) from the model whatever `review_exclude` says: override it only
+to add. Every `.env.*` is withheld, templates included — a git pathspec cannot re-include
+`.env.example` once `.env.*` matched it. Both lists come from Open Code Review's defaults;
+its default exclusion of tests was not taken, on purpose.
+
 ## The review proves what it read
 
 The report names every file of the diff under `### Files reviewed`, and each finding

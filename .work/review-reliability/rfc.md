@@ -251367,4 +251367,11 @@ t## Blocked on the human
   a README note for local models (`--concurrency 1`, `--max-tokens` under the server's
   window, `--timeout`); OCR's `summary.total_tokens` in the section, to measure cost per
   run before wiring a paid API (`--max-tokens-budget` via `ocr_args` caps it).
-
+- OCR guards, asked by the human (2026-10-12): adopted its file filters — credential
+  files withheld by a separate `review_secrets` (survives a `review_exclude` override),
+  build outputs / vendored / generated code added to `review_exclude`; contract: a
+  committed private key is 🔴, another credential file a 🟡. `changed: every `.env.*` is
+  withheld, templates included — a pathspec cannot re-include`. Not taken: OCR's test
+  exclusion (precision over recall, the opposite of ours); its per-language rule docs
+  (1.6–2.7k tokens per language, applied by OCR itself when `ocr=1`) — case by case,
+  for what improves code generation, measured.

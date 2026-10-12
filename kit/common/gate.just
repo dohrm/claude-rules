@@ -51,7 +51,21 @@ review_out := ".work/review.tmp"
 # be glob-expanded by the shell before git ever sees it. `quote()` cannot do the job
 # here: it would wrap the whole list into ONE argument. Keep the convention when you
 # override — one quoted word per pathspec, space-separated.
-review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json'"
+#
+# Build outputs, vendored dependencies and generated code join the list from OCR's own
+# defaults (alibaba/open-code-review 1.12.13, default_exclude_patterns.json) — without
+# its tests, which OCR skips for precision and this reviewer reads on purpose.
+review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json' ':(exclude,glob)**/node_modules/**' ':(exclude,glob)**/vendor/**' ':(exclude,glob)**/dist/**' ':(exclude,glob)**/target/**' ':(exclude,glob)**/.next/**' ':(exclude,glob)**/__pycache__/**' ':(exclude,glob)**/*.min.js' ':(exclude,glob)**/*.min.css' ':(exclude,glob)**/*.pb.go' ':(exclude,glob)**/*.generated.*' ':(exclude,glob)**/__snapshots__/**' ':(exclude,glob)**/*.snap'"
+
+# Credential files never reach the reviewer's model, whatever `review_exclude` says — a
+# separate variable, so a repo that overrides the list above cannot drop it by accident.
+# The list is OCR's (default_secret_patterns.json plus its `.env` rule), case-insensitive.
+# One difference, by necessity: OCR keeps `.env.example` / `.sample` / `.template`, but a
+# git pathspec cannot re-include what an exclude matched, so every `.env.*` is withheld —
+# a template is cheap to lose, a `.env.production` is not. The name stays in the
+# inventory: the contract tells the reviewer what a withheld credential file means.
+review_secrets := "':(exclude,glob,icase)**/.env' ':(exclude,glob,icase)**/.env.*' ':(exclude,glob,icase)**/.ssh/**' ':(exclude,glob,icase)**/id_rsa' ':(exclude,glob,icase)**/id_dsa' ':(exclude,glob,icase)**/id_ecdsa' ':(exclude,glob,icase)**/id_ed25519' ':(exclude,glob,icase)**/.netrc' ':(exclude,glob,icase)**/_netrc' ':(exclude,glob,icase)**/.npmrc' ':(exclude,glob,icase)**/.pypirc' ':(exclude,glob,icase)**/.dockercfg'"
+review_paths   := review_exclude + " " + review_secrets
 
 # ── Incremental T3/T4 (the marker) ────────────────────────────────────────
 # `code-review` and `mutate-diff` both measured the WHOLE branch, so a branch built by
@@ -104,7 +118,8 @@ ocr_cmd     := "npx --yes @alibaba-group/open-code-review@" + ocr_version
 # What our reviewer does not see, OCR does not pay for: `review_exclude`, in OCR's
 # syntax — doublestar globs, where `*` never crosses `/` (its help says "gitignore-style";
 # its matcher is not), hence the `**/` that git's `:(exclude)*.lock` does not need.
-# Extend both together.
+# Credential files, build outputs and vendored code are not repeated here: OCR skips them
+# by default. Extend both together.
 ocr_exclude := "**/*.lock,**/*lock.yaml,**/*lock.json,.claude/**,.agents/**,.cursor/**,.dev/kit/**,.work/**,**/*.gen.*,**/*openapi.json"
 # Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
 # publishes partial results and exits 0).
@@ -280,7 +295,7 @@ review-cursor:
 code-review reviewer=reviewer:
     case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
-    if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_exclude}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
+    if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_paths}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
     rm -f {{review_out}} .work/review-incomplete.md
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
@@ -289,8 +304,8 @@ code-review reviewer=reviewer:
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
-    git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} >> {{review_in}}
-    git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} > .work/review-files.txt
+    git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} >> {{review_in}}
+    git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} > .work/review-files.txt
     n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review-{{reviewer}}
     rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then mv {{review_out}} .work/review-incomplete.md; exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
@@ -323,7 +338,7 @@ review-with reviewer=reviewer topic="":
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> .work/adhoc-prompt.md
     git diff --stat=200 {{base}}...HEAD >> .work/adhoc-prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md
-    git diff {{base}}...HEAD -- . {{review_exclude}} >> .work/adhoc-prompt.md
+    git diff {{base}}...HEAD -- . {{review_paths}} >> .work/adhoc-prompt.md
     n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review_in='.work/adhoc-prompt.md' review_out='.work/adhoc-review.tmp' review-{{reviewer}}
     cat .work/adhoc-review.tmp
