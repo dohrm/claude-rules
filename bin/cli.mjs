@@ -264,8 +264,19 @@ async function makeStaged(ref, entry) {
     const abs = join(localFlag, entry.from)
     return { dir: isFile ? dirname(abs) : abs, isFile, name, temp: false }
   }
-  const { downloadTemplate } = await import('giget')   // cached after first call
   const dir = mkdtempSync(join(tmpdir(), 'claude-rules-'))
+  // giget fetches a DIRECTORY tarball; a file path yields an empty dir and no error.
+  // A file entry (the CHANGELOG) comes from the raw endpoint instead.
+  if (isFile) {
+    try {
+      const url = `https://raw.githubusercontent.com/${registry.repo}/${encodeURIComponent(ref)}/${entry.from}`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
+      writeFileSync(join(dir, name), Buffer.from(await res.arrayBuffer()))
+    } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
+    return { dir, isFile, name, temp: true }
+  }
+  const { downloadTemplate } = await import('giget')   // cached after first call
   try { await downloadTemplate(`github:${registry.repo}/${entry.from}#${ref}`, { dir, force: true }) }
   catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
   return { dir, isFile, name, temp: true }
