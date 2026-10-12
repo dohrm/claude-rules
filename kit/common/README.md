@@ -144,13 +144,22 @@ ADRs, experience contracts and AI slop — the two complement each other.
 
    Non-interactive (CI): `config set provider anthropic`, `config set model <id>`,
    `config set providers.anthropic.api_key "$ANTHROPIC_API_KEY"`.
-2. **Per review**: `just ocr=1 code-review`. To run it on every review, set
-   `ocr := "1"` in the root justfile.
-3. **Read the result**: the reviewer's report ends with `OCR: <n> shown, <k> confirmed`
+2. **Per review**: `just ocr=1 code-review` (`1`, or any value but empty, `0`,
+   `false`, `no`, `off`).
+3. **Or from the root justfile**, which overrides `gate.just`'s variables (the
+   `set allow-duplicate-variables` header) — every knob is optional:
+
+   ```just
+   ocr                  := "1"            # every `code-review` runs OCR; `just ocr=0 code-review` skips it once
+   ocr_cmd              := "ocr"          # a global install instead of the pinned npx
+   ocr_args             := "--max-tokens-budget 300000"  # cap OCR's spend; a budget stop keeps what it found
+   ocr_background_chars := "4000"         # RFC brief size; OCR aborts past 8,000
+   ocr_exclude          := "**/*.lock,…"  # extend together with review_exclude
+   ```
+
+4. **Read the result**: the reviewer's report ends with `OCR: <n> shown, <k> confirmed`
    (or `OCR: not run — <reason>`). OCR's raw output stays in `.work/ocr.json`, its log
    in `.work/ocr.log`.
-4. **Cap the spend** if needed: `ocr_args := "--max-tokens-budget 300000"`. A budget
-   stop keeps what OCR found so far.
 
 **Running OCR by hand instead** (outside `code-review`) loses what the recipe pins:
 give it the branch's base, not an older ref, or it reviews other changes than yours
