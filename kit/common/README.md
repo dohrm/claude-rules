@@ -126,15 +126,45 @@ understood.
 ## An optional second reviewer: OCR
 
 `just ocr=1 code-review` first runs [Open Code Review](https://github.com/alibaba/open-code-review)
-(`ocr_cmd`, pinned by `ocr_version`; `ocr_cmd := "ocr"` uses a global install instead) on the same range, with a brief of the RFC as background
-(`ocr_background_chars`, 2,000: OCR aborts past 8,000), and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
+(`ocr_cmd`, pinned by `ocr_version`; `ocr_cmd := "ocr"` uses a global install instead) on the same range, with a brief of the RFC (title, Goal, Local decisions) as background
+(`ocr_background_chars`, 4,000: OCR warns past 2,000 and aborts past 8,000), and hands its findings to the reviewer as `=== OCR CANDIDATES ===`: leads
 it confirms against the code or drops, never a verdict of their own. OCR trades recall
 for precision with a deterministic pipeline; ours is one strict pass that also judges
 ADRs, experience contracts and AI slop — the two complement each other.
 
-- **Setup, once per machine**: `npx @alibaba-group/open-code-review@<ocr_version> config
-  provider`. OCR calls its own LLM and spends that provider's tokens, on top of the
-  reviewer's.
+### How to use it
+
+1. **Once per machine**, pick OCR's provider and model (stored in OCR's own config, not
+   in the repo), with the `ocr_version` that `gate.just` pins:
+
+   ```sh
+   npx @alibaba-group/open-code-review@<ocr_version> config provider   # interactive
+   npx @alibaba-group/open-code-review@<ocr_version> config model
+   ```
+
+   Non-interactive (CI): `config set provider anthropic`, `config set model <id>`,
+   `config set providers.anthropic.api_key "$ANTHROPIC_API_KEY"`.
+2. **Per review**: `just ocr=1 code-review`. To run it on every review, set
+   `ocr := "1"` in the root justfile.
+3. **Read the result**: the reviewer's report ends with `OCR: <n> shown, <k> confirmed`
+   (or `OCR: not run — <reason>`). OCR's raw output stays in `.work/ocr.json`, its log
+   in `.work/ocr.log`.
+4. **Cap the spend** if needed: `ocr_args := "--max-tokens-budget 300000"`. A budget
+   stop keeps what OCR found so far.
+
+**Running OCR by hand instead** (outside `code-review`) loses what the recipe pins:
+give it the branch's base, not an older ref, or it reviews other changes than yours
+(`--from` is resolved by merge-base). The recipe runs:
+
+```sh
+ocr review --audience agent --format json --output .work/ocr.json \
+  --from <base> --to HEAD --background-file .work/ocr-background.md --exclude '<ocr_exclude>'
+```
+
+Its candidates are unchecked there: nothing confirms them against the current code.
+
+- **Its own tokens**: OCR calls its own LLM and spends that provider's tokens, on top of
+  the reviewer's.
 - **Failure never blocks**: no key, rate limit, network — the prompt says "OCR pass not
   run" with the tail of `.work/ocr.log`, and the review runs without it.
 - **Read-only**: on 1.12.9 and 1.12.13 its tools only read git (`ls-files`, `grep`, `show`). An MCP

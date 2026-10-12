@@ -23,8 +23,8 @@
 //
 //   node review-context.mjs [--slug <s>]                prints the section on stdout.
 //   node review-context.mjs [--slug <s>] --brief <n>    prints at most <n> characters of
-//       it for OCR's `--background-file`: the RFC's title, Goal, Scope and Local
-//       decisions. OCR warns past 2,000 characters and aborts past 8,000 (1.12.13,
+//       it for OCR's `--background-file`: the RFC's title, Goal and Local decisions
+//       (Scope is left out: the diff OCR reviews already shows it). OCR warns past 2,000 characters and aborts past 8,000 (1.12.13,
 //       cmd/opencodereview/background_file.go) — the full section, a ticket's comments
 //       included, ran 27,530 on the first real RFC.
 
@@ -119,10 +119,10 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
     + `Pointer:\n\n${withoutHistory(rfc)}\nTicket:\n\n${readFileSync(join(cwd, cachePath), 'utf8')}`
 }
 
-const BRIEF_SECTIONS = /^##\s+(goal|scope|local decisions)\s*$/i
+const BRIEF_SECTIONS = /^##\s+(goal|local decisions)\s*$/i
 
 /** What a second reviewer needs of the frame, in at most `max` characters: the title and
- *  the first Goal, Scope and Local decisions sections found (the ticket body carries them
+ *  the first Goal and Local decisions sections found (the ticket body carries them
  *  in ticket mode); else the start of the text. Cut, never rejected. */
 function brief(text, max) {
   const lines = text.split('\n')

@@ -792,7 +792,7 @@ test('review-context: only a recorded change survives, in any list shape', () =>
   })
 })
 
-test('review-context --brief: the frame OCR can take — title, Goal, Scope, decisions, capped', () => {
+test('review-context --brief: the frame OCR can take — title, Goal, decisions, capped', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)
     git(dir, 'checkout', '-q', '-b', 'work')
@@ -804,8 +804,8 @@ test('review-context --brief: the frame OCR can take — title, Goal, Scope, dec
       + '## Local decisions\n\n- DECISION_TEXT\n\n## Steps\n\nSTEPS_TEXT\n\n' + 'comment '.repeat(5000))
     const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
     assert.ok(Array.from(out.trim()).length <= 2000, `${Array.from(out).length} characters`)
-    for (const want of ['# RFC — X', 'GOAL_TEXT', 'SCOPE_TEXT', 'DECISION_TEXT']) assert.ok(out.includes(want), want)
-    for (const not of ['REQUEST_TEXT', 'STEPS_TEXT', 'comment comment']) assert.ok(!out.includes(not), not)
+    for (const want of ['# RFC — X', 'GOAL_TEXT', 'DECISION_TEXT']) assert.ok(out.includes(want), want)
+    for (const not of ['REQUEST_TEXT', 'SCOPE_TEXT', 'STEPS_TEXT', 'comment comment']) assert.ok(!out.includes(not), not)
     // Over the cap: cut, never rejected.
     const cut = run(REVIEW_CONTEXT, ['--brief', '30'], dir).out
     assert.equal(Array.from(cut.trim()).length, 30)
