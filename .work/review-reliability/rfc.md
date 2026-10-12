@@ -299,3 +299,9 @@ consuming repo running Tier 3, first piloted on temper-altern.
   `## Blocked on the human` and the first `## Revisions` — which was a mention inside
   Local decisions, so the slice was empty and `str.replace('', …)` inserted the block
   between every character. Rebuilt from c36abbd with both intended edits, line-anchored.
+- Feedback from a standalone OCR run on a work repo (by the human, 2026-10-12): 6 of 7
+  candidates held, one cross-cutting defect our review had missed. The 2,000-character
+  brief cut the RFC by its tail, so Local decisions went first. `changed: OCR background
+  — title, Goal and Local decisions only; Scope is dropped, the diff OCR reviews already
+  shows it`. The brief here is 3,079 characters with it (4,093 before), so `changed:
+  ocr_background_chars = 4,000 — OCR only warns past 2,000; the decisions stay whole`.

@@ -124,9 +124,10 @@ ocr_exclude := "**/*.lock,**/*lock.yaml,**/*lock.json,.claude/**,.agents/**,.cur
 # Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
 # publishes partial results and exits 0).
 ocr_args    := ""
-# OCR's background is a brief of the RFC (title, Goal, Scope, Local decisions), not the
-# reviewer's full section: OCR warns past 2,000 characters and aborts past 8,000.
-ocr_background_chars := "2000"
+# OCR's background is a brief of the RFC (title, Goal, Local decisions — Scope is what
+# the diff already shows), not the reviewer's full section: OCR aborts past 8,000
+# characters. It warns past 2,000; 4,000 keeps a real RFC's decisions whole.
+ocr_background_chars := "4000"
 
 # A diff that does not fit the reviewer's context does not produce a smaller review: it
 # produces a review of an unknown subset that still returns a verdict — a `CLEAN` over

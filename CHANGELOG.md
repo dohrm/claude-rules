@@ -75,7 +75,7 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
   Both lists come from Open Code Review's defaults; its test exclusion was not taken.
 
 - **An optional OCR pass.** `just ocr=1 code-review` runs Open Code Review
-  (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first, with a 2,000-character brief of the RFC;
+  (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first, with a 4,000-character brief of the RFC (title, Goal, Local decisions);
   its findings reach the reviewer as candidates to confirm or drop, never as a verdict.
   It needs its own LLM provider and costs its tokens; a failed pass is declared and the
   review runs without it. Off by default.
