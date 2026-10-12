@@ -288,7 +288,9 @@ function emitKit(s, entry, agent, ctx) {
   if (ctx.kit.has(entry.from)) return null
   ctx.kit.add(entry.from)
   const dest = join(KIT_DIR, basename(entry.from))
-  for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
+  // A file entry (the CHANGELOG) lands AT dest, not inside a directory named after it.
+  if (s.isFile) { ensureDir(KIT_DIR); copyFileSync(join(s.dir, s.name), dest) }
+  else for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
 // Rules & agents for Claude. Verbatim, unless the profile is anchored to modules —

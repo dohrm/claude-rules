@@ -77,7 +77,7 @@ slash-command notation.
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |
 | Run a local monorepo | `devstack`; [setup and commands](kit/devstack/README.md) |
-| Equip an existing repo / migrate an installation | `/onboard` / `/migrate` |
+| Equip an existing repo / update or migrate an installation | `/onboard` / `/update` / `/migrate` |
 
 Use `/solution-exploration` to assess a problem and its options before reading
 the relevant ADRs; it then follows dependent decisions where needed. Use `/adr-review`

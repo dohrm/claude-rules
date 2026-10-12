@@ -48,6 +48,16 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Added
 
+- **`/update`, and the CHANGELOG ships with the install.** Every install now writes
+  this file to `.dev/kit/CHANGELOG.md`; after `update`, `git diff` on it is exactly
+  what changed since the repo last installed — no tag needed. `/update` (in
+  `product`) runs `update`, reads that diff, triages each entry (delivered by
+  `update`, hand merge, stricter gate) in `.work/update.md` and stops for a yes on
+  every stricter gate before merging and re-greening `just check`. `/migrate` stays
+  for an older harness (no `modules`, no imported just library).
+  **Get it:** `add product`, then `update` — the first `update` writes the baseline,
+  so this first time `/update` falls back to the kit diff.
+
 - **The review reads its RFC.** `code-review` and `review-with` put an `=== RFC ===`
   section before the diff: the local RFC without its history, or the ticket the
   implementing agent cached raw in `.work/<slug>/review-context.md` (gitignored) —

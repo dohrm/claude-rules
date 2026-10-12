@@ -136,7 +136,8 @@ test('reference profile catalogue lists every profile', () => {
 })
 
 test('kit entries that need wiring say so', () => {
-  for (const e of allEntries.filter(e => e.kind === 'kit')) {
+  // A file entry (the CHANGELOG) is read, not wired.
+  for (const e of allEntries.filter(e => e.kind === 'kit' && !statSync(join(REPO, e.from)).isFile())) {
     const files = walk(join(REPO, e.from))
     assert.ok(files.length, `${e.from}: empty kit directory`)
     assert.ok(e.wire, `${e.from}: kit is copied but never wired — add a "wire" note or make it a rule`)

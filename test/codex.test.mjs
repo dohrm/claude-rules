@@ -227,6 +227,7 @@ test('canonical ownership paths cannot escape their asset tree', () => withTmpRe
 
 test('source failure preserves installed files; source deletion removes only owned files', () => withTmpRepo(dir => withTmpRepo(source => {
   cpSync(join(REPO, 'rules'), join(source, 'rules'), { recursive: true })
+  cpSync(join(REPO, 'CHANGELOG.md'), join(source, 'CHANGELOG.md'))   // a shared entry
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
   put(dir, '.agents/rules/rust/custom.md', 'mine')
   const before = read(dir, '.claude-rules.lock')

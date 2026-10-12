@@ -28,13 +28,14 @@ test('experience contracts ship for all targets and the installed document gate 
   })
 })
 
-test('add rust --agent claude: rules only by default; common language is the only shared', () => {
+test('add rust --agent claude: rules only by default; common language and the CHANGELOG are the only shared', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
 
     assert.equal(read(dir, '.claude/rules/rust/code-style.md'), read(REPO, 'rules/rust/code-style.md'))
     assert.ok(has(dir, '.claude/rules/rust/utf8-safety.md'))
     assert.ok(has(dir, '.claude/rules/common/language.md'), 'shared common rules missing')
+    assert.equal(read(dir, '.dev/kit/CHANGELOG.md'), read(REPO, 'CHANGELOG.md'), '/update diffs this copy')
     assert.ok(!has(dir, '.claude/rules/agent/guardrails.md'), 'agent is a profile, not a gift')
     assert.ok(!has(dir, '.claude/agents/code-reviewer.md'))
     assert.ok(!has(dir, '.dev/kit/rust/deny.toml'), 'kit is --level gates')
@@ -100,7 +101,7 @@ test('retired --agent names fail loudly', () => {
 test('add product: skills land as <name>/SKILL.md directories', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
-    for (const name of ['prd', 'architect', 'rfc', 'pre-mortem', 'onboard', 'interview', 'migrate']) {
+    for (const name of ['prd', 'architect', 'rfc', 'pre-mortem', 'onboard', 'interview', 'migrate', 'update']) {
       assert.ok(has(dir, `.claude/skills/${name}/SKILL.md`), `skill ${name} not installed`)
     }
     assert.equal(read(dir, '.claude/skills/prd/SKILL.md'), read(REPO, 'skills/prd/SKILL.md'))

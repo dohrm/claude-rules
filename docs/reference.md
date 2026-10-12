@@ -57,7 +57,10 @@ Nothing forces you through all of it. A library repo installs `rust testing cicd
 and never runs a product skill; a greenfield product starts at `/interview`, and so
 does one new feature on a repo that already ships — `/onboard` wires an existing
 repo onto the workflow, it frames nothing. An existing install of an older harness
-is `/migrate` (gap table, then compose the lock and justfile) — not `/onboard`.
+is `/migrate` (gap table, then compose the lock and justfile) — not `/onboard`. A
+current install picks up a new release with `/update`: it runs `update`, diffs the
+installed `.dev/kit/CHANGELOG.md` for what is new, and stops on each hand merge or
+stricter gate for a yes.
 
 ### Frontend exploration and retained experiences
 
@@ -156,7 +159,7 @@ npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 npx github:dohrm/claude-rules add ts-tauri-app --root apps/desktop --level gates
 npx github:dohrm/claude-rules add agent testing cicd --level gates   # repo-wide; not on the language tree
 npx github:dohrm/claude-rules add ops --root deploy --level gates    # + k8s incident when they apply
-npx github:dohrm/claude-rules add product                            # /interview, /domain-modeling, /onboard, /migrate, /prd, /architect, …
+npx github:dohrm/claude-rules add product                            # /interview, /domain-modeling, /onboard, /update, /migrate, /prd, /architect, …
 
 npx github:dohrm/claude-rules list                     # available, installed, and aliases
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
@@ -384,7 +387,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 
 | | |
 |---|---|
-| `product` | `/interview` `/domain-modeling` `/onboard` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/rfc` `/pre-mortem` `/diagram` |
+| `product` | `/interview` `/domain-modeling` `/onboard` `/update` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/rfc` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
 | `investigate` `loop-setup` | `/investigate` `/loop-setup` |
 

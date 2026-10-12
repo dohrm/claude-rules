@@ -3,7 +3,8 @@
   "defaultRef": "main",
   "_comment": "Drives the npx installer. Each entry copies a source dir from the repo (at the pinned ref) into the consuming repo. 'kind' selects the per-agent emitter (skill|kit|rule|agent). 'to' is the Claude destination; other agents' destinations are derived from kind. 'wire: true' = one-time manual setup needed (the installer prints a note, never auto-merges build config).",
   "shared": [
-    { "from": "rules/common", "to": ".claude/rules/common", "kind": "rule" }
+    { "from": "rules/common", "to": ".claude/rules/common", "kind": "rule" },
+    { "from": "CHANGELOG.md", "to": ".dev/kit/CHANGELOG.md", "kind": "kit", "_note": "The installed copy is the baseline `/update` diffs: after `update`, `git diff -- .dev/kit/CHANGELOG.md` is exactly what changed since this repo last installed — no tag needed." }
   ],
   "retired": {
     "_comment": "Profiles and skills removed from the library. A lock that still names a retired profile is cleaned on read instead of rejected; retired skill directories are purged on install.",
@@ -118,6 +119,7 @@
       { "from": "skills/domain-modeling", "to": ".claude/skills/domain-modeling", "kind": "skill", "_note": "Ubiquitous-language glossary (`CONTEXT.md`) + on-the-spot `Proposed` ADR, run alongside /interview, /architect, /onboard rather than as a phase of its own. The passive read-CONTEXT.md habit is rules/product/vocabulary.md, always on." },
       { "from": "skills/onboard", "to": ".claude/skills/onboard", "kind": "skill", "_note": "Brownfield twin of /interview. Existing repo, no product workflow yet. Does not write ADRs or a PRD. Hands off .work/onboard.md + a CLAUDE.md scaffold. A stale claude-rules install is /migrate, not this." },
       { "from": "skills/migrate", "to": ".claude/skills/migrate", "kind": "skill", "_note": "Upgrade an existing claude-rules install: gap table in .work/migrate.md, then lock --root, imported just library, leftover-tree purge, CI callers. Not /onboard (no lock yet) and not /ci-setup (pipeline only)." },
+      { "from": "skills/update", "to": ".claude/skills/update", "kind": "skill", "_note": "Routine upgrade of a current install: run `update`, diff the installed .dev/kit/CHANGELOG.md for what is new, triage hand merges and stricter gates in .work/update.md, stop for a yes. An old harness goes to /migrate." },
       { "from": "skills/prd", "to": ".claude/skills/prd", "kind": "skill" },
       { "from": "skills/architect", "to": ".claude/skills/architect", "kind": "skill" },
       { "from": "skills/solution-exploration", "to": ".claude/skills/solution-exploration", "kind": "skill" },
