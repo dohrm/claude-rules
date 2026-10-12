@@ -222,6 +222,48 @@ test('the prompt lists every changed file but omits generated/vendored/locked bo
   })
 })
 
+test('credential files and build outputs never reach the reviewer, even with review_exclude overridden',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  // OCR's guard, adopted: a committed `.env` used to go to the model whole.
+  for (const override of ['', 'review_exclude := ""\n']) {
+    withReviewRepo(BASE_PREV + override + COPY_STUB, (dir, just) => {
+      const withheld = {
+        '.env': 'SECRET_ENV', 'apps/api/.ENV.production': 'SECRET_PROD', '.env.example': 'TEMPLATE_BODY',
+        'deploy/.ssh/config': 'SECRET_SSH', 'keys/id_ed25519': 'SECRET_KEY', '.npmrc': 'SECRET_NPM',
+      }
+      const build = {
+        'web/node_modules/x/i.js': 'BUILD_NM', 'web/dist/b.js': 'BUILD_DIST', 'api/target/t.rs': 'BUILD_TARGET',
+        'web/a.min.js': 'BUILD_MIN', 'api/x.pb.go': 'BUILD_PB', 'web/__snapshots__/a.snap': 'BUILD_SNAP',
+      }
+      for (const [f, body] of Object.entries({ ...withheld, ...build })) write(dir, f, `${body}\n`)
+      write(dir, 'src/kept.rs', 'KEPT_SOURCE\n')
+      write(dir, 'src/kept.test.ts', 'KEPT_TEST\n')
+      commitAll(dir)
+
+      assert.equal(just('review-with', 'claude', '').status, 0)
+      const prompt = readFileSync(join(dir, '.work/adhoc-prompt.md'), 'utf8')
+      for (const body of Object.values(withheld))
+        assert.ok(!prompt.includes(body), `${body} must never reach the model (override: ${JSON.stringify(override)})`)
+      if (!override) for (const body of Object.values(build)) assert.ok(!prompt.includes(body), body)
+      assert.ok(prompt.includes('KEPT_SOURCE') && prompt.includes('KEPT_TEST'), 'source and tests are reviewed')
+      assert.ok(prompt.includes('keys/id_ed25519'), 'the name stays in the inventory')
+    })
+  }
+})
+
+test('a withheld credential file is not expected under Files reviewed',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    write(dir, '.env', 'SECRET\n')
+    write(dir, 'first.rs', 'fn a() {}\n')
+    commitAll(dir)
+    assert.equal(just('code-review', 'claude').status, 0)
+    const listed = readFileSync(join(dir, '.work/review-files.txt'), 'utf8').split('\0')
+    assert.ok(listed.includes('first.rs') && !listed.includes('.env'), listed.join(','))
+  })
+})
+
 test('an oversized prompt fails before dispatch instead of truncating the review',
   { skip: JUST.error ? 'just not installed' : false }, () => {
   // Truncation would not shrink the review, it would review an unknown subset and
@@ -355,6 +397,9 @@ test('a report that skips a file is not promoted: the previous one stands, the m
     assert.match(r.stderr, /Files reviewed does not name second\.rs/)
     assert.equal(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), 'PREVIOUS_REPORT\n')
     assert.ok(!existsSync(join(dir, MARKER)), 'nothing was cleared')
+    // Its verdict is not trusted, its findings are: they are kept, and said to be.
+    assert.match(readFileSync(join(dir, '.work/review-incomplete.md'), 'utf8'), /### Files reviewed\n\nfirst\.rs/)
+    assert.match(r.stderr, /review-incomplete\.md/)
   })
 })
 

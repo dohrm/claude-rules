@@ -98,13 +98,26 @@ marker lands next to its RFC; else the branch name (`work-slug.mjs`). Both files
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
 
+## What the reviewer never sees
+
+`review_exclude` drops what a human reviewer skips too — lockfiles, the installed
+agent-rules tree, `.work/`, build outputs, vendored dependencies, generated code — and
+the reviewer is told each omission is deliberate (the `--stat` inventory stays whole).
+`review_secrets` withholds credential files (`.env*`, `.ssh/`, `id_*`, `.netrc`, `.npmrc`,
+`.pypirc`, `.dockercfg`) from the model whatever `review_exclude` says: override it only
+to add. Every `.env.*` is withheld, templates included — a git pathspec cannot re-include
+`.env.example` once `.env.*` matched it. Both lists come from Open Code Review's defaults;
+its default exclusion of tests was not taken, on purpose.
+
 ## The review proves what it read
 
 The report names every file of the diff under `### Files reviewed`, and each finding
 points at a `path:line` (or `path:start-end`) as of the commit under review.
 `code-review` checks both on the temp report before promoting it (`review-guard.mjs
 --expect-files .work/review-files.txt`): an incomplete report is not promoted — the
-previous one stands, the marker stays, the recipe fails — unless it still blocks (a
+previous one stands, the marker stays, the recipe fails, and the report is kept as
+`.work/review-incomplete.md`, because its findings are real even when its verdict is
+not trusted — unless it still blocks (a
 `CRITICAL`, or markers nobody can read: a truncated report), which is promoted anyway,
 so that it still blocks the push. The check is a
 floor, not a reading: it proves a file was named and a line exists, not that either was

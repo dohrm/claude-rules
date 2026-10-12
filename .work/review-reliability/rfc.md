@@ -4,7 +4,7 @@
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
-- **Branch**: rfc/review-reliability-4b
+- **Branch**: rfc/review-reliability-5
 - **Stopping condition**: `npm test` green on the last phase's branch, and the pilot hold
   (Phase 4) checked on temper-altern
 - **Serves**: —
@@ -174,15 +174,16 @@ consuming repo running Tier 3, first piloted on temper-altern.
 
 ## Blocked on the human
 
-- Phase 4's hold: merge the phase 4 PR into `next`, update temper-altern's kit from
-  `next` (`claude-rules update`), let `/rfc implement` resume #19 so it caches
-  `.work/19-deliver-composition/review-context.md`, then run `just code-review` and
-  `just ocr=1 code-review` on `rfc/19-deliver-composition` (OCR needs its
-  provider once: `ocr config provider` with the global install). Check: the cache holds
-  issue #19's body; the prompt (`.work/prompt.md`) carries it under `=== RFC ===`; the
-  report has `### Files reviewed` naming every diff file; the marker lands in
-  `.work/19-deliver-composition/`; with `ocr=1`, an `=== OCR CANDIDATES ===` section (or
-  a declared "not run"). Then `/rfc implement review-reliability` to close the RFC.
+- Phase 4's hold, OCR leg only (the rest passed, see `## Log`): merge #28, `claude-rules
+  update` in temper-altern, then a full `just incremental=0 ocr=1 code-review` on
+  `rfc/19-deliver-composition`. Check: `=== OCR CANDIDATES ===` in `.work/prompt.md`
+  (or a declared "not run" with its reason), the report's `OCR:` line, coverage. The
+  2026-10-11 run (local Qwen 3.6 35B-A3B) was still going after 9 min — the brief passed
+  OCR's size check. Then `/rfc implement review-reliability` to close the RFC.
+- Open offers, the human's call: `--audience human` so `.work/ocr.log` shows progress;
+  a README note for local models (`--concurrency 1`, `--max-tokens` under the server's
+  window, `--timeout`); OCR's `summary.total_tokens` in the section, to measure cost per
+  run before wiring a paid API (`--max-tokens-budget` via `ocr_args` caps it).
 
 ## Revisions
 
@@ -275,3 +276,26 @@ consuming repo running Tier 3, first piloted on temper-altern.
     decisions), capped at `ocr_background_chars` = 2,000 (OCR warns past 2,000, aborts
     past 8,000); the reviewer keeps the full section`. The phase 4 review had read the
     1 MB file cap as the only limit.
+- Feedback from the session implementing temper #19 (forwarded by the human): the full
+  pass found three real defects no earlier review had (a send race ending both programs,
+  an OIDC discovery error pointing at the wrong place, a stale E2E message) — the RFC
+  context was used (holds, local decisions, comments). Two kit issues: (1) OCR aborted on
+  the 27.5 KB ticket — already fixed by #27; the reviewer wrote `OCR: not run` without
+  the reason. (2) The coverage check rejected that very pass (15 files missing) and the
+  recipe dropped it silently into `.work/review.tmp`. `changed: an incomplete report is
+  kept as `.work/review-incomplete.md` and the failure says its findings stand — only
+  its verdict is not promoted`; the contract asks to build `Files reviewed` from the
+  `diff --git` headers before the Verdict, and `OCR: not run — <reason>`. Relaxing the
+  check for tests/ADRs left to the human (a policy call). Phase 5 PR to `next`.
+- OCR guards, asked by the human (2026-10-12): adopted its file filters — credential
+  files withheld by a separate `review_secrets` (survives a `review_exclude` override),
+  build outputs / vendored / generated code added to `review_exclude`; contract: a
+  committed private key is 🔴, another credential file a 🟡. `changed: every `.env.*` is
+  withheld, templates included — a pathspec cannot re-include`. Not taken: OCR's test
+  exclusion (precision over recall, the opposite of ours); its per-language rule docs
+  (1.6–2.7k tokens per language, applied by OCR itself when `ocr=1`) — case by case,
+  for what improves code generation, measured.
+- `rfc.md` blew up to 251,377 lines in 23adf0d: a script replaced the slice between
+  `## Blocked on the human` and the first `## Revisions` — which was a mention inside
+  Local decisions, so the slice was empty and `str.replace('', …)` inserted the block
+  between every character. Rebuilt from c36abbd with both intended edits, line-anchored.
