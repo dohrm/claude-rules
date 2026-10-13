@@ -383,6 +383,14 @@ function assertFiles(e) {
   if (bad.length) throw new Error(`${LOCK} installed: ${e.kind} ${e.from} records ${bad.join(', ')} — an inventoried file must be a sha256 under ${OWNED_ROOTS.join(', ')}`)
 }
 
+// A skill is one unit, so a skill directory this run empties must hold nothing else
+// either: the recorded skill destinations that hold a file of `deletes`.
+function emptiedSkills(records, deletes) {
+  const gone = [...deletes]
+  return [...new Set(records.filter(e => e.kind === 'skill').flatMap(e => KNOWN_AGENTS.flatMap(a => destsFor(e, a))))]
+    .filter(d => gone.some(f => f.startsWith(d + '/')))
+}
+
 // Filesystem targets that add() created for (entry, agent) — mirror of the emitters.
 function destsFor(entry, agent) {
   const name = basename(entry.from)
@@ -520,7 +528,7 @@ function remove(profilesArg) {
   // Delete exactly the files the removed records hold that no kept record still does.
   const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
   const plan = { writes, deletes: [...new Set([...lock.installed.filter(i => !isKept(i)).flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
-  plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: [] }))
+  plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: emptiedSkills(lock.installed, plan.deletes) }))
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
@@ -792,7 +800,8 @@ async function install(profiles, fetched, agents, modules, levels) {
       // A skill is one unit: its directory holds nothing else. An adopted destination
       // is overwritten whole, so whatever this run does not write in it goes.
       dirs: adopted.length ? adopted
-        : [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
+        : [...new Set([...staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))),
+          ...emptiedSkills(previous?.installed || [], plan.deletes)])],
     })
     // The agents root also holds the repo's own agents, and an unhashed lock cannot
     // tell them from one of ours dropped upstream: adoption never decides that alone,

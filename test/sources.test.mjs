@@ -771,3 +771,32 @@ test('two entries that install the same source path to different destinations ar
     assert.ok(!has(repo, '.claude/rules/team-rust'))
   })
 })
+
+// A skill is one unit: a directory the install empties must hold nothing it did not
+// write, whether the skill is excluded, dropped or removed.
+test('a foreign file in a skill that an exclude or a remove empties is refused; --force removes it', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ exclude: ['skills/team'] }) })
+    const coreOnly = [{ name: 'core', url: core.url, ref: 'main' }]
+    const repo = consumer(root, coreOnly, ['rust', 'team'])
+    ok(cli(['update'], repo))
+    writeFileSync(join(repo, '.claude/skills/team/custom.md'), 'mine\n')
+
+    for (const args of [['remove', 'team'], ['update']]) {
+      if (args[0] === 'update') {
+        const lock = lockOf(repo)
+        lock.sources = [...coreOnly, { name: 'team', url: team.url, ref: 'main' }]
+        writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+      }
+      const before = read(repo, LOCK)
+      const r = cli(args, repo)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.match(r.stderr, /\.claude\/skills\/team\/custom\.md — not written by claude-rules, inside an installed directory/)
+      assert.equal(read(repo, LOCK), before, `${args[0]}: lock unchanged`)
+      assert.ok(has(repo, '.claude/skills/team/SKILL.md'), `${args[0]}: tree unchanged`)
+    }
+    ok(cli(['update', '--force'], repo))
+    assert.ok(!has(repo, '.claude/skills/team'), '--force removes the listed file with the skill')
+  })
+})
