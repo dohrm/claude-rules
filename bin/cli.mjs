@@ -16,7 +16,7 @@
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs'
 import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
@@ -154,7 +154,6 @@ const KIT_DIR = '.dev/kit'
 const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put it
 
 // ------------------------------------------------------------------ fs utils
-const ensureDir = d => mkdirSync(d, { recursive: true })
 const logCopy = (from, to) => console.log(`  ✓ ${from}  →  ${to}`)
 
 // ------------------------------------------------------- frontmatter (dep-free)
@@ -274,12 +273,18 @@ const stagedFiles = s => s.isFile ? [{ abs: join(s.dir, s.name), rel: s.name }] 
 const mdFiles = s => stagedFiles(s).filter(f => f.rel.endsWith('.md'))
 
 // -------------------------------------------------------------------- emitters
-// Signature: (staged, entry, agent, ctx) => note | null
+// Signature: (staged, entry, agent, ctx) => note | null. An emitter writes nothing:
+// it puts every file it produces into the run's plan, under the entry it came from.
+const entryKey = e => `${e.kind}:${e.from}`
+function put(ctx, path, content) {
+  ctx.out.set(path, content)
+  ctx.byEntry.set(ctx.key, [...(ctx.byEntry.get(ctx.key) || []), path])
+}
 function emitSkill(s, entry, agent, ctx) {
   const dest = join(SKILL_DIR[agent], basename(entry.from))
   if (ctx.skills.has(dest)) return null
   ctx.skills.add(dest)
-  for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
+  for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs))
   logCopy(entry.from, dest); return null
 }
 function emitKit(s, entry, agent, ctx) {
@@ -289,22 +294,22 @@ function emitKit(s, entry, agent, ctx) {
   ctx.kit.add(entry.from)
   const dest = join(KIT_DIR, basename(entry.from))
   // A file entry (the CHANGELOG) lands AT dest, not inside a directory named after it.
-  if (s.isFile) { ensureDir(KIT_DIR); copyFileSync(join(s.dir, s.name), dest) }
-  else for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
+  if (s.isFile) put(ctx, dest, readFileSync(join(s.dir, s.name)))
+  else for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs))
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
 // Rules & agents for Claude. Verbatim, unless the profile is anchored to modules —
 // then only the `paths:` list is rewritten. Agents carry no `paths:` and are untouched.
 function emitClaudeRaw(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
-  if (entry.kind === 'rule' && !s.isFile) resetDir(entry.to)
+  if (entry.kind === 'rule' && !s.isFile) ctx.resets.push(entry.to)
   let n = 0
   for (const f of stagedFiles(s)) {
     const text = f.rel.endsWith('.md') ? readFileSync(f.abs, 'utf8') : null
     if (entry.kind === 'rule' && text && isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
-    const t = s.isFile ? entry.to : join(entry.to, f.rel); ensureDir(dirname(t))
+    const t = s.isFile ? entry.to : join(entry.to, f.rel)
     const scoped = entry.kind === 'rule' && text ? toScopedRuleText(text, prefixes) : null
-    if (scoped) writeFileSync(t, scoped); else copyFileSync(f.abs, t)
+    put(ctx, t, scoped ? Buffer.from(scoped) : readFileSync(f.abs))
     n++
   }
   logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
@@ -313,12 +318,12 @@ function emitClaudeRaw(s, entry, agent, ctx) {
 function emitCursorRule(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
   const root = '.cursor/rules'
-  if (!s.isFile) resetDir(join(root, basename(entry.from)))
+  if (!s.isFile) ctx.resets.push(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8')
     if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
     const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, '.mdc')
-    const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(text, prefixes))
+    put(ctx, join(root, rel), Buffer.from(toMdcText(text, prefixes)))
   }
   logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
 }
@@ -643,7 +648,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles } }
+  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), byEntry: new Map(), resets: [], key: null }
   const notes = []
   const staged = []
   let tree = null
@@ -657,7 +662,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     // deletes it recursively — either way the other entry's files go with it.
     const destOwner = new Map()
     for (const { e } of owned) for (const a of agents) for (const d of destsFor(e, a)) {
-      const key = `${e.kind}:${e.from}`
+      const key = entryKey(e)
       if (destOwner.has(d) && destOwner.get(d) !== key) throw new Error(`registry: ${destOwner.get(d)} and ${key} both install to ${d}`)
       destOwner.set(d, key)
     }
@@ -703,6 +708,7 @@ async function install(profiles, fetched, agents, modules, levels) {
           if (e.kind === 'rule') content = Buffer.from(toScopedRuleText(content.toString(), prefixes) || content)
           const path = join('.agents', e.kind === 'rule' ? 'rules' : 'skills', ...(s.isFile ? [] : [basename(e.from)]), f.rel)
           files[path] = { content, profiles: owners, kind: e.kind }
+          put({ ...ctx, key: entryKey(e) }, path, content)
           if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
         }
       }
@@ -731,6 +737,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     }
     for (const { e: entry, s } of staged) {
       ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
+      ctx.key = entryKey(entry)
       for (const agent of agents) {
         // Shared skills are written once by the ownership-aware Codex adapter.
         if (codex && agent === 'cursor' && entry.kind === 'skill') continue
@@ -738,12 +745,16 @@ async function install(profiles, fetched, agents, modules, levels) {
         if (note) notes.push(note)
       }
     }
+    for (const dir of ctx.resets) resetDir(dir)
+    for (const [path, content] of ctx.out) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
     if (codex) applyCodex(codex)
     for (const dest of stale)
       if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
+    for (const record of installed)
+      record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })

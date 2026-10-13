@@ -238,7 +238,9 @@ test('remove deletes from the inventory: a source that redefines a known profile
     assert.ok(has(repo, '.claude/rules/team-rust/code-style.md'))
     assert.ok(has(repo, '.claude/rules/go'))
     const inv = lockOf(repo).installed
-    assert.deepEqual(inv.find(i => i.from === 'rules/rust'), { source: 'core', kind: 'rule', from: 'rules/rust', to: '.claude/rules/team-rust', profile: 'rust' })
+    const { files, ...record } = inv.find(i => i.from === 'rules/rust')
+    assert.deepEqual(record, { source: 'core', kind: 'rule', from: 'rules/rust', to: '.claude/rules/team-rust', profile: 'rust' })
+    assert.ok(Object.keys(files).length && Object.keys(files).every(p => p.startsWith('.claude/rules/team-rust/')), 'its files, where the source put them')
     assert.ok(inv.some(i => i.profile === null && i.from === 'rules/common'), 'shared entries are inventoried with profile null')
     // The bundled destination holds something this install never wrote.
     mkdirSync(join(repo, '.claude/rules/rust'), { recursive: true })
