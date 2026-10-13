@@ -470,7 +470,11 @@ function stageTree(layers, entries) {
         found = true
       }
       if (!found && !gone.size) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
-      for (const rel of gone) if (!existsSync(rel ? join(dest, rel) : dest)) excluded.push({ from, rel })
+      // Emptied by its excludes, an entry is excluded whole: nothing to install, nothing to inventory.
+      if (gone.size && existsSync(dest) && statSync(dest).isDirectory() && !walk(dest).length) {
+        rmSync(dest, { recursive: true, force: true })
+        excluded.push({ from, rel: '' })
+      } else for (const rel of gone) if (!existsSync(rel ? join(dest, rel) : dest)) excluded.push({ from, rel })
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
   return { tree, excluded }

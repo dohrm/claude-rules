@@ -860,3 +860,27 @@ test('an installing registry with no aliases records {}, so the bundled ones nev
     assert.deepEqual(lockOf(repo).profiles, ['rust'])
   })
 })
+
+// An entry whose every file is excluded is not installed at all: no empty record in the
+// inventory for doctor to find missing.
+test('excluding the only file of a rule directory uninstalls the entry, and doctor stays green', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles['team-only'] = [{ from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'rules/team-only/house.md': '# House rule\n' })
+    const team = makeSource(root, 'team', [], { 'registry.json': '{}\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust', 'team-only'], ['claude', 'cursor'])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/team-only/house.md') && has(repo, '.cursor/rules/team-only/house.mdc'))
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['rules/team-only/house.md'] }) + '\n' })
+    for (let run = 0; run < 2; run++) {
+      ok(cli(['update'], repo))
+      assert.ok(!has(repo, '.claude/rules/team-only') && !has(repo, '.cursor/rules/team-only'), `run ${run}`)
+      assert.ok(!lockOf(repo).installed.some(i => i.from === 'rules/team-only'), `run ${run}: out of the inventory`)
+    }
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })
+    assert.doesNotMatch(cli(['doctor'], repo).stdout, /missing on disk/)
+  })
+})
