@@ -481,6 +481,7 @@ merge. `kit/common/hooks/README.md` says so at length; do not sell more.
 ```
 claude-rules/
 ├── registry.json    # drives the installer: profile → source dirs → destinations
+├── justfile         # self-host: imports kit/common/gate.just in place (.claude/ and .agents/ are symlinks)
 ├── bin/cli.mjs      # the npx installer (giget-based; dumb by design, data-driven)
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat portal-http tauri api backend react) · delivery & run (testing
@@ -495,7 +496,14 @@ claude-rules/
 
 ## Verifying the factory itself
 
+This repository is **self-hosted**: it runs the skills, rules and gates it edits, with
+no install. `.claude/skills`, `.agents/skills`, `.claude/agents` and
+`.claude/rules/{agent,product}` are committed relative symlinks to the canonical
+directories (macOS and Linux), and the root `justfile` imports `kit/common/gate.just`
+in place. `test/self-host.test.mjs` fails when a link breaks.
+
 ```bash
+just check              # npm test + adr-check + docs-check, through the kit being edited
 npm test                # installer black-box + asset-tree + prose lint + the kit's doc gates + the eval harness
 node eval/run.mjs       # rot detector for the agents AND the skills — spends tokens, run on a model bump
 node eval/run.mjs --runner cursor            # …or claude
