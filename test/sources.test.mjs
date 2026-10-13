@@ -553,7 +553,7 @@ test('exclude: an excluded core rule and skill disappear on update, for Claude a
 })
 
 // Agent and kit directories are not reset on emit (the kit is "copy and own"), so a
-// file excluded inside one is deleted by name — and only that file.
+// file excluded inside one is deleted by name, from the inventory — and only that file.
 test('exclude: a file inside an agent directory is deleted by name', () => {
   withTmpRepo(root => {
     const reg = JSON.parse(read(REPO, 'registry.json'))
@@ -744,5 +744,33 @@ test('an overlay that un-retires a core-retired skill keeps it installed', () =>
     writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
     ok(cli(['update'], repo))
     assert.ok(has(repo, '.claude/skills/team/SKILL.md'), 'the later retired.skills replaces the earlier one')
+  })
+})
+
+// Agent and kit directories are not reset on emit, so the inventory records the files
+// it wrote inside them: one no layer supplies any more is pruned by name, and a file
+// the repo added there is never touched.
+test('remove --source prunes the files it supplied inside core\'s agent and kit directories', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents', to: '.claude/agents', kind: 'agent' }]
+    const core = makeSource(root, 'core', [...CORE_PATHS, 'agents'], { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const team = makeSource(root, 'team', [], { 'agents/team.md': '# team agent\n', 'kit/rust/team.sh': 'echo team\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeFileSync(join(repo, LOCK), JSON.stringify({ sources: [{ name: 'core', url: core.url, ref: 'main' }], profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }, null, 2) + '\n')
+    ok(cli(['update'], repo))
+    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+    assert.ok(has(repo, '.claude/agents/team.md') && has(repo, '.dev/kit/rust/team.sh'))
+    writeFileSync(join(repo, '.claude/agents/mine.md'), 'ours\n')
+    writeFileSync(join(repo, '.dev/kit/rust/mine.sh'), 'ours\n')
+
+    const r = ok(cli(['remove', '--source', 'team'], repo))
+    assert.match(r.stdout, /✗ \.claude\/agents\/team\.md {2}\(no longer installed\)/)
+    assert.ok(!has(repo, '.claude/agents/team.md'), 'the overlay agent is gone')
+    assert.ok(!has(repo, '.dev/kit/rust/team.sh'), 'the overlay kit file is gone')
+    assert.ok(has(repo, '.claude/agents/code-reviewer.md') && has(repo, '.dev/kit/rust/rust.just'), 'core files stay')
+    assert.equal(read(repo, '.claude/agents/mine.md'), 'ours\n')
+    assert.equal(read(repo, '.dev/kit/rust/mine.sh'), 'ours\n')
   })
 })

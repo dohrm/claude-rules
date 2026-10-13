@@ -553,6 +553,8 @@ const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside th
 // agent, and update the lock. Symmetric with the EMITTERS/destination logic.
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
+// Agent and kit directories are not reset on emit: the inventory lists the files written there.
+const ownsFiles = e => (e.kind === 'agent' || e.kind === 'kit') && !isFileFrom(e.from)
 
 // Every destination is derived from an entry, and both its sources are now content
 // this CLI did not ship: a fetched registry, and the lock's inventory. An entry may
@@ -752,7 +754,10 @@ function readLock({ known = true } = {}) {
   if (lock.aliases !== undefined && !isListMap(lock.aliases)) throw new Error(`${LOCK}: "aliases" must map names to lists of profiles`)
   if (lock.installed !== undefined) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
-    for (const e of lock.installed) assertEntry(e, `${LOCK} installed`)
+    for (const e of lock.installed) {
+      assertEntry(e, `${LOCK} installed`)
+      if (e.files !== undefined && !(isList(e.files) && e.files.every(plainPath))) throw new Error(`${LOCK} installed: ${e.from}: "files" must be a list of relative paths`)
+    }
   }
   delete lock.repo
   delete lock.ref
@@ -904,15 +909,12 @@ async function install(profiles, layers, agents, modules, levels) {
     const stagedTree = stageTree(layers, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
     tree = stagedTree.tree
     // An entry excluded whole is not installed: dropped here, its old copy is stale.
-    // A path excluded inside one goes with the re-emit, which resets rule directories;
-    // agent and kit directories are not reset, so their copy is deleted by name below.
+    // A path excluded inside one goes with the re-emit (rule and skill directories are
+    // reset) or with the file-level cleanup below (agent and kit directories).
     for (const { from, rel } of stagedTree.excluded) console.log(`  − ${rel ? `${from}/${rel}` : from}  (excluded)`)
     owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
-    const excludedInside = stagedTree.excluded.filter(x => x.rel).flatMap(({ from, rel }) => owned
-      .filter(({ e }) => e.from === from && (e.kind === 'agent' || e.kind === 'kit'))
-      .flatMap(({ e }) => agents.flatMap(a => destsFor(e, a)).map(d => join(d, rel))))
-    for (const dest of excludedInside) safePath(dest)
-    installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
+    installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile,
+      ...(ownsFiles(e) ? { files: stagedFiles(makeStaged(tree, e)).map(f => f.rel).sort() } : {}) }))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
@@ -970,6 +972,17 @@ async function install(profiles, layers, agents, modules, levels) {
       const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))
       if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
     }
+    // Agent and kit directories are never reset, so a file the previous install wrote in
+    // one that is still installed, and that no layer supplies now (an overlay removed, a
+    // path excluded, a file dropped upstream), is pruned by name. The repo's own files
+    // there were never recorded, so they are never touched.
+    const staleFiles = [...new Set((previous?.installed || []).filter(r => ownsFiles(r) && Array.isArray(r.files)).flatMap(r => {
+      const now = installed.find(i => i.kind === r.kind && i.from === r.from)
+      if (!now) return []
+      return r.files.filter(f => !now.files.includes(f))
+        .flatMap(f => agentsFromLock(previous).kept.flatMap(a => destsFor(r, a)).filter(d => fresh.has(d)).map(d => join(d, f)))
+    }))]
+    for (const dest of staleFiles) safePath(dest)
     if (previous && !Array.isArray(previous.installed)) legacyStaleHint(previous, fresh)
     for (const dest of stale) {
       safePath(dest)
@@ -987,8 +1000,8 @@ async function install(profiles, layers, agents, modules, levels) {
     if (codex) applyCodex(codex)
     for (const dest of stale)
       if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
-    for (const dest of new Set(excludedInside))
-      if (existsSync(dest)) { safePath(dest); rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (excluded)`) }
+    for (const dest of staleFiles)
+      if (existsSync(dest)) { rmSync(dest, { force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
