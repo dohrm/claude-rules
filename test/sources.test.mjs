@@ -984,3 +984,28 @@ test('an overlay skill changes an internal file into a directory and back, for C
     for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference'), 'a file in core\n', dir)
   })
 })
+
+// Profile removal, like every cleanup, deletes the files we wrote in an agent or kit
+// directory and never one the repo added there.
+test('remove and remove all keep the repo\'s own file in an agent directory', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents/team', to: '.claude/agents/team', kind: 'agent' }]
+    reg.profiles.go = [...reg.profiles.go, { from: 'agents/go', to: '.claude/agents/go', kind: 'agent' }]
+    const core = makeSource(root, 'core', [...CORE_PATHS, ...registry.profiles.go.map(e => e.from)], {
+      'registry.json': JSON.stringify(reg, null, 2) + '\n', 'agents/team/sub/one.md': '# one\n', 'agents/go/g.md': '# go\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust', 'go'])
+    ok(cli(['update'], repo))
+    writeFileSync(join(repo, '.claude/agents/team/mine.md'), 'ours\n')
+    writeFileSync(join(repo, '.claude/agents/go/mine.md'), 'ours too\n')
+    ok(cli(['remove', 'rust'], repo))
+    assert.ok(!has(repo, '.claude/agents/team/sub'), 'ours is gone, and the directory it emptied')
+    assert.equal(read(repo, '.claude/agents/team/mine.md'), 'ours\n')
+    assert.equal(read(repo, '.claude/agents/go/g.md'), '# go\n', 'the remaining profile keeps its files')
+    ok(cli(['remove', 'all'], repo))
+    assert.ok(!has(repo, '.claude/agents/go/g.md'))
+    assert.equal(read(repo, '.claude/agents/go/mine.md'), 'ours too\n')
+  })
+})

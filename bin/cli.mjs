@@ -570,6 +570,11 @@ const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
 // Agent and kit directories are not reset on emit: the inventory lists the files written there.
 const ownsFiles = e => (e.kind === 'agent' || e.kind === 'kit') && !isFileFrom(e.from)
+// After a file of ours is deleted: the directories it emptied go too, from `dir` up to
+// `root` included, stopping at a destination still installed (`keep`) or a non-empty one.
+function pruneEmpty(dir, root, keep) {
+  for (; under(dir, root) && !keep.has(dir) && existsSync(dir) && !readdirSync(dir).length; dir = dirname(dir)) rmSync(dir, { recursive: true })
+}
 
 // Every destination is derived from an entry, and both its sources are now content
 // this CLI did not ship: a fetched registry, and the lock's inventory. An entry may
@@ -711,16 +716,28 @@ function remove(profilesArg) {
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
+  // Agent and kit directories hold the repo's files too: only the inventoried ones go.
+  const keptFiles = new Set(keptInstalled.filter(ownsFiles).flatMap(e => agents.flatMap(a => destsFor(e, a)).flatMap(d => (e.files || []).map(f => join(d, f)))))
+  const unlisted = []
   let removedKit = false
   for (const entry of entries) {
     if (entry.kind === 'kit') removedKit = true
     for (const agent of agents) {
       for (const dest of destsFor(entry, agent)) {
-        if (skipped(entry, agent, dest)) continue
-        if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
+        if (skipped(entry, agent, dest) || !existsSync(dest)) continue
+        if (!ownsFiles(entry)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`); continue }
+        if (!Array.isArray(entry.files)) { unlisted.push(dest); continue }
+        for (const f of entry.files) {
+          const path = join(dest, f)
+          if (keptFiles.has(path) || !existsSync(path) || !lstatSync(path).isFile()) continue
+          rmSync(path)
+          console.log(`  ✗ ${path}`)
+          pruneEmpty(dirname(path), dest, stillNeeded)
+        }
       }
     }
   }
+  if (unlisted.length) console.log(`  • kept ${unlisted.join(', ')}: the lock lists no files for ${unlisted.length > 1 ? 'them' : 'it'}, so ours cannot be told from yours — delete what you no longer want.`)
   if (codex) applyCodex(codex)
   if (fullUninstall) {
     purgeRetired()
@@ -1064,8 +1081,7 @@ async function install(profiles, layers, agents, modules, levels) {
       if (!existsSync(dest) || !lstatSync(dest).isFile()) continue
       rmSync(dest)
       console.log(`  ✗ ${dest}  (no longer installed)`)
-      // Directories the cleanup emptied go too, up to a destination still installed.
-      for (let dir = dirname(dest); under(dir, root) && !fresh.has(dir) && existsSync(dir) && !readdirSync(dir).length; dir = dirname(dir)) rmSync(dir, { recursive: true })
+      pruneEmpty(dirname(dest), root, fresh)
     }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
