@@ -749,3 +749,25 @@ test('an entry no layer holds is refused, even when an exclude names a path insi
     assert.equal(read(repo, LOCK), before)
   })
 })
+
+// One source path, one installed copy: the inventory records files per `kind:from`, so
+// two entries installing the same path to two places would share one record (ADR-0010:
+// refused, not reconciled).
+test('two entries that install the same source path to different destinations are refused', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({
+      profiles: { 'team-rust': [{ from: 'rules/rust', to: '.claude/rules/team-rust', kind: 'rule' }] },
+    }) })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    const before = read(repo, LOCK)
+    const r = cli(['add', 'team-rust'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /registry: rule:rules\/rust installs to \.claude\/rules\/rust and to \.claude\/rules\/team-rust: one source path installs once/)
+    assert.equal(read(repo, LOCK), before)
+    assert.ok(!has(repo, '.claude/rules/team-rust'))
+  })
+})

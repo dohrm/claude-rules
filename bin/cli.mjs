@@ -713,6 +713,15 @@ async function install(profiles, fetched, agents, modules, levels) {
     assertRetiredSkills()
     // Two entries must not share or nest destinations: each installed path belongs to
     // one entry, so that entry's record alone says who wrote it.
+    // And one entry's files are recorded under its `kind:from`, so a source path that two
+    // entries install to two places is refused: neither record could say which copy it owns.
+    const destsOf = new Map()
+    for (const { e } of owned) {
+      const key = entryKey(e), dests = agents.flatMap(a => destsFor(e, a)).join(', ')
+      if (destsOf.has(key) && destsOf.get(key) !== dests)
+        throw new Error(`registry: ${key} installs to ${destsOf.get(key)} and to ${dests}: one source path installs once`)
+      destsOf.set(key, dests)
+    }
     const destOwner = new Map()
     for (const { e } of owned) for (const a of agents) for (const d of destsFor(e, a)) {
       const key = entryKey(e)
