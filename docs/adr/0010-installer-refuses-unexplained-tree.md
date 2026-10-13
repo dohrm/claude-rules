@@ -1,6 +1,6 @@
 # ADR-0010: The installer writes only over what it owns, and refuses a tree it cannot explain
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-13
 
 ## Context
