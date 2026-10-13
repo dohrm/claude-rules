@@ -699,3 +699,27 @@ test('doctor audits the inventory offline: an overlay-only profile passes, an ed
     assert.match(r.stdout, /\.claude\/rules\/team\/a\.md — installed by "team", missing on disk/)
   })
 })
+
+test('the lock records the merged aliases: an offline remove unpacks one only an overlay defined', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({
+        profiles: { 'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }] },
+        aliases: { 'team-all': ['team', 'team-extra'] },
+      }),
+      'rules/team-extra/x.md': '# extra\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust'])
+    ok(cli(['add', 'team-all'], repo))
+    assert.deepEqual(lockOf(repo).aliases['team-all'], ['team', 'team-extra'])
+    assert.ok(!registry.aliases['team-all'], 'the bundled registry must not know it')
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })
+
+    const r = ok(cli(['remove', 'team-all'], repo))
+    assert.match(r.stdout, /unpack team-all → team team-extra/)
+    assert.deepEqual(lockOf(repo).profiles, ['rust'])
+    assert.ok(!has(repo, '.claude/rules/team-extra') && !has(repo, '.claude/rules/team'))
+    assert.deepEqual(lockOf(repo).aliases['team-all'], ['team', 'team-extra'], 'kept for the next remove')
+  })
+})
