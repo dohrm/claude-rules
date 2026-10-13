@@ -299,31 +299,41 @@ function toScopedRuleText(text, prefixes) {
   if (!prefixes.length || !Array.isArray(fm.paths) || !fm.paths.length) return null
   return `---\n${dumpFm({ ...fm, paths: scopeGlobs(fm.paths, prefixes) })}\n---\n${body}`
 }
+// -------------------------------------------------------------------- fetching
+// One shallow fetch per source, into its own temp dir. `init` + `fetch <ref>` takes a
+// tag, a branch and a SHA alike, where `clone --branch` refuses a SHA. Authentication
+// is the user's git (SSH keys, credential helper): the installer never sees a token.
+// `--local <dir>` means "core is the tree at <dir>, no git".
+const gitUrl = url => { const m = url.match(/^github:([\w.-]+\/[\w.-]+)$/); return m ? `https://github.com/${m[1]}.git` : url }
+function git(args, cwd) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  if (r.error) throw new Error(`git: ${r.error.message} (git is required to fetch sources)`)
+  if (r.status !== 0) throw new Error((r.stderr || `git ${args[0]} exited ${r.status}`).trim())
+}
+function fetchSource(source) {
+  if (source.name === CORE && localFlag) return { ...source, dir: localFlag, temp: false }
+  // A lock is repository content: an option-shaped value must never reach git as a flag.
+  for (const [key, value] of [['url', source.url], ['ref', source.ref]])
+    if (value.startsWith('-')) throw new Error(`source ${source.name}: ${key} must not start with "-" (${value})`)
+  const dir = mkdtempSync(join(tmpdir(), 'claude-rules-src-'))
+  try {
+    git(['init', '-q', dir])
+    git(['fetch', '-q', '--depth', '1', gitUrl(source.url), source.ref], dir)
+    git(['-c', 'advice.detachedHead=false', 'checkout', '-q', 'FETCH_HEAD'], dir)
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true })
+    throw new Error(`source ${source.name} (${source.url}#${source.ref}): ${error.message}`)
+  }
+  return { ...source, dir, temp: true }
+}
+
 // -------------------------------------------------------------------- staging
-// Returns { dir, isFile, name, temp } — a readable source for the entry.
-async function makeStaged(ref, entry) {
+// Returns { dir, isFile, name } — a readable view of the entry inside a source tree.
+function makeStaged(root, entry) {
   const isFile = /\.[a-z0-9]+$/i.test(entry.from)
-  const name = basename(entry.from)
-  if (localFlag) {
-    const abs = join(localFlag, entry.from)
-    return { dir: isFile ? dirname(abs) : abs, isFile, name, temp: false }
-  }
-  const dir = mkdtempSync(join(tmpdir(), 'claude-rules-'))
-  // giget fetches a DIRECTORY tarball; a file path yields an empty dir and no error.
-  // A file entry (the CHANGELOG) comes from the raw endpoint instead.
-  if (isFile) {
-    try {
-      const url = `https://raw.githubusercontent.com/${registry.repo}/${encodeURIComponent(ref)}/${entry.from}`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
-      writeFileSync(join(dir, name), Buffer.from(await res.arrayBuffer()))
-    } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
-    return { dir, isFile, name, temp: true }
-  }
-  const { downloadTemplate } = await import('giget')   // cached after first call
-  try { await downloadTemplate(`github:${registry.repo}/${entry.from}#${ref}`, { dir, force: true }) }
-  catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
-  return { dir, isFile, name, temp: true }
+  const abs = join(root, entry.from)
+  if (!existsSync(abs)) throw new Error(`${entry.from}: not found in the source tree`)
+  return { dir: isFile ? dirname(abs) : abs, isFile, name: basename(entry.from) }
 }
 const stagedFiles = s => s.isFile ? [{ abs: join(s.dir, s.name), rel: s.name }] : walk(s.dir)
 const mdFiles = s => stagedFiles(s).filter(f => f.rel.endsWith('.md'))
@@ -620,7 +630,6 @@ const FINAL_MSG = {
 }
 
 async function install(profiles, sources, agents, modules, levels) {
-  const ref = sources[0].ref
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {
@@ -651,15 +660,18 @@ async function install(profiles, sources, agents, modules, levels) {
   const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
   const staged = []
+  const fetched = []
   let codex
   try {
     // Fetch every source before changing any destination.
+    if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
+    for (const source of sources) fetched.push(fetchSource(source))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
       if (stagedKeys.has(key)) continue
       stagedKeys.add(key)
-      staged.push({ ...item, s: await makeStaged(ref, item.e) })
+      staged.push({ ...item, s: makeStaged(fetched[0].dir, item.e) })
     }
     for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
     for (const { e, s } of staged) for (const agent of agents) {
@@ -709,7 +721,7 @@ async function install(profiles, sources, agents, modules, levels) {
     purgeLegacyKit()
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory)
   } finally {
-    for (const { s } of staged) if (s.temp) rmSync(s.dir, { recursive: true, force: true })
+    for (const f of fetched) if (f.temp) rmSync(f.dir, { recursive: true, force: true })
   }
   console.log(`\nPinned in ${LOCK} (${sourcesLabel(sources)}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
