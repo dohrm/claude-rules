@@ -90,12 +90,25 @@ export function prepareCodex(files, rules, modules, previous = {}) {
   checkInventory(previous)
   const blocks = instructionBlocks(rules, modules)
   const writes = new Map(), deletes = [], inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
+  // A file of ours, unmodified, that this install no longer writes: it is deleted
+  // (below, and first in applyCodex), so it may stand where a directory now goes —
+  // a later layer turned a file of a skill into a directory, or back.
+  const leaving = p => previous.files?.[p] && !files[p] && lstatSync(p).isFile() && hash(readFileSync(p)) === previous.files[p].hash
+  const filesUnder = dir => readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory() ? filesUnder(join(dir, d.name)) : [join(dir, d.name)])
   for (const [path, asset] of Object.entries(files)) {
-    safePath(path)
-    if (existsSync(path)) {
-      if (!lstatSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
-      const current = hash(readFileSync(path)), old = previous.files?.[path]?.hash
-      if (current !== hash(asset.content) && current !== old) throw new Error(`Conflicting local content: ${path}; reconcile before updating`)
+    const segments = path.split('/')
+    const blocker = segments.slice(1).map((_, i) => segments.slice(0, i + 1).join('/')).find(up => existsSync(up) && lstatSync(up).isFile())
+    if (blocker && !leaving(blocker)) throw new Error(`Conflicting destination: ${blocker} is a file where ${path} goes`)
+    if (!blocker) {
+      safePath(path)
+      if (existsSync(path) && lstatSync(path).isDirectory()) {
+        const foreign = filesUnder(path).find(f => !leaving(f))
+        if (foreign) throw new Error(`Conflicting destination: ${path} is a directory holding ${foreign}`)
+      } else if (existsSync(path)) {
+        if (!lstatSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
+        const current = hash(readFileSync(path)), old = previous.files?.[path]?.hash
+        if (current !== hash(asset.content) && current !== old) throw new Error(`Conflicting local content: ${path}; reconcile before updating`)
+      }
     }
     writes.set(path, asset.content)
     inventory.files[path] = { hash: hash(asset.content), profiles: asset.profiles, kind: asset.kind }
@@ -120,14 +133,15 @@ export function prepareCodex(files, rules, modules, previous = {}) {
   return { writes, deletes, inventory }
 }
 
+// Deletes first: a path being deleted may stand where a write now goes (prepareCodex).
 export function applyCodex(plan) {
-  for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
   for (const path of plan.deletes) {
     rmSync(path)
     // Remove empty asset directories only; never remove a module directory.
     let dir = dirname(path)
     while (dir.startsWith('.agents/') && existsSync(dir) && !readdirSync(dir).length) { rmSync(dir, { recursive: true }); dir = dirname(dir) }
   }
+  for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
 }
 
 export function auditCodex(lock, bad, warn) {

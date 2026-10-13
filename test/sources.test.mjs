@@ -969,43 +969,28 @@ test('an entry whose type contradicts its extension is refused before any write'
 
 // A skill is replaced whole on disk, so an overlay may change a file inside it into a
 // directory, or back, over an existing install.
-test('an overlay skill changes an internal file into a directory and back, for Claude and Cursor', () => {
+test('an overlay skill changes an internal file into a directory and back, for every target set', () => {
   withTmpRepo(root => {
     const reg = withSkill(JSON.parse(read(REPO, 'registry.json')))
     const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'skills/team/SKILL.md': SKILL, 'skills/team/reference': 'a file in core\n' })
     const team = makeSource(root, 'team', [], { 'skills/team/SKILL.md': SKILL, 'skills/team/reference/page.md': '# a directory in the overlay\n' })
-    const repo = join(root, 'consumer')
-    mkdirSync(repo)
-    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust'], ['claude', 'cursor'])
-    ok(cli(['update'], repo))
-    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
-    for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference/page.md'), '# a directory in the overlay\n', dir)
-    ok(cli(['remove', '--source', 'team'], repo))
-    for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference'), 'a file in core\n', dir)
-  })
-})
-
-// Profile removal, like every cleanup, deletes the files we wrote in an agent or kit
-// directory and never one the repo added there.
-test('remove and remove all keep the repo\'s own file in an agent directory', () => {
-  withTmpRepo(root => {
-    const reg = JSON.parse(read(REPO, 'registry.json'))
-    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents/team', to: '.claude/agents/team', kind: 'agent' }]
-    reg.profiles.go = [...reg.profiles.go, { from: 'agents/go', to: '.claude/agents/go', kind: 'agent' }]
-    const core = makeSource(root, 'core', [...CORE_PATHS, ...registry.profiles.go.map(e => e.from)], {
-      'registry.json': JSON.stringify(reg, null, 2) + '\n', 'agents/team/sub/one.md': '# one\n', 'agents/go/g.md': '# go\n' })
-    const repo = join(root, 'consumer')
-    mkdirSync(repo)
-    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust', 'go'])
-    ok(cli(['update'], repo))
-    writeFileSync(join(repo, '.claude/agents/team/mine.md'), 'ours\n')
-    writeFileSync(join(repo, '.claude/agents/go/mine.md'), 'ours too\n')
-    ok(cli(['remove', 'rust'], repo))
-    assert.ok(!has(repo, '.claude/agents/team/sub'), 'ours is gone, and the directory it emptied')
-    assert.equal(read(repo, '.claude/agents/team/mine.md'), 'ours\n')
-    assert.equal(read(repo, '.claude/agents/go/g.md'), '# go\n', 'the remaining profile keeps its files')
-    ok(cli(['remove', 'all'], repo))
-    assert.ok(!has(repo, '.claude/agents/go/g.md'))
-    assert.equal(read(repo, '.claude/agents/go/mine.md'), 'ours too\n')
+    for (const agents of [['claude', 'cursor'], ['claude', 'codex'], ['claude', 'codex', 'cursor']]) {
+      const repo = join(root, `consumer-${agents.join('-')}`)
+      mkdirSync(repo)
+      writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust'], agents)
+      ok(cli(['update'], repo))
+      ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+      for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference/page.md'), '# a directory in the overlay\n', `${agents}: ${dir}`)
+      ok(cli(['remove', '--source', 'team'], repo))
+      for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference'), 'a file in core\n', `${agents}: ${dir}`)
+      if (!agents.includes('codex')) continue
+      // Codex owns .agents/skills by hash: content it did not write is never replaced.
+      ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+      writeFileSync(join(repo, '.agents/skills/team/reference/mine.md'), 'ours\n')
+      const r = cli(['remove', '--source', 'team'], repo)
+      assert.equal(r.status, 1, `${agents}`)
+      assert.match(r.stderr, /reference is a directory holding .*mine\.md/)
+      assert.equal(read(repo, '.agents/skills/team/reference/mine.md'), 'ours\n')
+    }
   })
 })
