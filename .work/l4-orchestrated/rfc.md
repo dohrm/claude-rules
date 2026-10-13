@@ -97,6 +97,8 @@ board does not delegate. The human receives one final PR with a report and merge
 
 ## Blocked on the human
 
+- Merge of PR #31 into `next` (hard checkpoint) — the human.
+
 ## Revisions
 
 - round 1: autonomy L3 (human); branch names `rfc/<slug>` + `phase/<slug>/<n>` confirmed;
@@ -121,3 +123,4 @@ board does not delegate. The human receives one final PR with a report and merge
   cutting a phase, push `rfc/<slug>` and RFC commits, ODD requires `rfc.md` committed on
   `rfc/<slug>`, `kit/common/README.md` slug order, unreachable `done` at L4 reworded.
   `npm test` 399 pass / 0 fail after fixes.
+- PR #31 → next opened: https://github.com/dohrm/claude-rules/pull/31
