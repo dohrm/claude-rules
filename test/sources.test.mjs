@@ -516,3 +516,48 @@ test('a path that is a file in one layer and a directory in another is refused',
     assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
   })
 })
+
+test('registries merge in source order: an overlay-only profile, appended entries, a later alias', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const overlayReg = {
+      profiles: {
+        'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }],
+        team: [{ from: 'rules/team-more', to: '.claude/rules/team-more', kind: 'rule' }],
+      },
+      aliases: { 'team-all': ['team', 'team-extra'], 'rust-api': ['rust'] },
+    }
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify(overlayReg),
+      'rules/team-extra/x.md': '# extra\n',
+      'rules/team-more/m.md': '# more\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust'])
+    const r = ok(cli(['add', 'team-all'], repo))
+    assert.match(r.stdout, /unpack team-all → team team-extra/)
+    assert.equal(read(repo, '.claude/rules/team-extra/x.md'), '# extra\n', 'the overlay-only profile installs')
+    assert.equal(read(repo, '.claude/rules/team-more/m.md'), '# more\n', 'an entry appended to a core profile installs')
+    assert.ok(has(repo, '.claude/rules/team/a.md'), 'the core entries of that profile stay')
+    const lock = lockOf(repo)
+    assert.deepEqual(lock.profiles, ['rust', 'team', 'team-extra'])
+    const by = from => lock.installed.find(i => i.from === from).source
+    assert.equal(by('rules/team-extra'), 'team', 'an entry\'s source is the registry that declared it')
+    assert.equal(by('rules/team-more'), 'team')
+    assert.equal(by('rules/team'), 'core')
+    // The later alias wins on the same key: rust-api is just rust here.
+    ok(cli(['add', 'rust-api'], repo))
+    assert.deepEqual(lockOf(repo).profiles, ['rust', 'team', 'team-extra'])
+  })
+})
+
+test('an overlay registry of the wrong shape is refused before any write', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ profiles: { team: 'rules/team' } }) })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /source team: registry\.json "profiles" must map names to lists/)
+    assert.deepEqual(readdirSync(repo), [LOCK])
+  })
+})

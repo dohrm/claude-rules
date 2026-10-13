@@ -76,8 +76,8 @@ function fetchSource(source, localDir) {
   return { ...source, dir, temp: true }
 }
 
-// Fetch the run's sources, read core's registry, hand both to `fn`, and remove every
-// temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
+// Fetch the run's sources, merge their registries, hand both to `fn` with the source
+// that declared each entry, and remove every temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
 export async function withSources({ lockFile, refFlags, localDir, registry }, fn) {
   let locked = null
@@ -90,13 +90,44 @@ export async function withSources({ lockFile, refFlags, localDir, registry }, fn
   process.on('exit', cleanup)
   try {
     for (const source of sources) fetched.push(fetchSource(source, localDir))
-    const file = join(fetched[0].dir, 'registry.json')
-    if (!existsSync(file)) throw new Error(`source ${CORE} (${sources[0].url}#${sources[0].ref}) has no registry.json`)
-    return await fn([...fetched], JSON.parse(readFileSync(file, 'utf8')))
+    const { registry: merged, declaredBy } = mergeRegistries(fetched)
+    return await fn([...fetched], merged, declaredBy)
   } finally {
     cleanup()
     process.off('exit', cleanup)
   }
+}
+
+// Registries merge in source order (ADR-0008): a profile seen again appends its
+// entries, `shared` appends, aliases and `retired` merge with the later source winning
+// on the same key. Core must carry one; an overlay that only replaces files may not.
+// `declaredBy` maps each entry to the source whose registry named it: that is the
+// entry's `source` in the inventory, whichever layers its files are staged from.
+const isList = v => Array.isArray(v)
+const isListMap = v => Boolean(v) && typeof v === 'object' && !isList(v) && Object.values(v).every(isList)
+const SHAPE = { profiles: [isListMap, 'map names to lists'], aliases: [isListMap, 'map names to lists'], shared: [isList, 'be a list'] }
+function mergeRegistries(fetched) {
+  let merged = null
+  const declaredBy = new Map()
+  for (const source of fetched) {
+    const file = join(source.dir, 'registry.json')
+    if (!existsSync(file)) {
+      if (source.name === CORE) throw new Error(`source ${CORE} (${source.url}#${source.ref}) has no registry.json`)
+      continue
+    }
+    assertInside(realpathSync(source.dir), file)
+    const reg = JSON.parse(readFileSync(file, 'utf8'))
+    for (const [key, [valid, what]] of Object.entries(SHAPE))
+      if (reg[key] !== undefined && !valid(reg[key])) throw new Error(`source ${source.name}: registry.json "${key}" must ${what}`)
+    for (const e of [...(reg.shared || []), ...Object.values(reg.profiles || {}).flat()])
+      if (e && typeof e === 'object') declaredBy.set(e, source.name)
+    if (!merged) { merged = { ...reg, shared: reg.shared || [], profiles: { ...reg.profiles }, aliases: { ...reg.aliases } }; continue }
+    merged.shared = [...merged.shared, ...(reg.shared || [])]
+    for (const [name, entries] of Object.entries(reg.profiles || {})) merged.profiles[name] = [...(merged.profiles[name] || []), ...entries]
+    merged.aliases = { ...merged.aliases, ...reg.aliases }
+    if (reg.retired) merged.retired = { ...merged.retired, ...reg.retired, profiles: { ...merged.retired?.profiles, ...reg.retired.profiles } }
+  }
+  return { registry: merged, declaredBy }
 }
 
 // -------------------------------------------------------------------- staging
@@ -116,25 +147,25 @@ function assertInside(root, abs, seen = new Set()) {
 // in the repo and no emitter knows where a file came from. Layers are overlaid in
 // order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
 // whole directory for a skill, so a skill is never half one layer, half another.
-// Returns { tree, origin }: origin maps each `from` to the first layer that held it.
+// Returns the tree's directory.
 export function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
-  const origin = {}
   try {
     for (const { from, kind } of entries) {
       const dest = join(tree, from)
+      let found = false
       for (const layer of layers) {
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
         assertInside(realpathSync(layer.dir), src)
         if (kind === 'skill') rmSync(dest, { recursive: true, force: true })
         overlay(src, dest, from, layer.name)
-        origin[from] ??= layer.name
+        found = true
       }
-      if (!origin[from]) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      if (!found) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, origin }
+  return tree
 }
 // One layer over the tree, file by file. A path that is a file in one layer and a
 // directory in another has no answer: it is refused, never resolved (ADR-0010).

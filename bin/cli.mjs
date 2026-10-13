@@ -21,12 +21,12 @@ import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
-// The registry bundled with the CLI. `add` and `update` replace it with the one their
-// fetched source carries (withSources): what a ref installs is that ref's registry, not
-// whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
+// The registry bundled with the CLI. `add` and `update` replace it with the merge of
+// the registries their fetched sources carry (withSources): what a ref installs is
+// that ref's registry, not whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
 // remove, doctor, init, budget) keep the bundled one.
 let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
@@ -99,11 +99,14 @@ function unpackNames(names, quiet = false) {
 
 // ------------------------------------------------------------------- sources
 // Fetching, staging and the lock's `sources` live in bin/sources.mjs. Commands that
-// fetch run under the source's registry from here on.
+// fetch run under the sources' merged registry from here on; `declaredBy` names the
+// source whose registry declared each of its entries.
 const lockSources = raw => readSources(raw, registry, LOCK)
+let declaredBy = new Map()
 function withSources(fn) {
-  return fetchSources({ lockFile: LOCK, refFlags, localDir: localFlag, registry }, (fetched, fetchedRegistry) => {
-    registry = fetchedRegistry
+  return fetchSources({ lockFile: LOCK, refFlags, localDir: localFlag, registry }, (fetched, merged, declared) => {
+    registry = merged
+    declaredBy = declared
     return fn(fetched)
   })
 }
@@ -714,9 +717,8 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
-    tree = stagedTree.tree
-    installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
+    tree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
