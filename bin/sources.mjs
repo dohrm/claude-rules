@@ -1,10 +1,10 @@
 // Sources (ADR-0008): what the lock pins, how each source is fetched, and the one
 // tree the emitters read. No emitter and no ownership logic lives here.
-import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync, realpathSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, mkdirSync, rmSync, realpathSync } from 'node:fs'
+import { join, sep, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { safePath } from './ownership.mjs'
+import { safePath, plainPath } from './ownership.mjs'
 
 // The lock pins an ordered list of sources. The first is this library, `core`; a lock
 // written before sources existed (`repo` + `ref`) reads as core alone and is rewritten
@@ -38,13 +38,47 @@ export function parseRefs(refFlags) {
 // The sources this run installs from: the lock's (or core alone on a first add), each
 // at its --ref. Without one, core follows defaultRef, as it always has, and every
 // other source replays its locked ref.
-function resolveSources(locked, refs, registry) {
-  const sources = (locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]).map(s => ({ ...s }))
+function resolveSources(locked, refs, registry, edit) {
+  const sources = editSources(locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }], edit).map(s => ({ ...s }))
   const unknown = Object.keys(refs).filter(n => !sources.some(s => s.name === n))
   if (unknown.length)
     throw new Error(`--ref names unknown source(s): ${unknown.join(', ')}. Locked: ${sources.map(s => s.name).join(', ')}`)
   for (const s of sources) s.ref = refs[s.name] || (s.name === CORE ? registry.defaultRef : s.ref)
   return sources
+}
+// `add --source <name>=<url>#<ref>`: the ref is after the last `#`, so a URL may hold one.
+export function parseSourceFlag(raw) {
+  const m = raw.match(/^([\w.-]+)=(.+)#([^#]+)$/)
+  if (!m) throw new Error(`--source ${raw}: expected <name>=<url>#<ref>`)
+  if (m[1] === CORE) throw new Error(`--source: "${CORE}" is this library; pin it with --ref`)
+  return { name: m[1], url: m[2], ref: m[3] }
+}
+// What this run changes in the lock's list: `add` appends a source, `drop` removes one.
+function editSources(list, { add, drop } = {}) {
+  if (add) {
+    if (list.some(s => s.name === add.name)) throw new Error(`source "${add.name}" is already locked; move it with --ref ${add.name}=<ref>`)
+    return [...list, add]
+  }
+  if (drop) {
+    if (drop === CORE) throw new Error(`source "${CORE}" cannot be removed; "remove all" uninstalls`)
+    if (!list.some(s => s.name === drop)) throw new Error(`source "${drop}" is not locked. Locked: ${list.map(s => s.name).join(', ')}`)
+    return list.filter(s => s.name !== drop)
+  }
+  return list
+}
+// After `remove --source`, a profile only that source defined is in no registry left:
+// it goes with the source, from profiles, modules and levels alike.
+export function dropUndefined(lock, registry) {
+  const gone = lock.profiles.filter(p => !registry.profiles[p])
+  if (!gone.length) return lock
+  console.log(`Dropping [${gone.join(', ')}]: no remaining source defines ${gone.length > 1 ? 'them' : 'it'}.\n`)
+  const keep = ps => ps.filter(p => !gone.includes(p))
+  return {
+    ...lock,
+    profiles: keep(lock.profiles),
+    modules: Object.fromEntries(Object.entries(lock.modules || {}).map(([d, ps]) => [d, keep(ps)])),
+    ...(lock.levels ? { levels: Object.fromEntries(Object.entries(lock.levels).filter(([p]) => !gone.includes(p))) } : {}),
+  }
 }
 export const sourcesLabel = sources => sources.map(s => `${s.name}@${s.ref}`).join(', ')
 
@@ -76,14 +110,24 @@ function fetchSource(source, localDir) {
   return { ...source, dir, temp: true }
 }
 
-// Fetch the run's sources, read core's registry, hand both to `fn`, and remove every
-// temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
+// The repo's own layer (ADR-0008): last, no ref, no registry, never written by the
+// installer and never locked — the one place a repo's edit to an installed file
+// survives `update`. It mirrors the source layout (.dev/overrides/rules/common/x.md).
+export const OVERRIDES = '.dev/overrides'
+function projectLayer() {
+  if (!existsSync(OVERRIDES)) return []
+  safePath(OVERRIDES)
+  return [{ name: OVERRIDES, dir: resolve(OVERRIDES), temp: false, project: true }]
+}
+
+// Fetch the run's sources, merge their registries, hand both to `fn` with the source
+// that declared each entry, and remove every temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
-export async function withSources({ lockFile, refFlags, localDir, registry }, fn) {
+// `edit`: `{ add: source }` or `{ drop: name }`, applied to the locked list first.
+export async function withSources({ lockFile, refFlags, localDir, registry, edit }, fn) {
   let locked = null
   if (existsSync(lockFile)) { safePath(lockFile); locked = lockSources(JSON.parse(readFileSync(lockFile, 'utf8')), registry, lockFile) }
-  const sources = resolveSources(locked, parseRefs(refFlags), registry)
-  if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
+  const sources = resolveSources(locked, parseRefs(refFlags), registry, edit)
   const fetched = []
   // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
   // trees (private content, git objects included) must not outlive the run either way.
@@ -91,13 +135,57 @@ export async function withSources({ lockFile, refFlags, localDir, registry }, fn
   process.on('exit', cleanup)
   try {
     for (const source of sources) fetched.push(fetchSource(source, localDir))
-    const file = join(fetched[0].dir, 'registry.json')
-    if (!existsSync(file)) throw new Error(`source ${CORE} (${sources[0].url}#${sources[0].ref}) has no registry.json`)
-    return await fn([...fetched], JSON.parse(readFileSync(file, 'utf8')))
+    const { registry: merged, declaredBy } = mergeRegistries(fetched)
+    return await fn([...fetched, ...projectLayer()], merged, declaredBy)
   } finally {
     cleanup()
     process.off('exit', cleanup)
   }
+}
+
+// Registries merge in source order (ADR-0008): a profile seen again appends its
+// entries, `shared` appends, aliases and `retired` merge with the later source winning
+// on the same key. Core must carry one; an overlay that only replaces files may not.
+// `declaredBy` maps each entry to the source whose registry named it: that is the
+// entry's `source` in the inventory, whichever layers its files are staged from.
+const isList = v => Array.isArray(v)
+const isMap = v => Boolean(v) && typeof v === 'object' && !isList(v)
+const isListMap = v => isMap(v) && Object.values(v).every(isList)
+// The lock records the merged aliases, and reads them back with this same check.
+export const isAliasMap = v => isListMap(v) && Object.values(v).every(ps => ps.every(p => typeof p === 'string'))
+const isRetired = v => isMap(v) && (v.profiles === undefined || isMap(v.profiles))
+const SHAPE = {
+  profiles: [isListMap, 'map names to lists'],
+  aliases: [isAliasMap, 'map names to lists of profile names'],
+  shared: [isList, 'be a list'],
+  retired: [isRetired, 'be an object whose "profiles" maps names to reasons'],
+}
+function mergeRegistries(fetched) {
+  let merged = null
+  const declaredBy = new Map()
+  for (const source of fetched) {
+    const file = join(source.dir, 'registry.json')
+    if (!existsSync(file)) {
+      if (source.name === CORE) throw new Error(`source ${CORE} (${source.url}#${source.ref}) has no registry.json`)
+      continue
+    }
+    assertInside(realpathSync(source.dir), file)
+    const reg = JSON.parse(readFileSync(file, 'utf8'))
+    for (const [key, [valid, what]] of Object.entries(SHAPE))
+      if (reg[key] !== undefined && !valid(reg[key])) throw new Error(`source ${source.name}: registry.json "${key}" must ${what}`)
+    // Paths this source removes from the layers before it (stageTree).
+    source.exclude = reg.exclude ?? []
+    if (!isList(source.exclude) || !source.exclude.every(plainPath))
+      throw new Error(`source ${source.name}: registry.json "exclude" must be a list of relative paths`)
+    for (const e of [...(reg.shared || []), ...Object.values(reg.profiles || {}).flat()])
+      if (e && typeof e === 'object') declaredBy.set(e, source.name)
+    if (!merged) { merged = { ...reg, shared: reg.shared || [], profiles: { ...reg.profiles }, aliases: { ...reg.aliases } }; continue }
+    merged.shared = [...merged.shared, ...(reg.shared || [])]
+    for (const [name, entries] of Object.entries(reg.profiles || {})) merged.profiles[name] = [...(merged.profiles[name] || []), ...entries]
+    merged.aliases = { ...merged.aliases, ...reg.aliases }
+    if (reg.retired) merged.retired = { ...merged.retired, ...reg.retired, profiles: { ...merged.retired?.profiles, ...reg.retired.profiles } }
+  }
+  return { registry: merged, declaredBy }
 }
 
 // -------------------------------------------------------------------- staging
@@ -113,20 +201,56 @@ function assertInside(root, abs, seen = new Set()) {
   for (const name of readdirSync(real)) assertInside(root, join(real, name), seen)
 }
 // The emitters read ONE tree, never a source: each entry's `from` is copied out of
-// the fetched sources into a temp dir, removed by the caller, so private content
-// never lands in the repo and no emitter knows where a file came from.
-// Returns { tree, origin }: origin maps each `from` to the source it was copied from.
-export function stageTree(layers, froms) {
+// the layers into a temp dir, removed by the caller, so private content never lands
+// in the repo and no emitter knows where a file came from. Layers are overlaid in
+// order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
+// whole directory for a skill, so a skill is never half one layer, half another.
+// A layer's `exclude` removes what the layers before it put there, a file or a whole
+// skill; a later layer may put it back. Returns { tree, excluded }: excluded maps each
+// path that stays removed to the source that removed it.
+const under = (path, dir) => path === dir || path.startsWith(dir + '/')
+export function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
-  const origin = {}
+  const excluded = new Map()
   try {
-    for (const from of froms) {
-      const layer = layers.find(l => existsSync(join(l.dir, from)))
-      if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
-      assertInside(realpathSync(layer.dir), join(layer.dir, from))
-      cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
-      origin[from] = layer.name
+    for (const { from, kind } of entries) {
+      const dest = join(tree, from)
+      let found = false
+      const gone = new Map()
+      for (const layer of layers) {
+        for (const path of layer.exclude || []) {
+          if (!under(path, from) && !under(from, path)) continue
+          if (kind === 'skill' && path !== from && under(path, from))
+            throw new Error(`source ${layer.name}: exclude ${path}: a skill is excluded whole (${from})`)
+          const at = under(from, path) ? from : path
+          rmSync(join(tree, at), { recursive: true, force: true })
+          gone.set(at, layer.name)
+        }
+        const src = join(layer.dir, from)
+        if (!existsSync(src)) continue
+        assertInside(realpathSync(layer.dir), src)
+        if (kind === 'skill') rmSync(dest, { recursive: true, force: true })
+        overlay(src, dest, from, layer.name)
+        found = true
+      }
+      if (!found && !gone.has(from)) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, origin }
+  return { tree, excluded }
+}
+// One layer over the tree, file by file. A path that is a file in one layer and a
+// directory in another has no answer: it is refused, never resolved (ADR-0010).
+// Links are followed (assertInside kept them in their source); `seen` stops a cycle.
+function overlay(src, dest, path, layer, seen = new Set()) {
+  const real = realpathSync(src)
+  if (!statSync(real).isDirectory()) {
+    if (existsSync(dest) && statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a file, where an earlier layer has a directory`)
+    cpSync(real, dest, { dereference: true })
+    return
+  }
+  if (seen.has(real)) throw new Error(`source ${layer}: ${path} links back into itself`)
+  if (existsSync(dest) && !statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a directory, where an earlier layer has a file`)
+  mkdirSync(dest, { recursive: true })
+  for (const name of readdirSync(real)) overlay(join(real, name), join(dest, name), `${path}/${name}`, layer, new Set([...seen, real]))
 }

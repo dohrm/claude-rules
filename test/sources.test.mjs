@@ -3,7 +3,7 @@
 // `git fetch --depth 1 <url> <ref>`, `checkout FETCH_HEAD` — runs with no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync } from 'node:fs'
+import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
@@ -157,11 +157,9 @@ test('the source\'s registry decides: a profile only it defines installs', () =>
     assert.ok(has(repo, '.claude/rules/team-only/house.md'), 'update reads the lock against the same registry')
 
     // The offline commands keep the bundled registry, which does not know team-only.
-    // They must still read the lock; remove works from the lock's inventory.
+    // They must still read the lock; remove and doctor work from the lock's inventory.
     assert.match(ok(cli(['list'], repo)).stdout, /Installed: \[rust, team-only\]/)
-    const doc = cli(['doctor'], repo)
-    assert.equal(doc.status, 1)
-    assert.match(doc.stdout, /profile "team-only", unknown to the registry bundled with this CLI/)
+    assert.doesNotMatch(ok(cli(['doctor'], repo)).stdout, /unknown to the registry bundled with this CLI/)
     ok(cli(['remove', 'team-only'], repo))
     assert.ok(!has(repo, '.claude/rules/team-only'))
     assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'the other profile stays')
@@ -456,5 +454,349 @@ test('a skill dropped upstream while Codex is adopted is still pruned, and remov
     assert.ok(!has(repo, '.agents/skills/team'), 'pruned although Codex now owns .agents/skills')
     ok(cli(['remove', 'all'], repo))
     assert.ok(!has(repo, '.agents/skills/team'))
+  })
+})
+
+// ------------------------------------------------------------------ layers (phase 3)
+// A core with one extra profile, `team`: a rule directory and a skill of two files.
+function teamCore(root, extra = {}) {
+  const reg = JSON.parse(read(REPO, 'registry.json'))
+  reg.profiles.team = [
+    { from: 'rules/team', to: '.claude/rules/team', kind: 'rule' },
+    { from: 'skills/team', to: '.claude/skills/team', kind: 'skill' },
+  ]
+  return makeSource(root, 'core', CORE_PATHS, {
+    'registry.json': JSON.stringify(reg, null, 2) + '\n',
+    'rules/team/a.md': '# core a\n',
+    'rules/team/b.md': '# core b\n',
+    'skills/team/SKILL.md': '---\nname: team\ndescription: core\n---\n',
+    'skills/team/notes.md': 'core notes\n',
+    ...extra,
+  })
+}
+const consumer = (root, sources, profiles = ['team']) => {
+  const repo = join(root, 'consumer')
+  mkdirSync(repo, { recursive: true })
+  writeFileSync(join(repo, LOCK), JSON.stringify({ sources, profiles, agents: ['claude'], levels: Object.fromEntries(profiles.map(p => [p, 'rules'])) }, null, 2) + '\n')
+  return repo
+}
+
+test('an overlay replaces files by path, and a skill directory whole', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'rules/team/a.md': '# overlay a\n',
+      'skills/team/SKILL.md': '---\nname: team\ndescription: overlay\n---\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a\n', 'the overlay rule wins')
+    assert.equal(read(repo, '.claude/rules/team/b.md'), '# core b\n', 'a rule file the overlay lacks stays core\'s')
+    assert.equal(read(repo, '.claude/skills/team/SKILL.md'), '---\nname: team\ndescription: overlay\n---\n', 'the overlay skill wins')
+    assert.deepEqual(readdirSync(join(repo, '.claude/skills/team')), ['SKILL.md'], 'no half skill: core\'s notes.md is not kept')
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'])
+    assert.deepEqual(Object.keys(lockOf(repo).installed.find(i => i.from === 'skills/team').files), ['.claude/skills/team/SKILL.md'])
+    // The overlay's ref replays from the lock: a new overlay commit lands on update.
+    team.commit({ 'rules/team/a.md': '# overlay a v2\n' })
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a v2\n')
+  })
+})
+
+test('a path that is a file in one layer and a directory in another is refused', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'rules/team/a.md/inner.md': '# a directory now\n' })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /source team: rules\/team\/a\.md is a directory, where an earlier layer has a file/)
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+  })
+})
+
+test('registries merge in source order: an overlay-only profile, appended entries, a later alias', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const overlayReg = {
+      profiles: {
+        'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }],
+        team: [{ from: 'rules/team-more', to: '.claude/rules/team-more', kind: 'rule' }],
+      },
+      aliases: { 'team-all': ['team', 'team-extra'], 'rust-api': ['rust'] },
+    }
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify(overlayReg),
+      'rules/team-extra/x.md': '# extra\n',
+      'rules/team-more/m.md': '# more\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust'])
+    const r = ok(cli(['add', 'team-all'], repo))
+    assert.match(r.stdout, /unpack team-all → team team-extra/)
+    assert.equal(read(repo, '.claude/rules/team-extra/x.md'), '# extra\n', 'the overlay-only profile installs')
+    assert.equal(read(repo, '.claude/rules/team-more/m.md'), '# more\n', 'an entry appended to a core profile installs')
+    assert.ok(has(repo, '.claude/rules/team/a.md'), 'the core entries of that profile stay')
+    const lock = lockOf(repo)
+    assert.deepEqual(lock.profiles, ['rust', 'team', 'team-extra'])
+    const by = from => lock.installed.find(i => i.from === from).source
+    assert.equal(by('rules/team-extra'), 'team', 'an entry\'s source is the registry that declared it')
+    assert.equal(by('rules/team-more'), 'team')
+    assert.equal(by('rules/team'), 'core')
+    // The later alias wins on the same key: rust-api is just rust here.
+    ok(cli(['add', 'rust-api'], repo))
+    assert.deepEqual(lockOf(repo).profiles, ['rust', 'team', 'team-extra'])
+  })
+})
+
+test('an overlay registry of the wrong shape is refused before any write', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const cases = [[{ profiles: { team: 'rules/team' } }, /source team: registry\.json "profiles" must map names to lists/],
+      // An alias the lock could not read back would make every later command fail.
+      [{ aliases: { unused: [42] } }, /source team: registry\.json "aliases" must map names to lists of profile names/],
+      [{ retired: { profiles: 'all of them' } }, /source team: registry\.json "retired" must be an object/]]
+    for (const [i, [reg, why]] of cases.entries()) {
+      const at = join(root, `case${i}`)
+      mkdirSync(at)
+      const team = makeSource(at, 'team', [], { 'registry.json': JSON.stringify(reg) })
+      const repo = consumer(at, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+      const before = read(repo, LOCK)
+      const r = cli(['update'], repo)
+      assert.equal(r.status, 1)
+      assert.match(r.stderr, why)
+      assert.deepEqual(readdirSync(repo), [LOCK])
+      assert.equal(read(repo, LOCK), before)
+    }
+  })
+})
+
+test('an overlay\'s exclude removes core paths from the merged tree, and update deletes their installed copies', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ exclude: ['rules/team/b.md', 'skills/team'] }) })
+    const coreOnly = [{ name: 'core', url: core.url, ref: 'main' }]
+    const repo = consumer(root, coreOnly)
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/team/b.md') && has(repo, '.claude/skills/team/SKILL.md'))
+
+    const lock = lockOf(repo)
+    lock.sources = [...coreOnly, { name: 'team', url: team.url, ref: 'main' }]
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /− rules\/team\/b\.md {2}\(excluded by team\)/)
+    assert.match(r.stdout, /− skills\/team {2}\(excluded by team\)/)
+    assert.ok(!has(repo, '.claude/rules/team/b.md'), 'the excluded rule disappears')
+    assert.ok(!has(repo, '.claude/skills/team'), 'the excluded skill disappears whole')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# core a\n', 'the rest of the entry stays')
+    const after = lockOf(repo)
+    assert.ok(!after.installed.some(i => i.from === 'skills/team'), 'an entry excluded whole is not inventoried')
+    assert.ok(!Object.keys(after.installed.find(i => i.from === 'rules/team').files).includes('.claude/rules/team/b.md'))
+  })
+})
+
+test('an exclude inside a skill, or one that is not a plain relative path, is refused', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const cases = [[['skills/team/notes.md'], /exclude skills\/team\/notes\.md: a skill is excluded whole \(skills\/team\)/],
+      [['../outside'], /source team: registry\.json "exclude" must be a list of relative paths/]]
+    for (const [i, [exclude, why]] of cases.entries()) {
+      const at = join(root, `case${i}`)
+      mkdirSync(at)
+      const team = makeSource(at, 'team', [], { 'registry.json': JSON.stringify({ exclude }) })
+      const repo = consumer(at, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+      const r = cli(['update'], repo)
+      assert.equal(r.status, 1, exclude[0])
+      assert.match(r.stderr, why)
+      assert.deepEqual(readdirSync(repo), [LOCK])
+    }
+  })
+})
+
+test('.dev/overrides/ is the last layer: a repo-owned rule survives update, and is never written or locked', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], { 'rules/common/language.md': '# team language\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const mine = '# Language\n\n- This repo writes in French.\n'
+    mkdirSync(join(repo, '.dev/overrides/rules/common'), { recursive: true })
+    writeFileSync(join(repo, '.dev/overrides/rules/common/language.md'), mine)
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/common/language.md'), mine, 'the project layer wins over every source')
+    core.commit({ 'rules/common/language.md': '# Language v2\n' })
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/common/language.md'), mine, 'and survives an upstream change')
+    assert.equal(read(repo, '.dev/overrides/rules/common/language.md'), mine, 'never written')
+    assert.deepEqual(readdirSync(join(repo, '.dev/overrides')), ['rules'])
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'], 'no ref, no lock entry')
+  })
+})
+
+test('add --source appends an overlay to the lock; remove --source drops it, its files and the profiles only it defined', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }] } }),
+      'rules/team-extra/x.md': '# extra\n',
+      'rules/team/a.md': '# overlay a\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+
+    ok(cli(['add', 'team-extra', '--source', `team=${team.url}#main`], repo))
+    let lock = lockOf(repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    assert.deepEqual(lock.profiles, ['team', 'team-extra'])
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a\n')
+    assert.ok(has(repo, '.claude/rules/team-extra/x.md'))
+
+    const r = ok(cli(['remove', '--source', 'team'], repo))
+    assert.match(r.stdout, /Dropping \[team-extra\]: no remaining source defines it/)
+    lock = lockOf(repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }])
+    assert.deepEqual(lock.profiles, ['team'])
+    assert.ok(!has(repo, '.claude/rules/team-extra'), 'the overlay-only profile\'s files go')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# core a\n', 'the file it overrode is core\'s again')
+    assert.ok(!lock.installed.some(i => i.source === 'team'))
+  })
+})
+
+test('--source refuses core, a source already locked, an unknown one, and a malformed value', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    for (const [args, why] of [
+      [['add', '--source', `core=${core.url}#main`], /"core" is this library; pin it with --ref/],
+      [['add', '--source', `team=${core.url}#main`], /source "team" is already locked; move it with --ref team=<ref>/],
+      [['add', '--source', 'team-no-ref'], /--source team-no-ref: expected <name>=<url>#<ref>/],
+      [['remove', '--source', 'nobody'], /source "nobody" is not locked\. Locked: core, team/],
+      [['remove', '--source', 'core'], /source "core" cannot be removed; "remove all" uninstalls/],
+    ]) {
+      const r = cli(args, repo)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.match(r.stderr, why)
+    }
+    assert.equal(read(repo, LOCK), before)
+  })
+})
+
+test('doctor audits the inventory offline: an overlay-only profile passes, an edited or deleted file fails', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }] } }),
+      'rules/team-extra/x.md': '# extra\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['add', 'team-extra'], repo))
+    writeFileSync(join(repo, 'CLAUDE.md'), '# Project\n')
+    // No network, no source: doctor reads the lock and the disk only.
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })
+    const clean = ok(cli(['doctor'], repo))
+    assert.doesNotMatch(clean.stdout, /unknown to the registry/)
+    assert.match(clean.stdout, /nothing to report/)
+
+    writeFileSync(join(repo, '.claude/rules/team-extra/x.md'), '# extra, edited\n')
+    let r = cli(['doctor'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/team-extra\/x\.md — edited since it was installed/)
+
+    rmSync(join(repo, '.claude/rules/team/a.md'))
+    r = cli(['doctor'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stdout, /\.claude\/rules\/team\/a\.md — installed by "team", missing on disk/)
+  })
+})
+
+test('the lock records the merged aliases: an offline remove unpacks one only an overlay defined', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({
+        profiles: { 'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }] },
+        aliases: { 'team-all': ['team', 'team-extra'] },
+      }),
+      'rules/team-extra/x.md': '# extra\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust'])
+    ok(cli(['add', 'team-all'], repo))
+    assert.deepEqual(lockOf(repo).aliases['team-all'], ['team', 'team-extra'])
+    assert.ok(!registry.aliases['team-all'], 'the bundled registry must not know it')
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })
+
+    const r = ok(cli(['remove', 'team-all'], repo))
+    assert.match(r.stdout, /unpack team-all → team team-extra/)
+    assert.deepEqual(lockOf(repo).profiles, ['rust'])
+    assert.ok(!has(repo, '.claude/rules/team-extra') && !has(repo, '.claude/rules/team'))
+    assert.deepEqual(lockOf(repo).aliases['team-all'], ['team', 'team-extra'], 'kept for the next remove')
+  })
+})
+
+test('an entry no layer holds is refused, even when an exclude names a path inside it', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({
+      profiles: { ghost: [{ from: 'rules/ghost', to: '.claude/rules/ghost', kind: 'rule' }] },
+      exclude: ['rules/ghost/x.md'],
+    }) })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    const r = cli(['add', 'ghost'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /rules\/ghost: not found in source core, team/)
+    assert.equal(read(repo, LOCK), before)
+  })
+})
+
+// One source path, one installed copy: the inventory records files per `kind:from`, so
+// two entries installing the same path to two places would share one record (ADR-0010:
+// refused, not reconciled).
+test('two entries that install the same source path to different destinations are refused', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({
+      profiles: { 'team-rust': [{ from: 'rules/rust', to: '.claude/rules/team-rust', kind: 'rule' }] },
+    }) })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    const before = read(repo, LOCK)
+    const r = cli(['add', 'team-rust'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /registry: rule:rules\/rust installs to \.claude\/rules\/rust and to \.claude\/rules\/team-rust: one source path installs once/)
+    assert.equal(read(repo, LOCK), before)
+    assert.ok(!has(repo, '.claude/rules/team-rust'))
+  })
+})
+
+// A skill is one unit: a directory the install empties must hold nothing it did not
+// write, whether the skill is excluded, dropped or removed.
+test('a foreign file in a skill that an exclude or a remove empties is refused; --force removes it', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ exclude: ['skills/team'] }) })
+    const coreOnly = [{ name: 'core', url: core.url, ref: 'main' }]
+    const repo = consumer(root, coreOnly, ['rust', 'team'])
+    ok(cli(['update'], repo))
+    writeFileSync(join(repo, '.claude/skills/team/custom.md'), 'mine\n')
+
+    for (const args of [['remove', 'team'], ['update']]) {
+      if (args[0] === 'update') {
+        const lock = lockOf(repo)
+        lock.sources = [...coreOnly, { name: 'team', url: team.url, ref: 'main' }]
+        writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+      }
+      const before = read(repo, LOCK)
+      const r = cli(args, repo)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.match(r.stderr, /\.claude\/skills\/team\/custom\.md — not written by claude-rules, inside an installed directory/)
+      assert.equal(read(repo, LOCK), before, `${args[0]}: lock unchanged`)
+      assert.ok(has(repo, '.claude/skills/team/SKILL.md'), `${args[0]}: tree unchanged`)
+    }
+    ok(cli(['update', '--force'], repo))
+    assert.ok(!has(repo, '.claude/skills/team'), '--force removes the listed file with the skill')
   })
 })
