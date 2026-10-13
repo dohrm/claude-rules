@@ -17,7 +17,7 @@
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync, realpathSync } from 'node:fs'
-import { join, dirname, basename, isAbsolute, sep } from 'node:path'
+import { join, dirname, basename, isAbsolute, sep, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
@@ -331,7 +331,16 @@ function fetchSource(source) {
   return { ...source, dir, temp: true }
 }
 
-// Fetch the run's sources, adopt core's registry, hand them to `fn`, and remove every
+// The repo's own layer (ADR-0008): last, no ref, no registry, never written by the
+// installer — the one place a repo's edit to an installed file survives `update`.
+const OVERRIDES = '.dev/overrides'
+function projectLayer() {
+  if (!existsSync(OVERRIDES)) return []
+  safePath(OVERRIDES)
+  return [{ name: OVERRIDES, dir: resolve(OVERRIDES), temp: false, project: true }]
+}
+
+// Fetch the run's sources, adopt their merged registry, hand them to `fn`, and remove every
 // temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
 async function withSources(fn) {
@@ -346,7 +355,7 @@ async function withSources(fn) {
   try {
     for (const source of sources) fetched.push(fetchSource(source))
     registry = mergeRegistries(fetched)
-    return await fn([...fetched])
+    return await fn([...fetched, ...projectLayer()])
   } finally {
     cleanup()
     process.off('exit', cleanup)
@@ -796,9 +805,10 @@ const FINAL_MSG = {
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
-// `fetched` are the run's sources, already on disk (withSources).
-async function install(profiles, fetched, agents, modules, levels) {
-  const sources = fetched.map(({ name, url, ref }) => ({ name, url, ref }))
+// `layers` are the run's layers, already on disk (withSources): the sources, then
+// the project layer, which the lock never records.
+async function install(profiles, layers, agents, modules, levels) {
+  const sources = layers.filter(l => !l.project).map(({ name, url, ref }) => ({ name, url, ref }))
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {
@@ -848,7 +858,7 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    const stagedTree = stageTree(layers, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
     tree = stagedTree.tree
     // An entry excluded whole is not installed: dropped here, its old copy is stale.
     // A path excluded inside one goes with the re-emit, which resets rule directories;

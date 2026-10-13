@@ -575,3 +575,23 @@ test('exclude: a file inside an agent directory is deleted by name', () => {
     assert.equal(read(repo, '.claude/agents/mine.md'), 'the repo\'s own\n')
   })
 })
+
+// `.dev/overrides/` is the repo's own layer: last, no ref, never written.
+test('.dev/overrides: a repo-owned rules/common/language.md survives update', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    mkdirSync(join(repo, '.dev/overrides/rules/common'), { recursive: true })
+    const mine = '# Language\n\n- Ours: French in the code comments.\n'
+    writeFileSync(join(repo, '.dev/overrides/rules/common/language.md'), mine)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust'], ['claude', 'codex'])
+    for (let run = 0; run < 2; run++) {
+      ok(cli(['update'], repo))
+      assert.equal(read(repo, '.claude/rules/common/language.md'), mine, `run ${run}: Claude`)
+      assert.equal(read(repo, '.agents/rules/common/language.md'), mine, `run ${run}: Codex`)
+    }
+    assert.deepEqual(readdirSync(join(repo, '.dev/overrides'), { recursive: true }).sort(), ['rules', 'rules/common', 'rules/common/language.md'], 'never written')
+    assert.equal(read(repo, '.dev/overrides/rules/common/language.md'), mine)
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core'], 'the project layer is no source: no ref, nothing locked')
+  })
+})
