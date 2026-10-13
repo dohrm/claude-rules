@@ -933,3 +933,22 @@ test('an overridden file deleted in the layer under it warns too, and fails unde
     assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
   })
 })
+
+// The layer an override replaced is part of its identity: when that layer drops the
+// path and an earlier one still has it, the warning names the layer that dropped it.
+test('a middle layer that drops an overridden path is named, whatever the layer under it holds', () => {
+  for (const same of [false, true]) withTmpRepo(root => {
+    const { team, repo } = layered(root)
+    if (same) team.commit({ 'rules/team/a.md': '# core a\n' })
+    ok(cli(['update'], repo))
+    spawnSync('git', ['rm', '-q', 'rules/team/a.md'], { cwd: join(root, 'team-work') })
+    team.commit({})
+    const lock = read(repo, LOCK)
+    const r = cli(['update', '--strict'], repo)
+    assert.equal(r.status, 1, `same=${same}: ${r.stdout}${r.stderr}`)
+    assert.ok(r.stdout.includes('⚠ rules/team/a.md removed from team (overridden by .dev/overrides)'), `same=${same}`)
+    assert.ok(!r.stdout.includes('changed in core'), `same=${same}: core did not change`)
+    assert.equal(read(repo, LOCK), lock)
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
+  })
+})

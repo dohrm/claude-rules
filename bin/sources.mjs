@@ -300,16 +300,18 @@ export function assertOverrides(list, lockName) {
   if (!valid) throw new Error(`${lockName}: "overrides" must be a list of { path, by, over, baseHash }`)
 }
 // The overrides whose replaced version moved since the last install (ADR-0008), as
-// { path, by, over, change }: the same path and overriding layer with another base, or
-// no base left while that layer still supplies the path — the version it replaced is
-// gone. A replacement new to this run has no earlier base, so nothing to compare.
+// { path, by, over, change }. A record is the overriding layer AND the layer it
+// replaced: while the first still supplies the path, the second either dropped it
+// (`removed from`), was replaced by another layer under it, or holds other content
+// (`changed in`). A replacement new to this run has no earlier base to compare.
 export function changedUpstream(previous = [], current, supplies) {
   const now = new Map(current.map(o => [`${o.path}\0${o.by}`, o]))
   const moved = []
   for (const was of previous) {
+    if (!supplies(was.path, was.by)) continue
     const o = now.get(`${was.path}\0${was.by}`)
-    if (o) { if (o.baseHash !== was.baseHash) moved.push({ ...o, change: 'changed in' }) }
-    else if (supplies(was.path, was.by)) moved.push({ ...was, change: 'removed from' })
+    if (!supplies(was.path, was.over)) moved.push({ ...was, change: 'removed from' })
+    else if (o && (o.over !== was.over || o.baseHash !== was.baseHash)) moved.push({ ...o, change: 'changed in' })
   }
   return moved
 }
