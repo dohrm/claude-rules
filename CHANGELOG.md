@@ -12,6 +12,66 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — the installer writes only over what it owns
+
+The lock now records every file the installer writes, for every target, with its
+hash, and `add`, `update` and `remove` refuse a tree they cannot explain
+([ADR-0010](docs/adr/0010-installer-refuses-unexplained-tree.md), [#33](https://github.com/dohrm/claude-rules/issues/33)).
+Four behaviours change:
+
+- **A hand edit or an unrecorded copy at an installed path stops `add`/`update`.**
+  Claude and Cursor copies used to be overwritten silently. Now the command lists
+  every such path (an edited rule, a file the lock does not record even when
+  byte-identical, a foreign file in an installed skill directory), exits 1 and
+  changes nothing. Move the edit to `.dev/overrides/` (below), or re-run with
+  `--force` to overwrite the listed paths.
+- **The first `update` from a lock without file hashes overwrites once.** Any lock
+  written before this change is adopted: the run lists every installed destination,
+  overwrites it whole (local edits included) and records it. Without a terminal it
+  needs `--force`. Save your edits under the listed paths first, then run
+  `update --force` once and review `git diff`.
+- **Legacy trees are purged only by that adoption.** `.dev/rules/`, `.opencode/`,
+  the old `.claude/kit/` directories and retired skills are deleted by the adopting
+  `update`, never by a later one. One left behind after that is yours to delete;
+  `doctor` reports the retired-target trees.
+- **`remove` deletes only the files it recorded.** It reads the lock's `installed`
+  inventory, not a registry, and refuses a lock without hashes: run `update` once
+  first. A file it did not write survives; an edited one stops it (`--force`
+  overwrites).
+
+### Added — layered sources and `.dev/overrides/`
+
+A team can add its private rules, skills and kit as a second pinned source, and a
+repo can keep its own edits; one `update` replays every layer
+([ADR-0008](docs/adr/0008-layered-sources.md), [#33](https://github.com/dohrm/claude-rules/issues/33)).
+See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrides).
+
+- **`sources` in the lock.** An ordered list of `{ name, url, ref }`, `core` first.
+  An old `{ repo, ref }` lock reads as `core` and is rewritten in the new shape by
+  the next write. Sources are fetched with `git` on `PATH` and your own credentials
+  (`github:owner/repo` or any git URL); `giget` is gone.
+- **`add --source <name>=<url>#<ref>` / `remove --source <name>`** append and drop a
+  source. **`--ref <name>=<ref>`** moves one source; a bare `--ref` still moves `core`.
+- **Each source's `registry.json` decides** what it installs; registries merge in
+  order (profiles append, aliases and `retired` merge, later wins), and a source may
+  define profiles only it has. Its **`exclude`** removes files or whole skills of the
+  sources before it, and `update` deletes their installed copies.
+- **`.dev/overrides/`**, if present, is the last layer: same layout as a source, never
+  written by the installer. A file there replaces the installed one and survives
+  `update`.
+- **Overrides are listed.** The lock records `overrides: [{ path, by, over,
+  baseHash }]`, and `add`/`update` print each one. When a replaced file changed in the
+  layer under it, `update` warns
+  `⚠ <path> changed in <over> (overridden by <by>)`; **`update --strict`** fails
+  before writing anything.
+- **The lock records the merged `aliases`**, so an offline `remove` unpacks an alias
+  only an overlay defined, and **`doctor` audits the hashed inventory** offline: an
+  overlay-only profile passes, an edited or deleted installed file fails.
+- **Two new refusals:** two registry entries that install the same source path to two
+  destinations, and a skill directory that an `exclude`, a dropped entry or a
+  `remove` empties while it still holds a file the installer did not write
+  (`--force` removes it).
+
 ### Breaking — stricter language gates
 
 The language rules' high-stakes lines (taken from Open Code Review's per-language

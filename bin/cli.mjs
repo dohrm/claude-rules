@@ -10,7 +10,8 @@
 // Usage:
 //   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,codex,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
-//   npx github:dohrm/claude-rules update [--ref v1.3.0] [--force]  # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules update [--ref v1.3.0|<source>=<ref>] [--force] [--strict]  # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules add|remove --source <name>[=<url>#<ref>]  # add or drop a layered source
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
@@ -1708,8 +1709,9 @@ async function main() {
         + '  add --source <name>=<url>#<ref>  append a source (an overlay) to the lock and re-install with it\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  remove --source <name>           drop a source from the lock and re-install without it\n'
-        + '  update [--ref <ref>|<source>=<ref>] [--force]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
+        + '  update [--ref <ref>|<source>=<ref>] [--force] [--strict]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
         + '                                   a path the installer did not write as it is stops add/update; --force overwrites the listed paths\n'
+        + '                                   --strict fails when a file a later layer overrides changed upstream\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
