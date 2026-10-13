@@ -1,6 +1,6 @@
 // Sources (ADR-0008): what the lock pins, how each source is fetched, and the one
 // tree the emitters read. No emitter and no ownership logic lives here.
-import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, rmSync, realpathSync } from 'node:fs'
+import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, mkdirSync, rmSync, realpathSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -83,7 +83,6 @@ export async function withSources({ lockFile, refFlags, localDir, registry }, fn
   let locked = null
   if (existsSync(lockFile)) { safePath(lockFile); locked = lockSources(JSON.parse(readFileSync(lockFile, 'utf8')), registry, lockFile) }
   const sources = resolveSources(locked, parseRefs(refFlags), registry)
-  if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
   const fetched = []
   // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
   // trees (private content, git objects included) must not outlive the run either way.
@@ -113,20 +112,42 @@ function assertInside(root, abs, seen = new Set()) {
   for (const name of readdirSync(real)) assertInside(root, join(real, name), seen)
 }
 // The emitters read ONE tree, never a source: each entry's `from` is copied out of
-// the fetched sources into a temp dir, removed by the caller, so private content
-// never lands in the repo and no emitter knows where a file came from.
-// Returns { tree, origin }: origin maps each `from` to the source it was copied from.
-export function stageTree(layers, froms) {
+// the layers into a temp dir, removed by the caller, so private content never lands
+// in the repo and no emitter knows where a file came from. Layers are overlaid in
+// order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
+// whole directory for a skill, so a skill is never half one layer, half another.
+// Returns { tree, origin }: origin maps each `from` to the first layer that held it.
+export function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   const origin = {}
   try {
-    for (const from of froms) {
-      const layer = layers.find(l => existsSync(join(l.dir, from)))
-      if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
-      assertInside(realpathSync(layer.dir), join(layer.dir, from))
-      cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
-      origin[from] = layer.name
+    for (const { from, kind } of entries) {
+      const dest = join(tree, from)
+      for (const layer of layers) {
+        const src = join(layer.dir, from)
+        if (!existsSync(src)) continue
+        assertInside(realpathSync(layer.dir), src)
+        if (kind === 'skill') rmSync(dest, { recursive: true, force: true })
+        overlay(src, dest, from, layer.name)
+        origin[from] ??= layer.name
+      }
+      if (!origin[from]) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
   return { tree, origin }
+}
+// One layer over the tree, file by file. A path that is a file in one layer and a
+// directory in another has no answer: it is refused, never resolved (ADR-0010).
+// Links are followed (assertInside kept them in their source); `seen` stops a cycle.
+function overlay(src, dest, path, layer, seen = new Set()) {
+  const real = realpathSync(src)
+  if (!statSync(real).isDirectory()) {
+    if (existsSync(dest) && statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a file, where an earlier layer has a directory`)
+    cpSync(real, dest, { dereference: true })
+    return
+  }
+  if (seen.has(real)) throw new Error(`source ${layer}: ${path} links back into itself`)
+  if (existsSync(dest) && !statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a directory, where an earlier layer has a file`)
+  mkdirSync(dest, { recursive: true })
+  for (const name of readdirSync(real)) overlay(join(real, name), join(dest, name), `${path}/${name}`, layer, new Set([...seen, real]))
 }

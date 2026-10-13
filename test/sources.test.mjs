@@ -458,3 +458,61 @@ test('a skill dropped upstream while Codex is adopted is still pruned, and remov
     assert.ok(!has(repo, '.agents/skills/team'))
   })
 })
+
+// ------------------------------------------------------------------ layers (phase 3)
+// A core with one extra profile, `team`: a rule directory and a skill of two files.
+function teamCore(root, extra = {}) {
+  const reg = JSON.parse(read(REPO, 'registry.json'))
+  reg.profiles.team = [
+    { from: 'rules/team', to: '.claude/rules/team', kind: 'rule' },
+    { from: 'skills/team', to: '.claude/skills/team', kind: 'skill' },
+  ]
+  return makeSource(root, 'core', CORE_PATHS, {
+    'registry.json': JSON.stringify(reg, null, 2) + '\n',
+    'rules/team/a.md': '# core a\n',
+    'rules/team/b.md': '# core b\n',
+    'skills/team/SKILL.md': '---\nname: team\ndescription: core\n---\n',
+    'skills/team/notes.md': 'core notes\n',
+    ...extra,
+  })
+}
+const consumer = (root, sources, profiles = ['team']) => {
+  const repo = join(root, 'consumer')
+  mkdirSync(repo, { recursive: true })
+  writeFileSync(join(repo, LOCK), JSON.stringify({ sources, profiles, agents: ['claude'], levels: Object.fromEntries(profiles.map(p => [p, 'rules'])) }, null, 2) + '\n')
+  return repo
+}
+
+test('an overlay replaces files by path, and a skill directory whole', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'rules/team/a.md': '# overlay a\n',
+      'skills/team/SKILL.md': '---\nname: team\ndescription: overlay\n---\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a\n', 'the overlay rule wins')
+    assert.equal(read(repo, '.claude/rules/team/b.md'), '# core b\n', 'a rule file the overlay lacks stays core\'s')
+    assert.equal(read(repo, '.claude/skills/team/SKILL.md'), '---\nname: team\ndescription: overlay\n---\n', 'the overlay skill wins')
+    assert.deepEqual(readdirSync(join(repo, '.claude/skills/team')), ['SKILL.md'], 'no half skill: core\'s notes.md is not kept')
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'])
+    assert.deepEqual(Object.keys(lockOf(repo).installed.find(i => i.from === 'skills/team').files), ['.claude/skills/team/SKILL.md'])
+    // The overlay's ref replays from the lock: a new overlay commit lands on update.
+    team.commit({ 'rules/team/a.md': '# overlay a v2\n' })
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a v2\n')
+  })
+})
+
+test('a path that is a file in one layer and a directory in another is refused', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'rules/team/a.md/inner.md': '# a directory now\n' })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /source team: rules\/team\/a\.md is a directory, where an earlier layer has a file/)
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+  })
+})

@@ -714,7 +714,7 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
+    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
     tree = stagedTree.tree
     installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
