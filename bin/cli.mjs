@@ -968,6 +968,11 @@ async function install(profiles, layers, agents, modules, levels) {
       replaced.add(path)
     }
     const inReplaced = p => [...replaced].some(r => under(p, r))
+    // Destinations an emitter clears before writing (resetDir): what is inside them now
+    // goes whole, so a path the new layer turns from file to directory, or back, is not
+    // in the way. The destination itself is still checked below, links included.
+    const resets = (e, s, agent) => agent !== 'codex' && (e.kind === 'rule' && !s.isFile
+      || e.kind === 'skill' && !(agent === 'cursor' && agents.includes('codex')))
     for (const { e, s } of staged) for (const agent of agents) {
       for (const dest of destsFor(e, agent)) {
         safePath(dest)
@@ -977,7 +982,7 @@ async function install(profiles, layers, agents, modules, levels) {
       }
       if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
         const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
-        if (inReplaced(path)) continue
+        if (inReplaced(path) || resets(e, s, agent)) continue
         safePath(path)
         if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
       }

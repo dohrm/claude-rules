@@ -966,3 +966,21 @@ test('an entry whose type contradicts its extension is refused before any write'
     }
   })
 })
+
+// A skill is replaced whole on disk, so an overlay may change a file inside it into a
+// directory, or back, over an existing install.
+test('an overlay skill changes an internal file into a directory and back, for Claude and Cursor', () => {
+  withTmpRepo(root => {
+    const reg = withSkill(JSON.parse(read(REPO, 'registry.json')))
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'skills/team/SKILL.md': SKILL, 'skills/team/reference': 'a file in core\n' })
+    const team = makeSource(root, 'team', [], { 'skills/team/SKILL.md': SKILL, 'skills/team/reference/page.md': '# a directory in the overlay\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust'], ['claude', 'cursor'])
+    ok(cli(['update'], repo))
+    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+    for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference/page.md'), '# a directory in the overlay\n', dir)
+    ok(cli(['remove', '--source', 'team'], repo))
+    for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference'), 'a file in core\n', dir)
+  })
+})
