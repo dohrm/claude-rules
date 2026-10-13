@@ -89,7 +89,7 @@ function checkInventory(previous = {}) {
 export function prepareCodex(files, rules, modules, previous = {}) {
   checkInventory(previous)
   const blocks = instructionBlocks(rules, modules)
-  const writes = new Map(), deletes = [], inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
+  const writes = new Map(), deletes = [], clears = [], inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
   // A file of ours, unmodified, that this install no longer writes: it is deleted
   // (below, and first in applyCodex), so it may stand where a directory now goes —
   // a later layer turned a file of a skill into a directory, or back.
@@ -104,6 +104,7 @@ export function prepareCodex(files, rules, modules, previous = {}) {
       if (existsSync(path) && lstatSync(path).isDirectory()) {
         const foreign = filesUnder(path).find(f => !leaving(f))
         if (foreign) throw new Error(`Conflicting destination: ${path} is a directory holding ${foreign}`)
+        clears.push(path)   // what is left once its owned files are deleted: empty directories
       } else if (existsSync(path)) {
         if (!lstatSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
         const current = hash(readFileSync(path)), old = previous.files?.[path]?.hash
@@ -130,7 +131,7 @@ export function prepareCodex(files, rules, modules, previous = {}) {
       else deletes.push(path)
     }
   }
-  return { writes, deletes, inventory }
+  return { writes, deletes, clears, inventory }
 }
 
 // Deletes first: a path being deleted may stand where a write now goes (prepareCodex).
@@ -141,6 +142,7 @@ export function applyCodex(plan) {
     let dir = dirname(path)
     while (dir.startsWith('.agents/') && existsSync(dir) && !readdirSync(dir).length) { rmSync(dir, { recursive: true }); dir = dirname(dir) }
   }
+  for (const path of plan.clears || []) rmSync(path, { recursive: true, force: true })
   for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
 }
 

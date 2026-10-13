@@ -984,6 +984,12 @@ test('an overlay skill changes an internal file into a directory and back, for e
       ok(cli(['remove', '--source', 'team'], repo))
       for (const dir of ['.claude/skills/team', '.agents/skills/team']) assert.equal(read(repo, dir, 'reference'), 'a file in core\n', `${agents}: ${dir}`)
       if (!agents.includes('codex')) continue
+      // A directory left empty, or holding an empty one, is no blocker either.
+      ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+      rmSync(join(repo, '.agents/skills/team/reference/page.md'))
+      mkdirSync(join(repo, '.agents/skills/team/reference/empty'))
+      ok(cli(['remove', '--source', 'team'], repo))
+      assert.equal(read(repo, '.agents/skills/team/reference'), 'a file in core\n', `${agents}: emptied directory`)
       // Codex owns .agents/skills by hash: content it did not write is never replaced.
       ok(cli(['add', '--source', `team=${team.url}#main`], repo))
       writeFileSync(join(repo, '.agents/skills/team/reference/mine.md'), 'ours\n')
