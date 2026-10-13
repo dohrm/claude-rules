@@ -495,7 +495,14 @@ claude-rules/
 
 ## Verifying the factory itself
 
+This repository is **self-hosted**: it runs the skills, rules and gates it edits, with
+no install. `.claude/skills`, `.agents/skills`, `.claude/agents` and
+`.claude/rules/{agent,product}` are committed relative symlinks to the canonical
+directories (macOS and Linux), and the root `justfile` imports `kit/common/gate.just`
+in place. `test/self-host.test.mjs` fails when a link breaks.
+
 ```bash
+just check              # npm test + adr-check + docs-check, through the kit being edited
 npm test                # installer black-box + asset-tree + prose lint + the kit's doc gates + the eval harness
 node eval/run.mjs       # rot detector for the agents AND the skills — spends tokens, run on a model bump
 node eval/run.mjs --runner cursor            # …or claude
