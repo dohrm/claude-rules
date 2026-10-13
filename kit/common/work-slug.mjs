@@ -11,7 +11,10 @@
 // Order, first answer wins:
 //   1. an explicit slug (the justfile's `work_slug`);
 //   2. the `.work/*/rfc.md` whose `**Branch**` header names the current branch;
-//   3. the branch name, sanitized into one path segment (the gates' original behavior).
+//   3. an L4 phase branch `phase/<slug>/<n>` whose `.work/<slug>/rfc.md` exists — the
+//      header names the integration branch `rfc/<slug>`, and git cannot nest a phase
+//      under it (rules/agent/autonomy.md § L4);
+//   4. the branch name, sanitized into one path segment (the gates' original behavior).
 //
 // A module, not a command: `diff-since.mjs` and `review-context.mjs` import it, and its
 // `ensureWorkIgnored` keeps their per-developer files out of a committed `.work/`.
@@ -76,6 +79,10 @@ export function resolveSlug({ slug = '', cwd = '.' } = {}) {
     // Two RFCs claiming one branch is a tree that contradicts its state files — not ours
     // to arbitrate. The branch name is the answer that hides nothing.
     return { slug: sanitize(branch), from: 'branch name', ambiguous: matches }
+  }
+  const phaseOf = branch.match(/^phase\/([^/]+)\/[^/]+$/)?.[1]
+  if (phaseOf && existsSync(join(cwd, '.work', phaseOf, 'rfc.md'))) {
+    return { slug: sanitize(phaseOf), from: `phase branch of .work/${phaseOf}/rfc.md` }
   }
   return { slug: sanitize(branch), from: 'branch name' }
 }

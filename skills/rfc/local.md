@@ -40,6 +40,10 @@ question settled without asking (L2+) goes under `## Assumptions`.
 Tick each step as its proof passes, and append its outcome to `## Log`. The status
 line is the state; `just status` and `just publish-summary` read this file.
 
+At L4, `## Log` also takes the `ODD:` lines (or `dropped to L3: <why>`), the dependency
+graph before any parallel phases, and each delegated decision with its proof. The final
+report is the `rfc/<slug>` PR's description, because this file is deleted at the merge.
+
 ## `ready` and escalation
 
 - `ready` is the `**Status**` line, changed and committed by the human. Its commit

@@ -22,7 +22,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, 'rfc/**']   # rfc/**: L4 phase PRs (rules/agent/autonomy.md § L4)
   workflow_dispatch:
     inputs:
       run_eval:

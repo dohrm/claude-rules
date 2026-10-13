@@ -94,7 +94,8 @@ diffs from there:
 
 `<slug>` is, first answer wins: `work_slug` if you set it; else the `.work/*/rfc.md`
 whose `**Branch**` header is the current branch (`/rfc` writes it per phase), so the
-marker lands next to its RFC; else the branch name (`work-slug.mjs`). Both files are per
+marker lands next to its RFC; else, for an L4 phase branch `phase/<slug>/<n>`, that
+`<slug>` when `.work/<slug>/rfc.md` exists; else the branch name (`work-slug.mjs`). Both files are per
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
 

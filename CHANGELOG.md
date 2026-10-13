@@ -48,6 +48,15 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Added
 
+- **Autonomy L4 — orchestrated** (ADR-0009). An RFC carrying a `## Delegation board`
+  can run at L4. The orchestrator checks its domain at launch (or drops to L3), gives
+  each phase to an executor the board lists on `phase/<slug>/<n>`, merges phases into
+  `rfc/<slug>` on proof, and hands back one PR with a final report. The human merges
+  it. Doctrine in `agent/autonomy.md` § L4. **Hand merge:** add `'rfc/**'` to the
+  `pull_request` branches of your CI and mutation workflows (the templates now have
+  it), or delegated merges run without Tier 4. `work-slug.mjs` resolves a phase branch
+  to its RFC.
+
 - **`/update`, and the CHANGELOG ships with the install.** Every install now writes
   this file to `.dev/kit/CHANGELOG.md`; after `update`, `git diff` on it is exactly
   what changed since the repo last installed — no tag needed. `/update` (in

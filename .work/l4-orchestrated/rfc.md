@@ -1,7 +1,7 @@
 # RFC — Implement L4 (orchestrated): delegation board, verified ODD, executors, RFC integration branch
 
-- **Status**: ready
-- **Autonomy**: L1
+- **Status**: implementing
+- **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
 - **Branch**: rfc/l4-orchestrated
@@ -46,6 +46,7 @@ board does not delegate. The human receives one final PR with a report and merge
   rounds per phase before the orchestrator stops). A missing section or a missing list
   means L3.
 - **ODD record**: the launch check writes one `ODD:` line per prerequisite in `## Log`.
+  A change whose stopping condition cannot fail first (pure prose) cannot run at L4.
   A failed check writes `dropped to L3: <why>` and rewrites `**Autonomy**` to L3.
 - **State ownership**: only the orchestrator writes `rfc.md`, in the integration tree.
   An executor never edits it. Its report is the phase PR's description.
@@ -65,33 +66,29 @@ board does not delegate. The human receives one final PR with a report and merge
 
 ## Steps
 
-- [ ] Doctrine — `rules/agent/autonomy.md` § Levels: L4 row, the delegable/never split,
+- [x] Doctrine — `rules/agent/autonomy.md` § Levels: L4 row, the delegable/never split,
   board, ODD, cascade, minimal-risk condition; § One tree, one writer: at L4 one tree
   per phase, the integration tree as the only RFC writer, parallel phases allowed on a
   declared dependency graph; the hard-checkpoints paragraph says "except what an L4
   board delegates" → proof: `npm test`
-- [ ] Glossary — `CONTEXT.md`: Delegation board, ODD, Orchestrator, Executor,
+- [x] Glossary — `CONTEXT.md`: Delegation board, ODD, Orchestrator, Executor,
   Integration branch → proof: `npm test`
-- [ ] Skill — `skills/rfc/SKILL.md`: header `L1 | L2 | L3 | L4`, `## Delegation board`
+- [x] Skill — `skills/rfc/SKILL.md`: header `L1 | L2 | L3 | L4`, `## Delegation board`
   in `<rfc-body>`, § 4 L4 branch (launch check, integration branch, executor briefs = the
   RFC + phase number + level, phase merge on proof, parallelism, final report);
   `local.md` / `ticket.md`: where the report and ODD lines go → proof: `npm test`
-- [ ] Loop — `skills/loop-setup/SKILL.md`: L4 runs as L3 → proof: `npm test`
-- [ ] Slug — `kit/common/work-slug.mjs` new step + a case in `test/gates.test.mjs`
+- [x] Loop — `skills/loop-setup/SKILL.md`: L4 runs as L3 → proof: `npm test`
+- [x] Slug — `kit/common/work-slug.mjs` new step + a case in `test/gates.test.mjs`
   that fails without it → proof: `node --test test/gates.test.mjs`
-- [ ] CI — `pull_request.branches` gains `'rfc/**'` in `kit/{rust,python,ts}/mutation-ci.yaml`,
+- [x] CI — `pull_request.branches` gains `'rfc/**'` in `kit/{rust,python,ts}/mutation-ci.yaml`,
   `kit/go/coverage-ci.yaml`, `kit/cicd/ci.snippet.yaml`, `.github/workflows/ci.yml`
   → proof: `npm test`
-- [ ] Records — ADR-0004 amendment, README row on `/rfc`, CHANGELOG `[Unreleased]` → proof:
+- [x] Records — ADR-0004 amendment, README row on `/rfc`, CHANGELOG `[Unreleased]` → proof:
   `node kit/common/adr-check.mjs`, `npm test`
 
 ## Open questions
 
-- Autonomy for this RFC: L1 is written by default. Raise it if you want this run delegated.
-- Branch names `rfc/<slug>` + `phase/<slug>/<n>`: OK, or another scheme? — the human
-- The ODD needs a stopping condition that "fails for the right reason" at launch. For a
-  pure docs change, nothing fails first. Proposal: such an RFC cannot run at L4 and drops
-  to L3. — the human
+- none
 
 ## Assumptions
 
@@ -102,4 +99,25 @@ board does not delegate. The human receives one final PR with a report and merge
 
 ## Revisions
 
+- round 1: autonomy L3 (human); branch names `rfc/<slug>` + `phase/<slug>/<n>` confirmed;
+  a pure-docs RFC cannot run at L4 (its stopping condition cannot fail first) and drops to L3
+
 ## Log
+
+- doctrine: `autonomy.md` § L4 + one-tree exception; `gate.just` tree comment — `npm test` green.
+  `changed: ADR citation — shipped rules may not cite this repo's ADRs (asset test); § L4 names none`
+- glossary: Delegation board, ODD, Orchestrator / Executor in `CONTEXT.md`.
+  `changed: Integration branch — folded into Orchestrator / Executor, one entry fewer`
+- skill: `/rfc` L4 branch (6 steps), board in `<rfc-body>`, record homes in local/ticket.
+- loop: `/loop-setup` writes L3 for L4.
+- slug: `phase/<slug>/<n>` → `<slug>`; new test red before the fix (assertion), green after.
+- CI: `'rfc/**'` on the four kit workflows, the CI snippet and this repo's CI.
+- records: ADR-0004 dated amendment (status untouched), README, CHANGELOG (hand merge noted).
+- stopping condition: `npm test` 399 pass / 0 fail / 7 skipped (toolchain jalons);
+  `adr-check --strict` silent on 0004/0009. Tier 3: no `just code-review` in this repo
+  (no justfile) — not run, declared.
+- review (independent sub-agent, separate context, as Tier 3 stand-in): 6 findings, all
+  fixed — executor clause (never edits `rfc.md`, never merges), pull `rfc/<slug>` before
+  cutting a phase, push `rfc/<slug>` and RFC commits, ODD requires `rfc.md` committed on
+  `rfc/<slug>`, `kit/common/README.md` slug order, unreachable `done` at L4 reworded.
+  `npm test` 399 pass / 0 fail after fixes.

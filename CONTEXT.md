@@ -108,6 +108,24 @@ Ephemeral; deleted once its PR merges. Not a decision record — a
 choice that earns an ADR leaves the RFC as a `Proposed` ADR.
 _Avoid_: spec, plan, sprint (the retired `/plan` → `/tasks` units it replaced)
 
+**Delegation board**:
+The `## Delegation board` section of an RFC run at L4: the hard checkpoints the
+human delegates, the executors allowed (coding agent · model), and the caps
+(`agent/autonomy.md` § L4, ADR-0009). Without it, L4 runs as L3.
+_Avoid_: permissions, policy
+
+**ODD**:
+The operational design domain of an L4 run: the board plus the prerequisites the
+orchestrator proves at launch. Outside it, the run parks and escalates (the
+minimal-risk condition) instead of improvising.
+_Avoid_: scope (scope is what the RFC changes)
+
+**Orchestrator / Executor**:
+At L4, the orchestrator owns the RFC and its integration branch `rfc/<slug>` and
+merges phases on proof. An executor implements one phase on `phase/<slug>/<n>`, in its
+own tree, at L3 at most, and merges nothing.
+_Avoid_: manager / worker
+
 **Experience contract**:
 One screen or workflow for one actor profile under `docs/experience/`, indexed by
 `docs/EXPERIENCE.md`. Carries flow, invariants, recovery, freedom and evidence.
