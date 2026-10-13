@@ -1,6 +1,6 @@
 # RFC — Implement ADR-0008: install from layered sources, last path wins
 
-- **Status**: implementing
+- **Status**: draft
 - **Autonomy**: L4
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
@@ -9,4 +9,4 @@
 
 ## Blocked on the human
 
-- Phase 2 (#38) changes single-core `update` behaviour (skills cleared, dropped kit/agent files pruned), against the Out line — accept or refuse. See the ticket.
+- ADR-0010 (Proposed) — the human rules on it; it blocks `ready`. Then `rfc:ready` — see the ticket.
