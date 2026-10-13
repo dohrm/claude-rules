@@ -359,3 +359,43 @@ test('a registry that moves a destination into a child of itself is refused', ()
     assert.ok(!has(repo, '.claude/rules/rust/current'), 'nothing written')
   })
 })
+
+test('a fetched retired-skill name that climbs out of the skill root is refused, and src survives', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.retired = { ...(reg.retired || {}), skills: [...(reg.retired?.skills || []), '../../src'] }
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(join(repo, 'src'), { recursive: true })
+    writeFileSync(join(repo, 'src/main.rs'), 'fn main() {}\n')
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /retired skill "\.\.\/\.\.\/src" must be a plain skill directory name/)
+    assert.equal(read(repo, 'src/main.rs'), 'fn main() {}\n')
+    assert.ok(!has(repo, '.claude'), 'refused before emitting')
+  })
+})
+
+// The offline commands read the lock as written. A profile the installing source
+// defines, but the bundled registry retired, must not be renamed away by remove.
+test('remove keeps a source-defined profile that the bundled registry retired', () => {
+  withTmpRepo(root => {
+    const retired = Object.keys(registry.retired?.profiles || {})[0]
+    assert.ok(retired, 'the bundled registry retires at least one profile')
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    delete reg.retired.profiles[retired]
+    reg.profiles[retired] = [{ from: `rules/${retired}`, to: `.claude/rules/${retired}`, kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', [`rules/${retired}/r.md`]: '# kept\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['add', retired], repo))
+    assert.ok(has(repo, `.claude/rules/${retired}/r.md`))
+    ok(cli(['remove', 'rust'], repo))
+    assert.deepEqual(lockOf(repo).profiles, [retired], 'remove must not drop it through the bundled retirement list')
+    ok(cli(['remove', 'all'], repo))
+    assert.ok(!has(repo, `.claude/rules/${retired}`), 'remove all reaches it')
+    assert.ok(!has(repo, LOCK))
+  })
+})

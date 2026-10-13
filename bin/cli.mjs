@@ -546,7 +546,8 @@ function remove(profilesArg) {
   const agents = kept.length ? kept : ['claude']
   if (agents.includes('codex') && !lock.codex) throw new Error('Codex ownership inventory missing; update to adopt files before removing profiles')
   const full = profilesArg.length === 1 && profilesArg[0] === 'all'
-  const targets = full ? lock.profiles.slice() : profilesArg
+  // A locked profile name is taken as is; anything else unpacks as a bundled alias.
+  const targets = full ? lock.profiles.slice() : [...new Set(profilesArg.flatMap(n => lock.profiles.includes(n) ? [n] : unpackNames([n])))]
   const notInLock = targets.filter(p => !lock.profiles.includes(p))
   if (notInLock.length) console.log(`Not installed, skipping: ${notInLock.join(', ')}`)
   const toRemove = targets.filter(p => lock.profiles.includes(p))
@@ -628,7 +629,7 @@ function normalizeModules(profiles, modules = {}, validateRoot = true, known = t
   const out = {}
   for (const [raw, names] of Object.entries(modules)) {
     const dir = modulePath(raw)
-    const expanded = unpackNames(names, true)
+    const expanded = known ? unpackNames(names, true) : names
     if (known && expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
     out[dir] = [...new Set([...(out[dir] || []), ...expanded])]
   }
@@ -640,10 +641,15 @@ function normalizeModules(profiles, modules = {}, validateRoot = true, known = t
 }
 // Strict by default (add/update, under the fetched registry); `{ known: false }` for
 // the offline commands, which must still read a lock the bundled registry cannot explain.
+// Those keep the lock's profile names as written: retiring or unpacking them through
+// the bundled registry would rename what the installing source installed, and orphan
+// its inventory records. Migration happens on add/update, under the source's registry.
 function readLock({ known = true } = {}) {
   if (!existsSync(LOCK)) return null
   safePath(LOCK)
-  const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
+  const raw = JSON.parse(readFileSync(LOCK, 'utf8'))
+  const lock = known ? dropRetiredProfiles(raw) : raw
+  const unpack = names => known ? unpackNames(names, true) : names
   lock.sources = lockSources(lock)
   if (lock.installed !== undefined) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
@@ -651,12 +657,12 @@ function readLock({ known = true } = {}) {
   }
   delete lock.repo
   delete lock.ref
-  lock.profiles = unpackNames(lock.profiles, true)
+  lock.profiles = unpack(lock.profiles)
   lock.modules = normalizeModules(lock.profiles, lock.modules, true, known)
   if (lock.levels) {
     const levels = {}
     for (const [name, level] of Object.entries(lock.levels))
-      for (const p of unpackNames([name], true)) levels[p] = maxLevel(levels[p] || 'rules', level)
+      for (const p of unpack([name])) levels[p] = maxLevel(levels[p] || 'rules', level)
     lock.levels = levels
   }
   return lock
@@ -678,6 +684,15 @@ function dropRetiredProfiles(lock) {
 }
 // Skill directories of retired skills: library-owned, so no update would ever reach
 // them again. Codex-owned files under .agents/skills are pruned by its inventory.
+// A retired skill name is a fetched value too: one plain directory name, or a
+// `../../src` would make the purge below delete a project directory.
+function assertRetiredSkills() {
+  const names = registry.retired?.skills || []
+  if (!Array.isArray(names)) throw new Error('registry: retired.skills must be a list of skill names')
+  for (const name of names)
+    if (typeof name !== 'string' || !SOURCE_NAME.test(name) || name === '.' || name === '..')
+      throw new Error(`registry: retired skill ${JSON.stringify(name)} must be a plain skill directory name`)
+}
 function purgeRetiredSkills(agents, codexOwned) {
   for (const agent of agents) {
     if (codexOwned && SKILL_DIR[agent] === SKILL_DIR.codex) continue
@@ -755,6 +770,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   try {
     // Stage every entry before changing any destination.
     for (const { e } of owned) assertEntry(e, 'registry')
+    assertRetiredSkills()
     const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
     tree = stagedTree.tree
     installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
@@ -1651,7 +1667,7 @@ async function main() {
     }
     case 'remove': {
       if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
-      remove(positional[0] === 'all' ? positional : unpackNames(positional))
+      remove(positional)
       break
     }
     case 'init': initRepo(); break
