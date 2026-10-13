@@ -25,8 +25,8 @@ import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codex
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
 // the registries their fetched sources carry (withSources): what a ref installs is
-// that ref's registry, not whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
-// remove, doctor, init, budget) keep the bundled one.
+// that ref's registry, not whatever copy the CLI happened to be run from. Commands
+// that fetch nothing (list, remove, doctor, init, budget) keep the bundled one.
 let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const BUNDLED = registry
 const LOCK = '.claude-rules.lock'
@@ -360,8 +360,8 @@ function projectLayer() {
   return [{ name: OVERRIDES, dir: resolve(OVERRIDES), temp: false, project: true }]
 }
 
-// Fetch the run's sources, adopt their merged registry, hand them to `fn`, and remove every
-// temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
+// Fetch the run's sources, adopt their merged registry, hand them to `fn`, and remove
+// every temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
 async function withSources(fn, edit) {
   let locked = [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]
@@ -417,7 +417,6 @@ function mergeRegistries(fetched) {
       ...merged.retired,
       ...reg.retired,
       profiles: { ...merged.retired?.profiles, ...reg.retired.profiles },
-      skills: [...new Set([...(merged.retired?.skills || []), ...(reg.retired.skills || [])])],
     }
   }
   return merged
@@ -491,6 +490,9 @@ function emitSkill(s, entry, agent, ctx) {
   const dest = join(SKILL_DIR[agent], basename(entry.from))
   if (ctx.skills.has(dest)) return null
   ctx.skills.add(dest)
+  // A skill is one unit (ADR-0008): cleared before it is rewritten, like a rule
+  // directory, or a file of the skill an overlay replaced would stay on disk.
+  resetDir(dest)
   for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
   logCopy(entry.from, dest); return null
 }

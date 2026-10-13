@@ -707,3 +707,42 @@ test('the first update from a lock with no inventory lists what may be stale', (
     assert.doesNotMatch(ok(cli(['update'], repo)).stdout, /inventory/, 'said once: the next update has one')
   })
 })
+
+// The skill unit holds on disk too, not only in the staged tree: an overlay added after
+// core was installed must not leave core's other skill files behind.
+test('an overlay skill added after core replaces the installed skill whole, for Claude and Cursor', () => {
+  withTmpRepo(root => {
+    const reg = withSkill(JSON.parse(read(REPO, 'registry.json')))
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'skills/team/SKILL.md': SKILL, 'skills/team/reference.md': '# core-only page\n' })
+    const team = makeSource(root, 'team', [], { 'skills/team/SKILL.md': '---\nname: team\ndescription: team\n---\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }], ['rust'], ['claude', 'cursor'])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/skills/team/reference.md') && has(repo, '.agents/skills/team/reference.md'))
+    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+    for (const dir of ['.claude/skills/team', '.agents/skills/team']) {
+      assert.match(read(repo, dir, 'SKILL.md'), /description: team/, dir)
+      assert.ok(!has(repo, dir, 'reference.md'), `${dir}: no half skill on disk`)
+    }
+  })
+})
+
+// `retired` merges by key, the later source winning: an overlay that brings back a
+// skill core retired keeps it installed.
+test('an overlay that un-retires a core-retired skill keeps it installed', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.retired = { ...reg.retired, skills: ['team'] }
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ retired: { skills: [] }, profiles: { rust: [{ from: 'skills/team', to: '.claude/skills/team', kind: 'skill' }] } }) + '\n',
+      'skills/team/SKILL.md': SKILL,
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/skills/team/SKILL.md'), 'the later retired.skills replaces the earlier one')
+  })
+})
