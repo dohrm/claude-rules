@@ -624,3 +624,52 @@ test('.dev/overrides/ is the last layer: a repo-owned rule survives update, and 
     assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'], 'no ref, no lock entry')
   })
 })
+
+test('add --source appends an overlay to the lock; remove --source drops it, its files and the profiles only it defined', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-extra': [{ from: 'rules/team-extra', to: '.claude/rules/team-extra', kind: 'rule' }] } }),
+      'rules/team-extra/x.md': '# extra\n',
+      'rules/team/a.md': '# overlay a\n',
+    })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+
+    ok(cli(['add', 'team-extra', '--source', `team=${team.url}#main`], repo))
+    let lock = lockOf(repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    assert.deepEqual(lock.profiles, ['team', 'team-extra'])
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a\n')
+    assert.ok(has(repo, '.claude/rules/team-extra/x.md'))
+
+    const r = ok(cli(['remove', '--source', 'team'], repo))
+    assert.match(r.stdout, /Dropping \[team-extra\]: no remaining source defines it/)
+    lock = lockOf(repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }])
+    assert.deepEqual(lock.profiles, ['team'])
+    assert.ok(!has(repo, '.claude/rules/team-extra'), 'the overlay-only profile\'s files go')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# core a\n', 'the file it overrode is core\'s again')
+    assert.ok(!lock.installed.some(i => i.source === 'team'))
+  })
+})
+
+test('--source refuses core, a source already locked, an unknown one, and a malformed value', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    for (const [args, why] of [
+      [['add', '--source', `core=${core.url}#main`], /"core" is this library; pin it with --ref/],
+      [['add', '--source', `team=${core.url}#main`], /source "team" is already locked; move it with --ref team=<ref>/],
+      [['add', '--source', 'team-no-ref'], /--source team-no-ref: expected <name>=<url>#<ref>/],
+      [['remove', '--source', 'nobody'], /source "nobody" is not locked\. Locked: core, team/],
+      [['remove', '--source', 'core'], /source "core" cannot be removed; "remove all" uninstalls/],
+    ]) {
+      const r = cli(args, repo)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.match(r.stderr, why)
+    }
+    assert.equal(read(repo, LOCK), before)
+  })
+})

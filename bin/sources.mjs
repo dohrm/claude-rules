@@ -38,13 +38,33 @@ export function parseRefs(refFlags) {
 // The sources this run installs from: the lock's (or core alone on a first add), each
 // at its --ref. Without one, core follows defaultRef, as it always has, and every
 // other source replays its locked ref.
-function resolveSources(locked, refs, registry) {
-  const sources = (locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]).map(s => ({ ...s }))
+function resolveSources(locked, refs, registry, edit) {
+  const sources = editSources(locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }], edit).map(s => ({ ...s }))
   const unknown = Object.keys(refs).filter(n => !sources.some(s => s.name === n))
   if (unknown.length)
     throw new Error(`--ref names unknown source(s): ${unknown.join(', ')}. Locked: ${sources.map(s => s.name).join(', ')}`)
   for (const s of sources) s.ref = refs[s.name] || (s.name === CORE ? registry.defaultRef : s.ref)
   return sources
+}
+// `add --source <name>=<url>#<ref>`: the ref is after the last `#`, so a URL may hold one.
+export function parseSourceFlag(raw) {
+  const m = raw.match(/^([\w.-]+)=(.+)#([^#]+)$/)
+  if (!m) throw new Error(`--source ${raw}: expected <name>=<url>#<ref>`)
+  if (m[1] === CORE) throw new Error(`--source: "${CORE}" is this library; pin it with --ref`)
+  return { name: m[1], url: m[2], ref: m[3] }
+}
+// What this run changes in the lock's list: `add` appends a source, `drop` removes one.
+function editSources(list, { add, drop } = {}) {
+  if (add) {
+    if (list.some(s => s.name === add.name)) throw new Error(`source "${add.name}" is already locked; move it with --ref ${add.name}=<ref>`)
+    return [...list, add]
+  }
+  if (drop) {
+    if (drop === CORE) throw new Error(`source "${CORE}" cannot be removed; "remove all" uninstalls`)
+    if (!list.some(s => s.name === drop)) throw new Error(`source "${drop}" is not locked. Locked: ${list.map(s => s.name).join(', ')}`)
+    return list.filter(s => s.name !== drop)
+  }
+  return list
 }
 export const sourcesLabel = sources => sources.map(s => `${s.name}@${s.ref}`).join(', ')
 
@@ -89,10 +109,11 @@ function projectLayer() {
 // Fetch the run's sources, merge their registries, hand both to `fn` with the source
 // that declared each entry, and remove every temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
-export async function withSources({ lockFile, refFlags, localDir, registry }, fn) {
+// `edit`: `{ add: source }` or `{ drop: name }`, applied to the locked list first.
+export async function withSources({ lockFile, refFlags, localDir, registry, edit }, fn) {
   let locked = null
   if (existsSync(lockFile)) { safePath(lockFile); locked = lockSources(JSON.parse(readFileSync(lockFile, 'utf8')), registry, lockFile) }
-  const sources = resolveSources(locked, parseRefs(refFlags), registry)
+  const sources = resolveSources(locked, parseRefs(refFlags), registry, edit)
   const fetched = []
   // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
   // trees (private content, git objects included) must not outlive the run either way.
