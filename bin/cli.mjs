@@ -26,8 +26,8 @@ import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourc
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
 // the registries their fetched sources carry (withSources): what a ref installs is
-// that ref's registry, not whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
-// remove, doctor, init, budget) keep the bundled one.
+// that ref's registry, not whatever copy the CLI happened to be run from. Commands
+// that fetch nothing (list, remove, doctor, init, budget) keep the bundled one.
 let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
 const KNOWN_AGENTS = ['claude', 'codex', 'cursor']
