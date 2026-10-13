@@ -6,3 +6,7 @@
 - **Base branch**: next
 - **Branch**: feat/self-host
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/34
+
+## Blocked on the human
+
+- Merge of the PR into `next` (hard checkpoint) — the human.
