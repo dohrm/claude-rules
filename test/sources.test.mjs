@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
 
 const LOCK = '.claude-rules.lock'
@@ -798,5 +799,156 @@ test('a foreign file in a skill that an exclude or a remove empties is refused; 
     }
     ok(cli(['update', '--force'], repo))
     assert.ok(!has(repo, '.claude/skills/team'), '--force removes the listed file with the skill')
+  })
+})
+
+// ------------------------------------------------------- overrides (phase 4)
+// Every path a later layer replaces is recorded and printed (ADR-0008): a file, or a
+// skill directory whole, hashed as the sorted list of its (path, sha256).
+const sha = text => createHash('sha256').update(text).digest('hex')
+const skillHash = files => sha(JSON.stringify(Object.entries(files).sort(([a], [b]) => a < b ? -1 : 1).map(([p, t]) => [p, sha(t)])))
+function layered(root) {
+  const core = teamCore(root)
+  const team = makeSource(root, 'team', [], {
+    'rules/team/a.md': '# overlay a\n',
+    'skills/team/SKILL.md': '---\nname: team\ndescription: overlay\n---\n',
+  })
+  const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust', 'team'])
+  mkdirSync(join(repo, '.dev/overrides/rules/team'), { recursive: true })
+  writeFileSync(join(repo, '.dev/overrides/rules/team/a.md'), '# mine a\n')
+  writeFileSync(join(repo, '.dev/overrides/rules/team/b.md'), '# mine b\n')
+  return { core, team, repo }
+}
+
+test('add and update record every override in the lock, with the base it replaced, and print it', () => {
+  withTmpRepo(root => {
+    const { repo } = layered(root)
+    const expected = [
+      { path: 'rules/team/a.md', by: 'team', over: 'core', baseHash: sha('# core a\n') },
+      { path: 'rules/team/a.md', by: '.dev/overrides', over: 'team', baseHash: sha('# overlay a\n') },
+      { path: 'rules/team/b.md', by: '.dev/overrides', over: 'core', baseHash: sha('# core b\n') },
+      { path: 'skills/team', by: 'team', over: 'core', baseHash: skillHash({ 'SKILL.md': '---\nname: team\ndescription: core\n---\n', 'notes.md': 'core notes\n' }) },
+    ]
+    const byPath = list => [...list].sort((x, y) => `${x.path} ${x.by}`.localeCompare(`${y.path} ${y.by}`))
+    for (const args of [['update'], ['add', 'team']]) {
+      const r = ok(cli(args, repo))
+      assert.deepEqual(byPath(lockOf(repo).overrides), byPath(expected), `${args[0]}: lock`)
+      for (const o of expected) assert.ok(r.stdout.includes(`  ↻ ${o.path}  (${o.by} over ${o.over})`), `${args[0]}: prints ${o.path} by ${o.by}`)
+      assert.ok(!/⚠/.test(r.stdout), `${args[0]}: nothing changed upstream, no warning`)
+    }
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
+    // A single-source install has nothing to record.
+    const plain = join(root, 'plain')
+    mkdirSync(plain)
+    const core = makeSource(plain, 'core', CORE_PATHS)
+    const alone = join(plain, 'consumer')
+    mkdirSync(alone)
+    writeLock(alone, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = ok(cli(['update'], alone))
+    assert.equal(lockOf(alone).overrides, undefined)
+    assert.ok(!r.stdout.includes('↻'))
+  })
+})
+
+test('update warns when a replaced path changed in the layer under it; --strict fails and changes nothing', () => {
+  withTmpRepo(root => {
+    const { core, team, repo } = layered(root)
+    ok(cli(['update'], repo))
+    core.commit({ 'rules/team/a.md': '# core a v2\n', 'skills/team/notes.md': 'core notes v2\n' })
+    team.commit({ 'rules/team/a.md': '# overlay a v2\n' })
+
+    const before = read(repo, LOCK)
+    const strict = cli(['update', '--strict'], repo)
+    assert.equal(strict.status, 1, strict.stdout + strict.stderr)
+    assert.ok(strict.stdout.includes('⚠ rules/team/a.md changed in core (overridden by team)'))
+    assert.ok(strict.stdout.includes('⚠ rules/team/a.md changed in team (overridden by .dev/overrides)'))
+    assert.ok(strict.stdout.includes('⚠ skills/team changed in core (overridden by team)'))
+    assert.ok(!strict.stdout.includes('⚠ rules/team/b.md'), 'b.md did not change upstream')
+    assert.match(strict.stderr, /--strict: 3 overridden path\(s\) changed upstream; nothing was changed/)
+    assert.equal(read(repo, LOCK), before, 'lock unchanged')
+
+    const r = ok(cli(['update'], repo))
+    assert.ok(r.stdout.includes('⚠ rules/team/a.md changed in core (overridden by team)'), 'without --strict: a warning, and the install goes on')
+    const base = lockOf(repo).overrides.find(o => o.path === 'rules/team/a.md' && o.by === 'team').baseHash
+    assert.equal(base, sha('# core a v2\n'), 'the new base is recorded')
+    // Recorded, so the next strict run passes.
+    const again = ok(cli(['update', '--strict'], repo))
+    assert.ok(!again.stdout.includes('⚠'))
+  })
+})
+
+test('remove drops the overrides of the entries it removes', () => {
+  withTmpRepo(root => {
+    const { repo } = layered(root)
+    mkdirSync(join(repo, '.dev/overrides/rules/common'), { recursive: true })
+    writeFileSync(join(repo, '.dev/overrides/rules/common/language.md'), '# Language, mine\n')
+    ok(cli(['update'], repo))
+    ok(cli(['remove', 'team'], repo))
+    assert.deepEqual(lockOf(repo).overrides, [{ path: 'rules/common/language.md', by: '.dev/overrides', over: 'core', baseHash: sha(read(REPO, 'rules/common/language.md')) }])
+  })
+})
+
+// Staging one source path twice would replay every layer over a merged path, and record
+// a layer replacing itself, or core replacing the project layer: refused (ADR-0010).
+test('two entries whose source paths nest are refused before any write', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.team = [{ from: 'rules/common/language.md', to: '.claude/rules/extra.md', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /rules\/common\/language\.md is inside rules\/common: a source path is staged once/)
+    assert.equal(read(repo, LOCK), before)
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+  })
+})
+
+test('an overridden file deleted in the layer under it warns too, and fails under --strict', () => {
+  withTmpRepo(root => {
+    const { core, repo } = layered(root)
+    ok(cli(['update'], repo))
+    // b.md leaves core, the overriding project layer still supplies it.
+    spawnSync('git', ['rm', '-q', 'rules/team/b.md'], { cwd: join(root, 'core-work') })
+    core.commit({})
+    const before = read(repo, LOCK)
+    const strict = cli(['update', '--strict'], repo)
+    assert.equal(strict.status, 1, strict.stdout + strict.stderr)
+    assert.ok(strict.stdout.includes('⚠ rules/team/b.md removed from core (overridden by .dev/overrides)'))
+    assert.equal(read(repo, LOCK), before, 'lock unchanged')
+    assert.equal(read(repo, '.claude/rules/team/b.md'), '# mine b\n')
+    ok(cli(['update'], repo))
+    assert.ok(!lockOf(repo).overrides.some(o => o.path === 'rules/team/b.md'), 'nothing is replaced there any more')
+    ok(cli(['update', '--strict'], repo))
+
+    // Three layers: a.md leaves core; team still supplies it, under the project layer.
+    spawnSync('git', ['rm', '-q', 'rules/team/a.md'], { cwd: join(root, 'core-work') })
+    core.commit({})
+    const lock = read(repo, LOCK)
+    const three = cli(['update', '--strict'], repo)
+    assert.equal(three.status, 1, three.stdout + three.stderr)
+    assert.ok(three.stdout.includes('⚠ rules/team/a.md removed from core (overridden by team)'))
+    assert.equal(read(repo, LOCK), lock, 'lock unchanged')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
+  })
+})
+
+// The layer an override replaced is part of its identity: when that layer drops the
+// path and an earlier one still has it, the warning names the layer that dropped it.
+test('a middle layer that drops an overridden path is named, whatever the layer under it holds', () => {
+  for (const same of [false, true]) withTmpRepo(root => {
+    const { team, repo } = layered(root)
+    if (same) team.commit({ 'rules/team/a.md': '# core a\n' })
+    ok(cli(['update'], repo))
+    spawnSync('git', ['rm', '-q', 'rules/team/a.md'], { cwd: join(root, 'team-work') })
+    team.commit({})
+    const lock = read(repo, LOCK)
+    const r = cli(['update', '--strict'], repo)
+    assert.equal(r.status, 1, `same=${same}: ${r.stdout}${r.stderr}`)
+    assert.ok(r.stdout.includes('⚠ rules/team/a.md removed from team (overridden by .dev/overrides)'), `same=${same}`)
+    assert.ok(!r.stdout.includes('changed in core'), `same=${same}: core did not change`)
+    assert.equal(read(repo, LOCK), lock)
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
   })
 })

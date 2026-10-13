@@ -10,7 +10,8 @@
 // Usage:
 //   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,codex,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
-//   npx github:dohrm/claude-rules update [--ref v1.3.0] [--force]  # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules update [--ref v1.3.0|<source>=<ref>] [--force] [--strict]  # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules add|remove --source <name>[=<url>#<ref>]  # add or drop a layered source
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
@@ -21,7 +22,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides, changedUpstream } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
@@ -540,7 +541,10 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases)
+    // An override goes with the entries it was staged for.
+    const under = (path, from) => path === from || path.startsWith(from + '/')
+    const overrides = (lock.overrides || []).filter(o => keptInstalled.some(i => under(o.path, i.from)))
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases, overrides)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
   if (lock.installed.some(i => !isKept(i) && i.kind === 'kit'))
@@ -598,6 +602,7 @@ function readLock({ known = true } = {}) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
     for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
   }
+  if (lock.overrides !== undefined) assertOverrides(lock.overrides, LOCK)
   // Codex's inventory feeds the same ownership plan, whichever targets this run selects.
   if (lock.codex !== undefined) checkCodexInventory(lock.codex, false)
   delete lock.repo
@@ -653,11 +658,13 @@ function purgeRetiredSkills(agents, codexOwned) {
 // `installed` is the inventory: one { source, kind, from, to, profile } per entry
 // emitted (profile null for the shared ones). remove deletes from it. `aliases` are
 // the merged registry's, so an offline remove unpacks one an overlay defined.
-function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases) {
+// `overrides` are the paths a later layer replaced, with the base each replaced.
+function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases, overrides) {
   const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
   if (aliases && Object.keys(aliases).length) lock.aliases = aliases
   lock.installed = installed
+  if (overrides?.length) lock.overrides = overrides
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
@@ -745,6 +752,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     // An entry excluded whole is not installed; a file excluded inside one is not
     // emitted. Their copies are then owned and no longer produced: the apply deletes them.
     for (const [path, by] of staging.excluded) console.log(`  − ${path}  (excluded by ${by})`)
+    for (const o of staging.overrides) console.log(`  ↻ ${o.path}  (${o.by} over ${o.over})`)
     owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
     installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
@@ -791,6 +799,12 @@ async function install(profiles, fetched, agents, modules, levels) {
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
     // Read as written: its profiles may be ones no source defines any more (remove --source).
     const previous = readLock({ known: false })
+    // An override no longer receives what changed under it: say so, and under
+    // `update --strict` stop before anything is written.
+    const moved = changedUpstream(previous?.overrides, staging.overrides, staging.supplies)
+    for (const o of moved) console.log(`⚠ ${o.path} ${o.change} ${o.over} (overridden by ${o.by})`)
+    if (moved.length && strictFlag && cmd === 'update')
+      throw new Error(`--strict: ${moved.length} overridden path(s) changed upstream; nothing was changed. Review each change, then run \`update\` without --strict to record the new base.`)
     const recorded = ownedFiles(previous)
     const plan = { writes: ctx.out, modes: ctx.modes, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
     const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)
@@ -818,7 +832,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     if (adopted.length) { purgeRetired(); purgeRetiredSkills(agents, Boolean(codex)); purgeLegacyKit() }
     for (const record of installed)
       record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
-    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases, staging.overrides)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
   }
@@ -1695,8 +1709,9 @@ async function main() {
         + '  add --source <name>=<url>#<ref>  append a source (an overlay) to the lock and re-install with it\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
         + '  remove --source <name>           drop a source from the lock and re-install without it\n'
-        + '  update [--ref <ref>|<source>=<ref>] [--force]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
+        + '  update [--ref <ref>|<source>=<ref>] [--force] [--strict]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
         + '                                   a path the installer did not write as it is stops add/update; --force overwrites the listed paths\n'
+        + '                                   --strict fails when a file a later layer overrides changed upstream\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
