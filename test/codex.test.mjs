@@ -141,7 +141,7 @@ for (const malformed of [start, end + start, start + end + start + end]) {
 test('unowned conflicting asset rejects adoption without mutating other targets', () => withTmpRepo(dir => {
   put(dir, '.agents/rules/rust/code-style.md', 'custom')
   const r = runCli(['add', 'rust'], dir)
-  assert.equal(r.status, 1); assert.match(r.stderr, /Conflicting local content/)
+  assert.equal(r.status, 1); assert.match(r.stderr, /✗ \.agents\/rules\/rust\/code-style\.md — not written by claude-rules/)
   assert.ok(!has(dir, '.claude'))
   assert.equal(read(dir, '.agents/rules/rust/code-style.md'), 'custom')
 }))
@@ -289,9 +289,11 @@ test('profiles sharing registry assets union their scopes and retain remaining o
   assert.ok(!has(dir, 'apps/web/AGENTS.md'))
 }))
 
-test('identical manual assets are adopted and stale lock scoping is diagnosed', () => withTmpRepo(dir => {
+// ADR-0010: identical content is not ownership; --force records it.
+test('identical manual assets are refused, adopted under --force, and stale lock scoping is diagnosed', () => withTmpRepo(dir => {
   put(dir, '.agents/rules/rust/code-style.md', read(REPO, 'rules/rust/code-style.md'))
-  ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+  assert.match(runCli(['add', 'rust', '--agent', 'codex'], dir).stderr, /✗ \.agents\/rules\/rust\/code-style\.md — not written by claude-rules/)
+  ok(runCli(['add', 'rust', '--agent', 'codex', '--force'], dir))
   assert.ok(lock(dir).codex.files['.agents/rules/rust/code-style.md'])
   const state = lock(dir)
   state.modules = { '.': [], 'apps/api': ['rust'] }
