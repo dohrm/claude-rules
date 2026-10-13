@@ -30,7 +30,7 @@ section, written by `/architect`:
 ## RFC store
 - Tracker: <tool>, <project or repository>
 - Access: <CLI command> — else <REST base URL>, token in `$<VAR>`
-- Act as: <bot account>
+- Agent accounts: <bot or machine accounts reserved to agents, or `none`>
 - Status: draft = <…>, ready = <…>, implementing = <…>, done = <…>
 - Who set ready: <where the status history names the actor>
 ```
@@ -49,8 +49,9 @@ Learn the commands from the tool (`--help`, the API reference), not from memory.
 the section is missing, ask once and write it. If the declared access fails, stop and
 say so; never fall back to another tracker or store.
 
-Check **whoami** before the first write. If it is the human's account, you are in
-`SKILL.md`'s signed fallback.
+Check **whoami** before the first write: the account you act as is whoever the access
+is authenticated as, never a name written in the adapter. If it is not listed under
+`Agent accounts`, it is a human's, and you are in `SKILL.md`'s signed fallback.
 
 ## Pre-fetched context
 

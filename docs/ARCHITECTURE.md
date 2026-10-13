@@ -71,13 +71,14 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 ## RFC store
 
 - Tracker: GitHub issues, `dohrm/claude-rules`
-- Access: `gh` (`gh issue view|edit|comment`, `gh api` for the timeline), authenticated
-  as the owner
-- Act as: `dohr-michael` — the owner's own account, no bot. Every agent comment starts
-  with `🤖 … on behalf of dohr-michael`, and an agent never sets `rfc:ready`.
+- Access: `gh` (`gh issue view|edit|comment`, `gh api` for the timeline); whoami:
+  `gh api user -q .login`
+- Agent accounts: none — the agent acts as whoever `gh` is authenticated as, a human's
+  account. Every agent comment starts with `🤖 … on behalf of <whoami>`, and an agent
+  never sets `rfc:ready`.
 - Status: labels `rfc:draft`, `rfc:ready`, `rfc:implementing`, `rfc:done`
-- Who set ready: the issue timeline's actor on the `rfc:ready` label — always the
-  owner's account here, so the guard is the agent's own: it never adds that label
+- Who set ready: the issue timeline's actor on the `rfc:ready` label — a human's
+  account like the agent's here, so the guard is the agent's own: it never adds that label
 
 ## Decision log
 

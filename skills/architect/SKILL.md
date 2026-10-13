@@ -177,7 +177,7 @@ External services, the contract with each, the blast radius if it fails.
 <!-- Only when RFCs live in a tracker; the contract is in the rfc skill's ticket.md. -->
 - Tracker: <tool>, <project or repository>
 - Access: <CLI command> — else <REST base URL>, token in `$<VAR>`; an MCP server only when nothing else exists
-- Act as: <bot account, not a human's token>
+- Agent accounts: <bot or machine accounts reserved to agents, or `none` — the identity itself is whoever the access is authenticated as>
 - Status: draft = <…>, ready = <…>, implementing = <…>, done = <…>
 - Who set ready: <where the status history names the actor>
 

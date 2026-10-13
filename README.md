@@ -90,8 +90,8 @@ Ordinary authorized adjustments update the affected product documents in place.
 
 An RFC lives in `.work/<slug>/rfc.md` by default, or as a ticket in any tracker.
 For a tracker, `docs/ARCHITECTURE.md` declares the adapter under `## RFC store`:
-how to reach it (a CLI first, then the REST API, an MCP server last), the bot account
-the agent acts as, and how statuses map. A webhook can trigger a refinement round
+how to reach it (a CLI first, then the REST API, an MCP server last), which accounts
+are reserved to agents, and how statuses map. A webhook can trigger a refinement round
 unattended; a dispatcher that already holds the ticket may pre-fetch it into
 `.work/<slug>/ticket-context.md`. Implementation starts only on `/rfc implement`,
 once you mark the RFC `ready`.

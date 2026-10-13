@@ -151,6 +151,13 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Changed
 
+- **RFC store: `Act as` becomes `Agent accounts`.** The identity is whoever the
+  tracker access is authenticated as (whoami at run time); the adapter now lists only
+  the accounts reserved to agents, or `none`. Any other whoami is a human's, so the
+  agent signs `on behalf of <whoami>`. Rename the line in your `docs/ARCHITECTURE.md`
+  § RFC store by hand: `Agent accounts: <your bot>`, or `none` if the agent ran under
+  your account.
+
 - **Fewer, broader ADRs** (ADR-0005). A project ADR now needs an arbitration that is
   hard to reverse, constrains more than one feature, and refused real alternatives.
   Enterprise policy goes to a shared decision repository, stack conventions to the
