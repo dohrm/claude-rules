@@ -21,7 +21,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
@@ -540,7 +540,10 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases)
+    // An override goes with the entries it was staged for.
+    const under = (path, from) => path === from || path.startsWith(from + '/')
+    const overrides = (lock.overrides || []).filter(o => keptInstalled.some(i => under(o.path, i.from)))
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases, overrides)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
   if (lock.installed.some(i => !isKept(i) && i.kind === 'kit'))
@@ -598,6 +601,7 @@ function readLock({ known = true } = {}) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
     for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
   }
+  if (lock.overrides !== undefined) assertOverrides(lock.overrides, LOCK)
   // Codex's inventory feeds the same ownership plan, whichever targets this run selects.
   if (lock.codex !== undefined) checkCodexInventory(lock.codex, false)
   delete lock.repo
@@ -653,11 +657,13 @@ function purgeRetiredSkills(agents, codexOwned) {
 // `installed` is the inventory: one { source, kind, from, to, profile } per entry
 // emitted (profile null for the shared ones). remove deletes from it. `aliases` are
 // the merged registry's, so an offline remove unpacks one an overlay defined.
-function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases) {
+// `overrides` are the paths a later layer replaced, with the base each replaced.
+function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases, overrides) {
   const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
   if (aliases && Object.keys(aliases).length) lock.aliases = aliases
   lock.installed = installed
+  if (overrides?.length) lock.overrides = overrides
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
@@ -745,6 +751,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     // An entry excluded whole is not installed; a file excluded inside one is not
     // emitted. Their copies are then owned and no longer produced: the apply deletes them.
     for (const [path, by] of staging.excluded) console.log(`  − ${path}  (excluded by ${by})`)
+    for (const o of staging.overrides) console.log(`  ↻ ${o.path}  (${o.by} over ${o.over})`)
     owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
     installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
@@ -818,7 +825,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     if (adopted.length) { purgeRetired(); purgeRetiredSkills(agents, Boolean(codex)); purgeLegacyKit() }
     for (const record of installed)
       record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
-    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases, staging.overrides)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
   }

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
 
 const LOCK = '.claude-rules.lock'
@@ -798,5 +799,64 @@ test('a foreign file in a skill that an exclude or a remove empties is refused; 
     }
     ok(cli(['update', '--force'], repo))
     assert.ok(!has(repo, '.claude/skills/team'), '--force removes the listed file with the skill')
+  })
+})
+
+// ------------------------------------------------------- overrides (phase 4)
+// Every path a later layer replaces is recorded and printed (ADR-0008): a file, or a
+// skill directory whole, hashed as the sorted list of its (path, sha256).
+const sha = text => createHash('sha256').update(text).digest('hex')
+const skillHash = files => sha(JSON.stringify(Object.entries(files).sort(([a], [b]) => a < b ? -1 : 1).map(([p, t]) => [p, sha(t)])))
+function layered(root) {
+  const core = teamCore(root)
+  const team = makeSource(root, 'team', [], {
+    'rules/team/a.md': '# overlay a\n',
+    'skills/team/SKILL.md': '---\nname: team\ndescription: overlay\n---\n',
+  })
+  const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust', 'team'])
+  mkdirSync(join(repo, '.dev/overrides/rules/team'), { recursive: true })
+  writeFileSync(join(repo, '.dev/overrides/rules/team/a.md'), '# mine a\n')
+  writeFileSync(join(repo, '.dev/overrides/rules/team/b.md'), '# mine b\n')
+  return { core, team, repo }
+}
+
+test('add and update record every override in the lock, with the base it replaced, and print it', () => {
+  withTmpRepo(root => {
+    const { repo } = layered(root)
+    const expected = [
+      { path: 'rules/team/a.md', by: 'team', over: 'core', baseHash: sha('# core a\n') },
+      { path: 'rules/team/a.md', by: '.dev/overrides', over: 'team', baseHash: sha('# overlay a\n') },
+      { path: 'rules/team/b.md', by: '.dev/overrides', over: 'core', baseHash: sha('# core b\n') },
+      { path: 'skills/team', by: 'team', over: 'core', baseHash: skillHash({ 'SKILL.md': '---\nname: team\ndescription: core\n---\n', 'notes.md': 'core notes\n' }) },
+    ]
+    const byPath = list => [...list].sort((x, y) => `${x.path} ${x.by}`.localeCompare(`${y.path} ${y.by}`))
+    for (const args of [['update'], ['add', 'team']]) {
+      const r = ok(cli(args, repo))
+      assert.deepEqual(byPath(lockOf(repo).overrides), byPath(expected), `${args[0]}: lock`)
+      for (const o of expected) assert.ok(r.stdout.includes(`  ↻ ${o.path}  (${o.by} over ${o.over})`), `${args[0]}: prints ${o.path} by ${o.by}`)
+      assert.ok(!/⚠/.test(r.stdout), `${args[0]}: nothing changed upstream, no warning`)
+    }
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
+    // A single-source install has nothing to record.
+    const plain = join(root, 'plain')
+    mkdirSync(plain)
+    const core = makeSource(plain, 'core', CORE_PATHS)
+    const alone = join(plain, 'consumer')
+    mkdirSync(alone)
+    writeLock(alone, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = ok(cli(['update'], alone))
+    assert.equal(lockOf(alone).overrides, undefined)
+    assert.ok(!r.stdout.includes('↻'))
+  })
+})
+
+test('remove drops the overrides of the entries it removes', () => {
+  withTmpRepo(root => {
+    const { repo } = layered(root)
+    mkdirSync(join(repo, '.dev/overrides/rules/common'), { recursive: true })
+    writeFileSync(join(repo, '.dev/overrides/rules/common/language.md'), '# Language, mine\n')
+    ok(cli(['update'], repo))
+    ok(cli(['remove', 'team'], repo))
+    assert.deepEqual(lockOf(repo).overrides, [{ path: 'rules/common/language.md', by: '.dev/overrides', over: 'core', baseHash: sha(read(REPO, 'rules/common/language.md')) }])
   })
 })

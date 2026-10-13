@@ -4,7 +4,7 @@ import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, m
 import { join, sep, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { safePath, plainPath } from './ownership.mjs'
+import { safePath, plainPath, hash, walk } from './ownership.mjs'
 
 // The lock pins an ordered list of sources. The first is this library, `core`; a lock
 // written before sources existed (`repo` + `ref`) reads as core alone and is rewritten
@@ -206,12 +206,23 @@ function assertInside(root, abs, seen = new Set()) {
 // order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
 // whole directory for a skill, so a skill is never half one layer, half another.
 // A layer's `exclude` removes what the layers before it put there, a file or a whole
-// skill; a later layer may put it back. Returns { tree, excluded }: excluded maps each
-// path that stays removed to the source that removed it.
+// skill; a later layer may put it back. Returns { tree, excluded, overrides }: excluded
+// maps each path that stays removed to the source that removed it; overrides lists every
+// path a layer replaced, { path, by, over, baseHash } (ADR-0008), in staging order.
 const under = (path, dir) => path === dir || path.startsWith(dir + '/')
 export function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   const excluded = new Map()
+  // Which layer put each staged path there, and what each replacement replaced.
+  const holder = new Map(), replaced = new Map()
+  const place = (path, layer, base) => {
+    if (base !== null) replaced.set(`${path}\0${layer}`, { path, by: layer, over: holder.get(path), baseHash: base })
+    holder.set(path, layer)
+  }
+  const forget = at => {
+    for (const path of [...holder.keys()]) if (under(path, at)) holder.delete(path)
+    for (const [key, o] of [...replaced]) if (under(o.path, at)) replaced.delete(key)
+  }
   try {
     for (const { from, kind } of entries) {
       const dest = join(tree, from)
@@ -224,33 +235,54 @@ export function stageTree(layers, entries) {
             throw new Error(`source ${layer.name}: exclude ${path}: a skill is excluded whole (${from})`)
           const at = under(from, path) ? from : path
           rmSync(join(tree, at), { recursive: true, force: true })
+          forget(at)
           gone.set(at, layer.name)
         }
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
         assertInside(realpathSync(layer.dir), src)
-        if (kind === 'skill') rmSync(dest, { recursive: true, force: true })
-        overlay(src, dest, from, layer.name)
+        if (kind === 'skill') {
+          // The unit of override is the skill: one record for the directory, none inside.
+          place(from, layer.name, existsSync(dest) ? dirHash(dest) : null)
+          rmSync(dest, { recursive: true, force: true })
+          overlay(src, dest, from, layer.name, () => {})
+        } else overlay(src, dest, from, layer.name, place)
         found = true
       }
       if (!found && !gone.has(from)) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
       for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, excluded }
+  return { tree, excluded, overrides: [...replaced.values()] }
+}
+// A staged skill directory, hashed as the sorted list of its (path, sha256).
+function dirHash(dir) {
+  const files = walk(dir).map(f => [f.rel.split(sep).join('/'), hash(readFileSync(f.abs))])
+  return hash(JSON.stringify(files.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)))
 }
 // One layer over the tree, file by file. A path that is a file in one layer and a
 // directory in another has no answer: it is refused, never resolved (ADR-0010).
 // Links are followed (assertInside kept them in their source); `seen` stops a cycle.
-function overlay(src, dest, path, layer, seen = new Set()) {
+// `place(path, layer, baseHash)` is told of every file, with the hash it replaces or null.
+function overlay(src, dest, path, layer, place, seen = new Set()) {
   const real = realpathSync(src)
   if (!statSync(real).isDirectory()) {
     if (existsSync(dest) && statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a file, where an earlier layer has a directory`)
+    place(path, layer, existsSync(dest) ? hash(readFileSync(dest)) : null)
     cpSync(real, dest, { dereference: true })
     return
   }
   if (seen.has(real)) throw new Error(`source ${layer}: ${path} links back into itself`)
   if (existsSync(dest) && !statSync(dest).isDirectory()) throw new Error(`source ${layer}: ${path} is a directory, where an earlier layer has a file`)
   mkdirSync(dest, { recursive: true })
-  for (const name of readdirSync(real)) overlay(join(real, name), join(dest, name), `${path}/${name}`, layer, new Set([...seen, real]))
+  for (const name of readdirSync(real)) overlay(join(real, name), join(dest, name), `${path}/${name}`, layer, place, new Set([...seen, real]))
+}
+
+// -------------------------------------------------------------------- overrides
+// The lock's `overrides` are what the last install replaced; a record is lock content,
+// so it is shape-checked when read back.
+export function assertOverrides(list, lockName) {
+  const valid = Array.isArray(list) && list.every(o => o && plainPath(o.path) && typeof o.by === 'string' && o.by
+    && typeof o.over === 'string' && o.over && typeof o.baseHash === 'string' && /^[0-9a-f]{64}$/.test(o.baseHash))
+  if (!valid) throw new Error(`${lockName}: "overrides" must be a list of { path, by, over, baseHash }`)
 }
