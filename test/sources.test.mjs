@@ -125,3 +125,35 @@ test('no fetched source or staged tree outlives the run', () => {
     assert.deepEqual(readdirSync(tmp), [], 'after a failed fetch')
   })
 })
+
+// What a ref installs is decided by that ref's registry, not by the copy bundled with
+// the CLI — those drift as soon as `npx …#<cli ref>` and `--ref` differ.
+test('the source\'s registry decides: a profile only it defines installs', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles['team-only'] = [{ from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, {
+      'registry.json': JSON.stringify(reg, null, 2) + '\n',
+      'rules/team-only/house.md': '# House rule\n',
+    })
+    assert.ok(!registry.profiles['team-only'], 'the bundled registry must not know it')
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+
+    ok(cli(['add', 'team-only'], repo))
+    assert.equal(read(repo, '.claude/rules/team-only/house.md'), '# House rule\n')
+    assert.deepEqual(lockOf(repo).profiles, ['rust', 'team-only'])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/team-only/house.md'), 'update reads the lock against the same registry')
+  })
+})
+
+test('list fetches nothing and falls back to the bundled registry', () => {
+  withTmpRepo(repo => {
+    writeLock(repo, [{ name: 'core', url: 'file:///nowhere/at/all.git', ref: 'main' }])
+    const r = ok(cli(['list'], repo))
+    for (const name of Object.keys(registry.profiles)) assert.match(r.stdout, new RegExp(`^  ${name}  \\(`, 'm'))
+    assert.match(r.stdout, /Installed: \[rust\] for \[claude\] @ core@main/)
+  })
+})

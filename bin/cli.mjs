@@ -23,7 +23,11 @@ import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 // giget is imported lazily (only add/update without --local need it) so init/list run with no deps.
 
-const registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
+// The registry bundled with the CLI. `add` and `update` replace it with the one their
+// fetched source carries (withSources): what a ref installs is that ref's registry, not
+// whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
+// remove, doctor, init, budget) keep the bundled one.
+let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
 const KNOWN_AGENTS = ['claude', 'codex', 'cursor']
 const DEFAULT_AGENTS = ['claude', 'codex']
@@ -325,6 +329,26 @@ function fetchSource(source) {
     throw new Error(`source ${source.name} (${source.url}#${source.ref}): ${error.message}`)
   }
   return { ...source, dir, temp: true }
+}
+
+// Fetch the run's sources, adopt core's registry, hand them to `fn`, and remove every
+// temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
+// names, and only the fetched registry knows them all.
+async function withSources(fn) {
+  let locked = null
+  if (existsSync(LOCK)) { safePath(LOCK); locked = lockSources(JSON.parse(readFileSync(LOCK, 'utf8'))) }
+  const sources = resolveSources(locked, parseRefs())
+  if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
+  const fetched = []
+  try {
+    for (const source of sources) fetched.push(fetchSource(source))
+    const file = join(fetched[0].dir, 'registry.json')
+    if (!existsSync(file)) throw new Error(`source ${CORE} (${sources[0].url}#${sources[0].ref}) has no registry.json`)
+    registry = JSON.parse(readFileSync(file, 'utf8'))
+    return await fn(fetched)
+  } finally {
+    for (const f of fetched) if (f.temp) rmSync(f.dir, { recursive: true, force: true })
+  }
 }
 
 // -------------------------------------------------------------------- staging
@@ -642,7 +666,9 @@ const FINAL_MSG = {
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
-async function install(profiles, sources, agents, modules, levels) {
+// `fetched` are the run's sources, already on disk (withSources).
+async function install(profiles, fetched, agents, modules, levels) {
+  const sources = fetched.map(({ name, url, ref }) => ({ name, url, ref }))
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {
@@ -673,13 +699,10 @@ async function install(profiles, sources, agents, modules, levels) {
   const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles } }
   const notes = []
   const staged = []
-  const fetched = []
   let tree = null
   let codex
   try {
-    // Fetch every source before changing any destination.
-    if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
-    for (const source of sources) fetched.push(fetchSource(source))
+    // Stage every entry before changing any destination.
     tree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
     const stagedKeys = new Set()
     for (const item of owned) {
@@ -737,7 +760,6 @@ async function install(profiles, sources, agents, modules, levels) {
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
-    for (const f of fetched) if (f.temp) rmSync(f.dir, { recursive: true, force: true })
   }
   console.log(`\nPinned in ${LOCK} (${sourcesLabel(sources)}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
@@ -1439,10 +1461,9 @@ function doctor() {
 // the lock and leaves no way to find them.
 // `agentsRaw`/`levelName`/`rootDirRaw` are null for "use the flag/lock default";
 // the interactive prompt below passes explicit answers instead of CLI flags.
-async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw }) {
+async function runAdd(fetched, { requestedRaw, agentsRaw, levelName, rootDirRaw }) {
   const requested = unpackNames(requestedRaw)
   const lock = readLock()
-  const sources = resolveSources(lock?.sources, parseRefs())
   const migrated = migrateLegacyLock(lock)
   const profiles = [...new Set([...migrated.profiles, ...requested])]
   // Same rule for agents: no explicit choice on an existing install keeps its
@@ -1473,7 +1494,7 @@ async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw }) {
   const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.entries(modules).some(([d, ps]) => d !== '.' && ps.includes(p)))
   if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
   if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-  await install(profiles, sources, agents, modules, levels)
+  await install(profiles, fetched, agents, modules, levels)
 }
 
 // -------------------------------------------------------------- interactive add
@@ -1533,21 +1554,23 @@ async function main() {
     case 'add': {
       const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlags.length
       if (!positional.length && bare && process.stdin.isTTY) {
-        const answers = await promptAdd()
-        await runAdd(answers)
+        await withSources(async fetched => runAdd(fetched, await promptAdd()))
         break
       }
       if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>]'); process.exit(1) }
-      await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag })
+      const options = { requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag }
+      await withSources(fetched => runAdd(fetched, options))
       break
     }
     case 'update': {
-      const lock = readLock()
-      if (!lock) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
-      const { kept, dropped } = agentsFromLock(lock)
-      if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
-      const migrated = migrateLegacyLock(lock)
-      await install(migrated.profiles, resolveSources(lock.sources, parseRefs()), [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+      if (!existsSync(LOCK)) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
+      await withSources(async fetched => {
+        const lock = readLock()
+        const { kept, dropped } = agentsFromLock(lock)
+        if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
+        const migrated = migrateLegacyLock(lock)
+        await install(migrated.profiles, fetched, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+      })
       break
     }
     case 'remove': {
