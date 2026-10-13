@@ -236,3 +236,48 @@ test('--force replaces nested destinations', () => withTmpRepo(dir => {
   write(dir, '.cursor/rules/rust', 'a file above the destinations\n')
   forced(dir, ['add', 'rust', '--agent', 'claude,cursor'], [['.claude/rules/rust/code-style.md'], ['.cursor/rules/rust']], ['add', 'rust', '--agent', 'claude,cursor'])
 }))
+
+// ---------------------------------------------------------------- adoption
+// A lock without file hashes cannot tell a local edit from a stale copy. Its next update
+// warns that every installed destination is overwritten once; with no terminal (every
+// test run) it needs --force, and refuses without it, changing nothing.
+function adopts(dir, edited) {
+  write(dir, edited, 'an edit no inventory recorded\n')
+  const before = snapshot(dir)
+  const r = runCli(['update'], dir)
+  assert.equal(r.status, 1, r.stdout + r.stderr)
+  assert.match(r.stdout, /records no file hashes: this run adopts the install/)
+  assert.match(r.stdout, /^ {2}! \.claude\/rules\/rust$/m, 'the destinations are listed')
+  assert.match(r.stderr, /Adoption needs --force without a terminal/)
+  assert.deepEqual(snapshot(dir), before, 'nothing changed')
+
+  const forced = ok(runCli(['update', '--force'], dir))
+  assert.match(forced.stdout, /records no file hashes: this run adopts the install/)
+  assert.notEqual(read(dir, edited), 'an edit no inventory recorded\n', 'overwritten once')
+  const lock = JSON.parse(read(dir, LOCK))
+  assert.ok(lock.installed.every(i => i.files), 'recorded')
+  assert.ok(!('repo' in lock) && !('ref' in lock))
+  const next = ok(runCli(['update'], dir))
+  assert.doesNotMatch(next.stdout, /adopts the install/, 'once')
+}
+
+test('adoption of a phase-1 lock (an inventory without hashes)', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', 'product', '--agent', 'claude,codex,cursor'], dir))
+  const lock = JSON.parse(read(dir, LOCK))
+  for (const record of lock.installed) delete record.files
+  writeFileSync(join(dir, LOCK), JSON.stringify(lock, null, 2) + '\n')
+  adopts(dir, '.claude/rules/rust/code-style.md')
+}))
+
+test('adoption of a pre-RFC lock (repo and ref, no inventory)', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+  const { profiles, agents, modules, levels } = JSON.parse(read(dir, LOCK))
+  writeFileSync(join(dir, LOCK), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles, agents, modules, levels }, null, 2) + '\n')
+  adopts(dir, '.claude/rules/rust/code-style.md')
+}))
+
+test('a lock without hashes and nothing installed on disk is no adoption', () => withTmpRepo(dir => {
+  writeFileSync(join(dir, LOCK), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'] }, null, 2) + '\n')
+  const r = ok(runCli(['update'], dir))
+  assert.doesNotMatch(r.stdout, /adopts the install/)
+}))

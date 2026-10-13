@@ -350,6 +350,22 @@ function assertEntry(e, where) {
   if (!ok) throw new Error(`${where}: entry ${JSON.stringify(e)} — a ${e?.kind} must come from a relative path and land under ${ENTRY_ROOT[e?.kind] || 'its fixed root'}`)
 }
 
+// Adoption, once (ADR-0010): a lock recorded without file hashes cannot tell a local
+// edit from a stale copy, so its first install overwrites every destination already on
+// disk, says so first, and needs --force when no terminal is there to read it.
+// Returns whether this run adopts.
+function adoption(previous, destinations) {
+  if (!previous || recordsHashes(previous)) return false
+  const present = destinations.filter(d => existsSync(safePath(d)))
+  if (!present.length) return false
+  console.log(`⚠ ${LOCK} records no file hashes: this run adopts the install. Every installed destination below is overwritten once, local edits included, then recorded:`)
+  for (const d of present) console.log(`  ! ${d}`)
+  console.log()
+  if (!forceFlag && !process.stdin.isTTY)
+    throw new Error('Adoption needs --force without a terminal: save any local edit under the destinations listed above, then re-run with --force. Nothing was changed.')
+  return true
+}
+
 // The inventory's file paths are lock content too: each must sit under a root the
 // installer writes, or a forged record would let a prune delete a project file.
 const OWNED_ROOTS = ['.claude/rules/', '.claude/agents/', '.claude/skills/', '.agents/rules/', '.agents/skills/', '.cursor/rules/', `${KIT_DIR}/`]
@@ -509,9 +525,9 @@ function remove(profilesArg) {
 // ADR-0010: a tree the installer cannot explain is refused, never reconciled. The way
 // out is the user's fix, or --force, which overwrites exactly the listed paths.
 // Returns what applyTree overwrites.
-function settleCorruption(corrupt) {
+function settleCorruption(corrupt, force = forceFlag) {
   if (!corrupt.size) return corrupt
-  if (forceFlag) {
+  if (force) {
     console.log(`--force: overwriting ${corrupt.size} path(s) claude-rules did not install as they are:`)
     for (const [path, why] of corrupt) console.log(`  ! ${path} — ${why}`)
     console.log()
@@ -726,14 +742,16 @@ async function install(profiles, fetched, agents, modules, levels) {
     // The check before writing (ADR-0010): every path this run writes or deletes must be
     // absent, or owned and unchanged. A skill is one unit, so its directory holds nothing
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
-    const recorded = ownedFiles(readLock())
+    const previous = readLock()
+    const recorded = ownedFiles(previous)
     const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
+    const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))])
     plan.corrupt = settleCorruption(checkTree({
       ...plan,
       owned: recorded,
       dirs: [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
-    }))
-    if (codexInput) codex = prepareCodex(...codexInput, modules, readLock()?.codex)
+    }), forceFlag || adopted)
+    if (codexInput) codex = prepareCodex(...codexInput, modules, previous?.codex)
     // Apply: what the previous install wrote and this one no longer produces goes first
     // (an entry dropped upstream, a destination moved), then every write.
     applyTree(plan, path => console.log(`  ✗ ${path}  (no longer installed)`))
