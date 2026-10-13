@@ -145,7 +145,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    block; `just review-guard` reads the verdict it left behind and blocks a push on a
    `CRITICAL` — merge `common/lefthook.snippet.yml` for that pre-push trigger (it also
    carries the `no-commit-on-trunk` git floor; a solo repo deletes that one command).
-   The reviewer cannot run anything, so the prompt's diff IS its view of the change: append your repo's
+   The reviewer cannot write, build or reach the network, and the diff in its prompt is the review scope: append your repo's
    generated and vendored paths to `review_exclude` (lockfiles, the installed rules
    tree and `*.gen.*` are already there) — the `--stat` inventory still names every
    changed file, so nothing goes missing silently. `review_max_bytes` fails the gate on
