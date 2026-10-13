@@ -215,6 +215,15 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Fixed
 
+- **`reviewer=codex` reviewed the diff blind.** The review prompt told every reviewer
+  "you have no shell — Read/Glob/Grep is all you need", which is true for Claude only.
+  Codex reads through its read-only sandbox shell, took the sentence literally, and
+  reported it could not read the repo, so `CLAUDE.md`, the ADRs and any file outside the
+  diff went unchecked. The prompt now names each CLI's read-only mechanism and asks every
+  reviewer to read the repo. Delivered by `update` (`.dev/kit/common/review-prompt.md`);
+  a repo that overrides `review_prompt` merges the "Read-only, and not by promise"
+  bullet by hand.
+
 - **`mutate-diff` never advanced its marker, so mutation re-ran the whole branch
   every time.** `init` wrote it as a dependency list — `mutate-diff: rust-mutate` —
   which runs each mutator with its *default* range (the whole branch since `base`)
