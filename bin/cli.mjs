@@ -801,7 +801,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     const previous = readLock({ known: false })
     // An override no longer receives what changed under it: say so, and under
     // `update --strict` stop before anything is written.
-    const moved = changedUpstream(previous?.overrides, staging.overrides, staging.layerOf)
+    const moved = changedUpstream(previous?.overrides, staging.overrides, staging.supplies)
     for (const o of moved) console.log(`⚠ ${o.path} ${o.change} ${o.over} (overridden by ${o.by})`)
     if (moved.length && strictFlag && cmd === 'update')
       throw new Error(`--strict: ${moved.length} overridden path(s) changed upstream; nothing was changed. Review each change, then run \`update\` without --strict to record the new base.`)

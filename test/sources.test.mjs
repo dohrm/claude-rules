@@ -921,5 +921,15 @@ test('an overridden file deleted in the layer under it warns too, and fails unde
     ok(cli(['update'], repo))
     assert.ok(!lockOf(repo).overrides.some(o => o.path === 'rules/team/b.md'), 'nothing is replaced there any more')
     ok(cli(['update', '--strict'], repo))
+
+    // Three layers: a.md leaves core; team still supplies it, under the project layer.
+    spawnSync('git', ['rm', '-q', 'rules/team/a.md'], { cwd: join(root, 'core-work') })
+    core.commit({})
+    const lock = read(repo, LOCK)
+    const three = cli(['update', '--strict'], repo)
+    assert.equal(three.status, 1, three.stdout + three.stderr)
+    assert.ok(three.stdout.includes('⚠ rules/team/a.md removed from core (overridden by team)'))
+    assert.equal(read(repo, LOCK), lock, 'lock unchanged')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
   })
 })

@@ -209,7 +209,8 @@ function assertInside(root, abs, seen = new Set()) {
 // skill; a later layer may put it back. Returns { tree, excluded, overrides }: excluded
 // maps each path that stays removed to the source that removed it; overrides lists every
 // path a layer replaced, { path, by, over, baseHash } (ADR-0008), in staging order;
-// layerOf maps each staged file, or skill directory, to the layer it came from.
+// supplies(path, layer) says whether that layer still supplies a staged file, or skill
+// directory, the tree holds.
 // A source path is staged once: one inside another would replay every layer over an
 // already merged path, and record a layer replacing itself. Refused (ADR-0010).
 const under = (path, dir) => path === dir || path.startsWith(dir + '/')
@@ -221,14 +222,17 @@ export function stageTree(layers, entries) {
   }
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   const excluded = new Map()
-  // Which layer put each staged path there, and what each replacement replaced.
-  const holder = new Map(), replaced = new Map()
+  // Which layer put each staged path there, every layer that supplied it, and what each
+  // replacement replaced.
+  const holder = new Map(), supplied = new Set(), replaced = new Map()
   const place = (path, layer, base) => {
     if (base !== null) replaced.set(`${path}\0${layer}`, { path, by: layer, over: holder.get(path), baseHash: base })
     holder.set(path, layer)
+    supplied.add(`${path}\0${layer}`)
   }
   const forget = at => {
     for (const path of [...holder.keys()]) if (under(path, at)) holder.delete(path)
+    for (const key of [...supplied]) if (under(key.split('\0')[0], at)) supplied.delete(key)
     for (const [key, o] of [...replaced]) if (under(o.path, at)) replaced.delete(key)
   }
   try {
@@ -261,7 +265,8 @@ export function stageTree(layers, entries) {
       for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, excluded, overrides: [...replaced.values()], layerOf: holder }
+  const supplies = (path, layer) => holder.has(path) && supplied.has(`${path}\0${layer}`)
+  return { tree, excluded, overrides: [...replaced.values()], supplies }
 }
 // A staged skill directory, hashed as the sorted list of its (path, sha256).
 function dirHash(dir) {
@@ -298,13 +303,13 @@ export function assertOverrides(list, lockName) {
 // { path, by, over, change }: the same path and overriding layer with another base, or
 // no base left while that layer still supplies the path — the version it replaced is
 // gone. A replacement new to this run has no earlier base, so nothing to compare.
-export function changedUpstream(previous = [], current, layerOf) {
+export function changedUpstream(previous = [], current, supplies) {
   const now = new Map(current.map(o => [`${o.path}\0${o.by}`, o]))
   const moved = []
   for (const was of previous) {
     const o = now.get(`${was.path}\0${was.by}`)
     if (o) { if (o.baseHash !== was.baseHash) moved.push({ ...o, change: 'changed in' }) }
-    else if (layerOf.get(was.path) === was.by) moved.push({ ...was, change: 'removed from' })
+    else if (supplies(was.path, was.by)) moved.push({ ...was, change: 'removed from' })
   }
   return moved
 }
