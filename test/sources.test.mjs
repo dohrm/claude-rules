@@ -906,6 +906,43 @@ test('a later layer replaces a file by a directory and a directory by a file ins
     ok(cli(['update'], repo))
     assert.equal(read(repo, '.claude/agents/team/checks/run/check.md'), '# a directory in the overlay\n')
     assert.equal(read(repo, '.claude/agents/team/notes'), 'a file in the overlay\n')
+
+    // Replayed over an existing install, both ways: drop the overlay, then add it back.
+    ok(cli(['remove', '--source', 'team'], repo))
+    assert.equal(read(repo, '.claude/agents/team/checks/run'), 'a file in core\n')
+    assert.equal(read(repo, '.claude/agents/team/notes/old.md'), '# a directory in core\n')
+    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+    assert.equal(read(repo, '.claude/agents/team/checks/run/check.md'), '# a directory in the overlay\n')
+    assert.equal(read(repo, '.claude/agents/team/notes'), 'a file in the overlay\n')
+
+    // A path of the repo's own in the way is never replaced.
+    ok(cli(['remove', '--source', 'team'], repo))
+    writeFileSync(join(repo, '.claude/agents/team/notes/mine.md'), 'ours\n')
+    const r = cli(['add', '--source', `team=${team.url}#main`], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /notes is a directory holding .*mine\.md, which this install did not write/)
+    assert.equal(read(repo, '.claude/agents/team/notes/mine.md'), 'ours\n')
+  })
+})
+
+// An agent or kit directory that is no longer installed loses the files we wrote in
+// it, never one the repo added there.
+test('excluding the last file of an agent directory keeps the repo\'s own file there', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents/team', to: '.claude/agents/team', kind: 'agent' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'agents/team/sub/one.md': '# one\n' })
+    const team = makeSource(root, 'team', [], { 'registry.json': '{}\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    writeFileSync(join(repo, '.claude/agents/team/mine.md'), 'ours\n')
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['agents/team/sub/one.md'] }) + '\n' })
+    ok(cli(['update'], repo))
+    assert.ok(!has(repo, '.claude/agents/team/sub'), 'ours is gone, and the directory it emptied')
+    assert.equal(read(repo, '.claude/agents/team/mine.md'), 'ours\n', 'the repo\'s own stays')
+    assert.ok(!lockOf(repo).installed.some(i => i.from === 'agents/team'))
   })
 })
 

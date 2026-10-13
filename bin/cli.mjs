@@ -943,6 +943,31 @@ async function install(profiles, layers, agents, modules, levels) {
       staged.push({ ...item, s: makeStaged(tree, item.e) })
     }
     for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
+    const previous = readLock({ known: false })
+    const prevAgents = agentsFromLock(previous).kept
+    // Every file the previous install wrote in an agent or kit directory (the inventory).
+    const prevWritten = new Set((previous?.installed || []).filter(r => ownsFiles(r) && Array.isArray(r.files))
+      .flatMap(r => prevAgents.flatMap(a => destsFor(r, a)).flatMap(d => r.files.map(f => join(d, f)))))
+    // A layer may turn a file into a directory, or the reverse (overlay). Those dirs are
+    // never reset, so a path of ours in the way is replaced: an inventoried file where a
+    // directory now goes, a directory holding only inventoried files where a file goes.
+    // Anything else in the way is the repo's, and refused.
+    const replaced = new Set()
+    for (const { e, s } of staged) if (ownsFiles(e)) for (const dest of agents.flatMap(a => destsFor(e, a))) for (const f of stagedFiles(s)) {
+      const parts = f.rel.split(sep)
+      for (let i = 1; i < parts.length; i++) {
+        const up = join(dest, ...parts.slice(0, i))
+        if (!existsSync(up) || !lstatSync(up).isFile()) continue
+        if (!prevWritten.has(up)) throw new Error(`Conflicting destination: ${up} is a file this install did not write, where ${join(dest, f.rel)} goes`)
+        replaced.add(up)
+      }
+      const path = join(dest, f.rel)
+      if ([...replaced].some(r => under(path, r)) || !existsSync(path) || !lstatSync(path).isDirectory()) continue
+      const foreign = walk(path).map(x => x.abs).find(x => !prevWritten.has(x))
+      if (foreign) throw new Error(`Conflicting destination: ${path} is a directory holding ${foreign}, which this install did not write`)
+      replaced.add(path)
+    }
+    const inReplaced = p => [...replaced].some(r => under(p, r))
     for (const { e, s } of staged) for (const agent of agents) {
       for (const dest of destsFor(e, agent)) {
         safePath(dest)
@@ -952,6 +977,7 @@ async function install(profiles, layers, agents, modules, levels) {
       }
       if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
         const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
+        if (inReplaced(path)) continue
         safePath(path)
         if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
       }
@@ -983,29 +1009,31 @@ async function install(profiles, layers, agents, modules, levels) {
     // Only for the agents the previous install wrote for: a target added by this run
     // never held anything of ours. A destination moved into or out of a fresh one is
     // refused — removing the old one would delete the new, keeping it leaves stale files.
-    const previous = readLock({ known: false })
     const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
-    const stale = [...new Set((previous?.installed || []).flatMap(e => agentsFromLock(previous).kept.flatMap(a => destsFor(e, a)
-      .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
-      .filter(d => !fresh.has(d))
-    for (const d of stale) {
+    const staleOf = (previous?.installed || []).flatMap(e => prevAgents.flatMap(a => destsFor(e, a)
+      .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/'))))
+      .map(d => ({ d, e })))).filter(({ d }) => !fresh.has(d))
+    // An agent or kit directory no longer installed loses the files we wrote, never the
+    // repo's own (below); every other destination goes whole.
+    const stale = [...new Set(staleOf.filter(({ e }) => !ownsFiles(e)).map(({ d }) => d))]
+    for (const d of new Set(staleOf.map(({ d }) => d))) {
       const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))
       if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
     }
     // Agent and kit directories are never reset, so a file the previous install wrote in
-    // a destination still installed, and that no current entry writes (an overlay
-    // removed, a path excluded, a file dropped upstream), is pruned by name. Paths are
-    // compared, not entries: a destination another entry took over keeps what it writes.
-    // The repo's own files there were never recorded, so they are never touched. An
+    // one, and that no current entry writes (an overlay removed, a path excluded, a file
+    // dropped upstream, the whole entry gone), is pruned by name. Paths are compared,
+    // not entries: a destination another entry took over keeps what it writes. The
+    // repo's own files there were never recorded, so they are never touched. An
     // inventory from before the file lists cannot tell them apart: it is listed instead.
     const written = new Set(installed.filter(ownsFiles).flatMap(i => agents.flatMap(a => destsFor(i, a)).flatMap(d => i.files.map(f => join(d, f)))))
     const resetRoots = [...new Set(staged.filter(({ e }) => !ownsFiles(e)).flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))]
-    const current = p => written.has(p) || resetRoots.some(d => under(p, d))
-    const prevDests = r => agentsFromLock(previous).kept.flatMap(a => destsFor(r, a)).filter(d => fresh.has(d))
+    const current = p => written.has(p) || [...written].some(w => under(w, p)) || resetRoots.some(d => under(p, d))
+    const prevDests = r => prevAgents.flatMap(a => destsFor(r, a))
     const prevOwning = (previous?.installed || []).filter(ownsFiles)
-    const staleFiles = [...new Set(prevOwning.filter(r => Array.isArray(r.files))
-      .flatMap(r => prevDests(r).flatMap(d => r.files.map(f => join(d, f)))))].filter(p => !current(p))
-    for (const dest of staleFiles) safePath(dest)
+    const staleFiles = [...new Map(prevOwning.filter(r => Array.isArray(r.files))
+      .flatMap(r => prevDests(r).flatMap(d => r.files.map(f => [join(d, f), d])))).entries()].filter(([p]) => !current(p))
+    for (const [dest] of staleFiles) safePath(dest)
     const unlisted = [...new Set(prevOwning.filter(r => !Array.isArray(r.files))
       .flatMap(r => prevDests(r).filter(d => existsSync(d) && statSync(d).isDirectory()).flatMap(d => walk(d).map(f => f.abs))))].filter(p => !current(p))
     if (unlisted.length) console.log(`  • the lock's inventory has no file list for agent and kit directories: files no layer supplies now may be stale: ${unlisted.join(', ')}\n    They may also be your own; check \`git status\`. The next update has the list.`)
@@ -1014,6 +1042,7 @@ async function install(profiles, layers, agents, modules, levels) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
     }
+    for (const path of replaced) rmSync(path, { recursive: true, force: true })
     for (const { e: entry, s } of staged) {
       ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
       for (const agent of agents) {
@@ -1026,8 +1055,13 @@ async function install(profiles, layers, agents, modules, levels) {
     if (codex) applyCodex(codex)
     for (const dest of stale)
       if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
-    for (const dest of staleFiles)
-      if (existsSync(dest)) { rmSync(dest, { force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
+    for (const [dest, root] of staleFiles) {
+      if (!existsSync(dest) || !lstatSync(dest).isFile()) continue
+      rmSync(dest)
+      console.log(`  ✗ ${dest}  (no longer installed)`)
+      // Directories the cleanup emptied go too, up to a destination still installed.
+      for (let dir = dirname(dest); under(dir, root) && !fresh.has(dir) && existsSync(dir) && !readdirSync(dir).length; dir = dirname(dir)) rmSync(dir, { recursive: true })
+    }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
