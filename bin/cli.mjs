@@ -74,8 +74,7 @@ const ROOT_HINT = new Set(['rust', 'ts', 'ts-web', 'ts-node', 'ts-tauri', 'go', 
 // what else was requested in the same `add` call.
 const ROOT_FORBID = new Set(['agent', 'product'])
 
-function unpackNames(names, quiet = false) {
-  const aliases = registry.aliases || {}
+function unpackNames(names, quiet = false, aliases = registry.aliases || {}) {
   const out = []
   const seen = new Set()
   const active = new Set()
@@ -636,8 +635,10 @@ function remove(profilesArg) {
   const agents = kept.length ? kept : ['claude']
   if (agents.includes('codex') && !lock.codex) throw new Error('Codex ownership inventory missing; update to adopt files before removing profiles')
   const full = profilesArg.length === 1 && profilesArg[0] === 'all'
-  // A locked profile name is taken as is; anything else unpacks as a bundled alias.
-  const targets = full ? lock.profiles.slice() : [...new Set(profilesArg.flatMap(n => lock.profiles.includes(n) ? [n] : unpackNames([n])))]
+  // A locked profile name is taken as is; anything else unpacks as an alias the
+  // installing sources defined (recorded in the lock), else as a bundled one.
+  const aliases = lock.aliases || registry.aliases || {}
+  const targets = full ? lock.profiles.slice() : [...new Set(profilesArg.flatMap(n => lock.profiles.includes(n) ? [n] : unpackNames([n], false, aliases)))]
   const notInLock = targets.filter(p => !lock.profiles.includes(p))
   if (notInLock.length) console.log(`Not installed, skipping: ${notInLock.join(', ')}`)
   const toRemove = targets.filter(p => lock.profiles.includes(p))
@@ -709,7 +710,7 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled)
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
@@ -745,6 +746,7 @@ function readLock({ known = true } = {}) {
   const lock = known ? dropRetiredProfiles(raw) : raw
   const unpack = names => known ? unpackNames(names, true) : names
   lock.sources = lockSources(lock)
+  if (lock.aliases !== undefined && !isListMap(lock.aliases)) throw new Error(`${LOCK}: "aliases" must map names to lists of profiles`)
   if (lock.installed !== undefined) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
     for (const e of lock.installed) assertEntry(e, `${LOCK} installed`)
@@ -800,10 +802,12 @@ function purgeRetiredSkills(agents, codexOwned) {
   }
 }
 // `installed` is the inventory: one { source, kind, from, to, profile } per entry
-// emitted (profile null for the shared ones). remove deletes from it.
-function writeLock(sources, profiles, agents, modules, levels, codex, installed) {
+// emitted (profile null for the shared ones). remove deletes from it. `aliases` are
+// the merged registry's, so an offline remove unpacks one an overlay defined.
+function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases) {
   const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
+  if (aliases && Object.keys(aliases).length) lock.aliases = aliases
   lock.installed = installed
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
@@ -968,7 +972,7 @@ async function install(profiles, layers, agents, modules, levels) {
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
-    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
   }

@@ -660,3 +660,29 @@ test('doctor audits an overlay-only profile offline, and fails once an inventori
     assert.match(bad.stdout, /\.claude\/agents\/team\.md — promised by "team-only" for claude, missing on disk/)
   })
 })
+
+// An alias an overlay defines is in no bundled registry: the lock records the merged
+// aliases, so an offline `remove <alias>` unpacks it as `add` did.
+test('remove unpacks a source-only alias offline, from the lock', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({
+        profiles: { 'team-only': [{ from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' }] },
+        aliases: { 'team-pack': ['team-only'] },
+      }) + '\n',
+      'rules/team-only/house.md': '# House rule\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['add', 'team-pack'], repo))
+    assert.deepEqual(lockOf(repo).aliases['team-pack'], ['team-only'])
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })   // no source reachable
+    const r = ok(cli(['remove', 'team-pack'], repo))
+    assert.match(r.stdout, /unpack team-pack → team-only/)
+    assert.ok(!has(repo, '.claude/rules/team-only'))
+    assert.deepEqual(lockOf(repo).profiles, ['rust'])
+    assert.deepEqual(lockOf(repo).aliases['team-pack'], ['team-only'], 'remove keeps what the sources defined')
+  })
+})
