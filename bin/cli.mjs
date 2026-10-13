@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
-import { safePath, hash, walk } from './ownership.mjs'
+import { safePath, hash, walk, ownedFiles, checkTree } from './ownership.mjs'
 import { SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
@@ -359,6 +359,16 @@ function assertEntry(e, where) {
   if (!ok) throw new Error(`${where}: entry ${JSON.stringify(e)} — a ${e?.kind} must come from a relative path and land under ${ENTRY_ROOT[e?.kind] || 'its fixed root'}`)
 }
 
+// The inventory's file paths are lock content too: each must sit under a root the
+// installer writes, or a forged record would let a prune delete a project file.
+const OWNED_ROOTS = ['.claude/rules/', '.claude/agents/', '.claude/skills/', '.agents/rules/', '.agents/skills/', '.cursor/rules/', `${KIT_DIR}/`]
+function assertFiles(e) {
+  if (e.files === undefined) return
+  const bad = !e.files || typeof e.files !== 'object' || Array.isArray(e.files) ? ['files'] : Object.entries(e.files)
+    .filter(([path, digest]) => !plainPath(path) || !OWNED_ROOTS.some(r => path.startsWith(r)) || !/^[0-9a-f]{64}$/.test(digest)).map(([path]) => path)
+  if (bad.length) throw new Error(`${LOCK} installed: ${e.kind} ${e.from} records ${bad.join(', ')} — an inventoried file must be a sha256 under ${OWNED_ROOTS.join(', ')}`)
+}
+
 // Filesystem targets that add() created for (entry, agent) — mirror of the emitters.
 function destsFor(entry, agent) {
   const name = basename(entry.from)
@@ -510,6 +520,13 @@ function remove(profilesArg) {
 }
 
 // -------------------------------------------------------------------- install
+// ADR-0010: a tree the installer cannot explain is refused, never reconciled.
+function refuseCorruption(corrupt) {
+  if (!corrupt.size) return
+  const lines = [...corrupt].map(([path, why]) => `  ✗ ${path} — ${why}`)
+  throw new Error(`${corrupt.size} path(s) are not what claude-rules installed; nothing was changed:\n${lines.join('\n')}\n`
+    + 'Move the change out of the installed path, or re-run with --force to overwrite the listed paths.')
+}
 // `known: false` skips the profile-name check, for the commands that fetch nothing:
 // the bundled registry may not know a profile the installing source defined.
 function normalizeModules(profiles, modules = {}, validateRoot = true, known = true) {
@@ -540,7 +557,7 @@ function readLock({ known = true } = {}) {
   lock.sources = lockSources(lock)
   if (lock.installed !== undefined) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
-    for (const e of lock.installed) assertEntry(e, `${LOCK} installed`)
+    for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
   }
   delete lock.repo
   delete lock.ref
@@ -653,7 +670,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   const staged = []
   let tree = null
   let installed = []
-  let codex
+  let codex, codexInput
   try {
     // Stage every entry before changing any destination.
     for (const { e } of owned) assertEntry(e, 'registry')
@@ -681,17 +698,15 @@ async function install(profiles, fetched, agents, modules, levels) {
       staged.push({ ...item, s: makeStaged(tree, item.e) })
     }
     for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
-    for (const { e, s } of staged) for (const agent of agents) {
-      for (const dest of destsFor(e, agent)) {
-        safePath(dest)
-        if (existsSync(dest) && statSync(dest).isFile() !== s.isFile) throw new Error(`Conflicting destination: ${dest}`)
-        if (existsSync(dest) && statSync(dest).isDirectory())
-          for (const f of walk(dest)) safePath(f.abs)
-      }
-      if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
-        const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
-        safePath(path)
-        if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
+    // Emit: every file of every entry and target goes into the plan; nothing is written.
+    for (const { e: entry, s } of staged) {
+      ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
+      ctx.key = entryKey(entry)
+      for (const agent of agents) {
+        // Shared skills are emitted once, by the Codex adapter.
+        if (agents.includes('codex') && agent === 'cursor' && entry.kind === 'skill') continue
+        const note = EMITTERS[agent][entry.kind](s, entry, agent, ctx)
+        if (note) notes.push(note)
       }
     }
     if (agents.includes('codex')) {
@@ -712,7 +727,31 @@ async function install(profiles, fetched, agents, modules, levels) {
           if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
         }
       }
-      codex = prepareCodex(files, [...rules.values()], modules, readLock()?.codex)
+      codexInput = [files, [...rules.values()]]
+    }
+    // The check before writing (ADR-0010): every path this run writes or deletes must be
+    // absent, or owned and unchanged. A skill is one unit, so its directory holds nothing
+    // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
+    const recorded = ownedFiles(readLock())
+    refuseCorruption(checkTree({
+      writes: ctx.out,
+      deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)),
+      owned: recorded,
+      dirs: [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
+    }))
+    if (codexInput) codex = prepareCodex(...codexInput, modules, readLock()?.codex)
+    for (const { e, s } of staged) for (const agent of agents) {
+      for (const dest of destsFor(e, agent)) {
+        safePath(dest)
+        if (existsSync(dest) && statSync(dest).isFile() !== s.isFile) throw new Error(`Conflicting destination: ${dest}`)
+        if (existsSync(dest) && statSync(dest).isDirectory())
+          for (const f of walk(dest)) safePath(f.abs)
+      }
+      if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
+        const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
+        safePath(path)
+        if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
+      }
     }
     // What the previous install wrote and this one no longer does — an entry dropped
     // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
@@ -734,16 +773,6 @@ async function install(profiles, fetched, agents, modules, levels) {
     for (const dest of stale) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
-    }
-    for (const { e: entry, s } of staged) {
-      ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
-      ctx.key = entryKey(entry)
-      for (const agent of agents) {
-        // Shared skills are written once by the ownership-aware Codex adapter.
-        if (codex && agent === 'cursor' && entry.kind === 'skill') continue
-        const note = EMITTERS[agent][entry.kind](s, entry, agent, ctx)
-        if (note) notes.push(note)
-      }
     }
     for (const dir of ctx.resets) resetDir(dir)
     for (const [path, content] of ctx.out) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }

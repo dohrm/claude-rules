@@ -141,7 +141,7 @@ for (const malformed of [start, end + start, start + end + start + end]) {
 test('unowned conflicting asset rejects adoption without mutating other targets', () => withTmpRepo(dir => {
   put(dir, '.agents/rules/rust/code-style.md', 'custom')
   const r = runCli(['add', 'rust'], dir)
-  assert.equal(r.status, 1); assert.match(r.stderr, /Conflicting local content/)
+  assert.equal(r.status, 1); assert.match(r.stderr, /✗ \.agents\/rules\/rust\/code-style\.md — not written by claude-rules/)
   assert.ok(!has(dir, '.claude'))
   assert.equal(read(dir, '.agents/rules/rust/code-style.md'), 'custom')
 }))

@@ -61,3 +61,68 @@ export function applyFiles(plan) {
     while (dir.startsWith('.agents/') && existsSync(dir) && !readdirSync(dir).length) { rmSync(dir, { recursive: true }); dir = dirname(dir) }
   }
 }
+
+// ------------------------------------------------------------ the tree check
+// Every file the lock says the installer wrote, path → hash. Codex's own inventory
+// (`codex.files`) reads as the same record: one model, whichever wrote it.
+export function ownedFiles(lock) {
+  const owned = new Map()
+  for (const [path, asset] of Object.entries(lock?.codex?.files || {})) owned.set(path, asset.hash)
+  for (const record of lock?.installed || []) for (const [path, digest] of Object.entries(record.files || {})) owned.set(path, digest)
+  return owned
+}
+// A lock without a hash for every record cannot tell an edit from a stale copy: its
+// next update is an adoption (ADR-0010).
+export const recordsHashes = lock => Array.isArray(lock?.installed) && lock.installed.every(r => r.files && typeof r.files === 'object')
+
+// Where `path` stands, never through a link: 'absent', 'file', 'dir' or 'other' —
+// or `blocker`, the first ancestor that exists and is not a directory.
+function stand(path) {
+  safePathPrefix(path)
+  const parts = path.split('/')
+  for (let i = 1; i <= parts.length; i++) {
+    const at = parts.slice(0, i).join('/')
+    let st
+    try { st = lstatSync(at) } catch (e) { if (e.code === 'ENOENT') return { kind: 'absent' }; throw e }
+    if (st.isSymbolicLink()) throw new Error(`Refusing symlink destination: ${path}`)
+    if (i < parts.length && !st.isDirectory()) return { kind: 'absent', blocker: at }
+    if (i === parts.length) return { kind: st.isFile() ? 'file' : st.isDirectory() ? 'dir' : 'other' }
+  }
+}
+function safePathPrefix(path) {
+  const rel = relative(process.cwd(), resolve(path))
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) || slash(rel) !== path) throw new Error(`Not a canonical repository path: ${path}`)
+}
+const filesUnder = dir => walk(dir).map(f => slash(f.abs))
+
+// The check before writing. `writes`: path → content this run produces; `deletes`:
+// owned paths it no longer produces; `owned`: path → recorded hash; `dirs`: installed
+// directories whose every file must be explained. A path is fine when it is absent,
+// owned and unchanged, or already holds exactly what will be written. Anything else
+// is a corruption — listed, never reconciled. Returns Map path → why.
+export function checkTree({ writes, deletes, owned, dirs }) {
+  const corrupt = new Map()
+  const gone = new Set(deletes)
+  for (const path of deletes) {
+    const at = stand(path)
+    if (at.kind === 'file') { if (hash(readFileSync(path)) !== owned.get(path)) corrupt.set(path, 'edited since it was installed') }
+    else if (at.kind !== 'absent') corrupt.set(path, 'not a file, where an installed file was')
+  }
+  for (const [path, content] of writes) {
+    const at = stand(path)
+    if (at.blocker) { if (!gone.has(at.blocker)) corrupt.set(at.blocker, 'a file where a directory goes'); continue }
+    if (at.kind === 'file') {
+      const current = hash(readFileSync(path))
+      if (current !== hash(content) && current !== owned.get(path))
+        corrupt.set(path, owned.has(path) ? 'edited since it was installed' : 'not written by claude-rules')
+    } else if (at.kind === 'dir') {
+      if (filesUnder(path).some(f => !gone.has(f))) corrupt.set(path, 'a directory where a file goes')
+    } else if (at.kind === 'other') corrupt.set(path, 'not a regular file')
+  }
+  for (const dir of dirs) {
+    if (stand(dir).kind !== 'dir') continue
+    for (const f of filesUnder(dir))
+      if (!writes.has(f) && !owned.has(f) && !corrupt.has(f)) corrupt.set(f, 'not written by claude-rules, inside an installed directory')
+  }
+  return corrupt
+}
