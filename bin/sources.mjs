@@ -150,7 +150,9 @@ export async function withSources({ lockFile, refFlags, localDir, registry, edit
 // entry's `source` in the inventory, whichever layers its files are staged from.
 const isList = v => Array.isArray(v)
 const isListMap = v => Boolean(v) && typeof v === 'object' && !isList(v) && Object.values(v).every(isList)
-const SHAPE = { profiles: [isListMap, 'map names to lists'], aliases: [isListMap, 'map names to lists'], shared: [isList, 'be a list'] }
+// The lock records the merged aliases, and reads them back with this same check.
+export const isAliasMap = v => isListMap(v) && Object.values(v).every(ps => ps.every(p => typeof p === 'string'))
+const SHAPE = { profiles: [isListMap, 'map names to lists'], aliases: [isAliasMap, 'map names to lists of profile names'], shared: [isList, 'be a list'] }
 function mergeRegistries(fetched) {
   let merged = null
   const declaredBy = new Map()

@@ -551,12 +551,21 @@ test('registries merge in source order: an overlay-only profile, appended entrie
 test('an overlay registry of the wrong shape is refused before any write', () => {
   withTmpRepo(root => {
     const core = teamCore(root)
-    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ profiles: { team: 'rules/team' } }) })
-    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
-    const r = cli(['update'], repo)
-    assert.equal(r.status, 1)
-    assert.match(r.stderr, /source team: registry\.json "profiles" must map names to lists/)
-    assert.deepEqual(readdirSync(repo), [LOCK])
+    const cases = [[{ profiles: { team: 'rules/team' } }, /source team: registry\.json "profiles" must map names to lists/],
+      // An alias the lock could not read back would make every later command fail.
+      [{ aliases: { unused: [42] } }, /source team: registry\.json "aliases" must map names to lists of profile names/]]
+    for (const [i, [reg, why]] of cases.entries()) {
+      const at = join(root, `case${i}`)
+      mkdirSync(at)
+      const team = makeSource(at, 'team', [], { 'registry.json': JSON.stringify(reg) })
+      const repo = consumer(at, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+      const before = read(repo, LOCK)
+      const r = cli(['update'], repo)
+      assert.equal(r.status, 1)
+      assert.match(r.stderr, why)
+      assert.deepEqual(readdirSync(repo), [LOCK])
+      assert.equal(read(repo, LOCK), before)
+    }
   })
 })
 

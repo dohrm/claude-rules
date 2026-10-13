@@ -21,7 +21,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, withSources as fetchSources, stageTree } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
@@ -584,8 +584,7 @@ function readLock({ known = true } = {}) {
   const lock = known ? dropRetiredProfiles(raw) : raw
   const unpack = names => known ? unpackNames(names, true) : names
   lock.sources = lockSources(lock)
-  if (lock.aliases !== undefined && !(lock.aliases && typeof lock.aliases === 'object' && !Array.isArray(lock.aliases)
-    && Object.values(lock.aliases).every(ps => Array.isArray(ps) && ps.every(p => typeof p === 'string'))))
+  if (lock.aliases !== undefined && !isAliasMap(lock.aliases))
     throw new Error(`${LOCK}: "aliases" must map names to lists of profiles`)
   if (lock.installed !== undefined) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
