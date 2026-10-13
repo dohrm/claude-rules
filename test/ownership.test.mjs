@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import { readdirSync, lstatSync, mkdirSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
-import { REPO, runCli, runCliBare, withTmpRepo, read } from './helpers.mjs'
+import { spawnSync } from 'node:child_process'
+import { REPO, CLI, runCli, runCliBare, withTmpRepo, read } from './helpers.mjs'
 
 const LOCK = '.claude-rules.lock'
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
@@ -16,8 +17,9 @@ function snapshot(dir) {
   const rec = rel => {
     for (const name of readdirSync(join(dir, rel))) {
       const path = rel ? `${rel}/${name}` : name
-      if (lstatSync(join(dir, path)).isDirectory()) rec(path)
-      else out[path] = read(dir, path)
+      const st = lstatSync(join(dir, path))
+      if (st.isDirectory()) rec(path)
+      else out[path] = st.isFile() ? read(dir, path) : '<not a regular file>'   // never read a FIFO
     }
   }
   rec('')
@@ -357,4 +359,16 @@ test('a file where an installed Codex skill directory was is listed, and --force
   refused(dir, ['update'], [['.agents/skills/rfc', 'a file where a directory goes']])
   ok(runCli(['update', '--force'], dir))
   assert.equal(read(dir, '.agents/skills/rfc/SKILL.md'), read(REPO, 'skills/rfc/SKILL.md'))
+}))
+
+// Tier 3, round 4: writing through a FIFO would block, or send the content down it.
+test('--force replaces a special file where a file goes', () => withTmpRepo(dir => {
+  mkdirSync(join(dir, '.claude/rules/rust'), { recursive: true })
+  const fifo = spawnSync('mkfifo', [join(dir, '.claude/rules/rust/code-style.md')])
+  if (fifo.error || fifo.status !== 0) return   // no mkfifo on this host
+  refused(dir, ['add', 'rust', '--agent', 'claude'], [['.claude/rules/rust/code-style.md', 'not a regular file']])
+  const r = spawnSync(process.execPath, [CLI, 'add', 'rust', '--agent', 'claude', '--force', '--local', REPO], { cwd: dir, encoding: 'utf8', timeout: 20000 })
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  assert.ok(lstatSync(join(dir, '.claude/rules/rust/code-style.md')).isFile())
+  assert.equal(owned(JSON.parse(read(dir, LOCK)))['.claude/rules/rust/code-style.md'], sha256(read(REPO, 'rules/rust/code-style.md')))
 }))

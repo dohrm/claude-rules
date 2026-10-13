@@ -109,7 +109,8 @@ export function applyTree({ writes, modes = new Map(), deletes, corrupt = new Ma
   for (const path of corrupt.keys()) if (!writes.has(path)) removePath(path)
   for (const path of deletes) if (existsSync(path)) { removePath(path); onDelete(path) }
   for (const [path, content] of writes) {
-    if (existsSync(path) && lstatSync(path).isDirectory()) rmSync(path, { recursive: true })
+    // Whatever is not a regular file there (a directory, a FIFO) was checked or forced: it goes.
+    if (existsSync(path) && !lstatSync(path).isFile()) rmSync(path, { recursive: true })
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
     if (modes.has(path)) chmodSync(path, modes.get(path))
