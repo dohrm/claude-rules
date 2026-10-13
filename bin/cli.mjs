@@ -34,7 +34,8 @@ const RETIRED_DIRS = ['.dev/rules', '.opencode']
 const argv = process.argv.slice(2)
 const cmd = argv[0]
 const flag = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null }
-const refFlag = flag('--ref')
+// `--ref` repeats: `--ref <ref>` targets core, `--ref <name>=<ref>` a named source.
+const refFlags = argv.flatMap((a, i) => a === '--ref' && i + 1 < argv.length ? [argv[i + 1]] : [])
 const agentFlag = flag('--agent')
 const localFlag = flag('--local')
 const forceFlag = argv.includes('--force')
@@ -47,7 +48,7 @@ if (rootFlag && moduleFlag) {
   process.exit(1)
 }
 const scopeFlag = rootFlag || moduleFlag
-const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
+const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 const LEVELS = ['rules', 'gates', 'ratchet']
@@ -90,6 +91,49 @@ function unpackNames(names, quiet = false) {
   names.forEach(walk)
   return out
 }
+
+// ------------------------------------------------------------------- sources
+// The lock pins an ordered list of sources (ADR-0008). The first is this library,
+// `core`; a lock written before sources existed (`repo` + `ref`) reads as core alone
+// and is rewritten in the new shape by the next write.
+const CORE = 'core'
+const SOURCE_NAME = /^[\w.-]+$/
+function lockSources(raw) {
+  if (raw.sources === undefined)
+    return [{ name: CORE, url: `github:${raw.repo || registry.repo}`, ref: raw.ref || registry.defaultRef }]
+  const list = raw.sources
+  const valid = Array.isArray(list) && list.length && list.every(s => s && SOURCE_NAME.test(s.name)
+    && typeof s.url === 'string' && s.url && typeof s.ref === 'string' && s.ref)
+  if (!valid) throw new Error(`${LOCK}: "sources" must be a non-empty list of { name, url, ref }`)
+  if (list[0].name !== CORE) throw new Error(`${LOCK}: the first source must be "${CORE}", found "${list[0].name}"`)
+  const names = list.map(s => s.name)
+  const twice = names.filter((n, i) => names.indexOf(n) !== i)
+  if (twice.length) throw new Error(`${LOCK}: source "${twice[0]}" is listed twice`)
+  return list.map(({ name, url, ref }) => ({ name, url, ref }))
+}
+// `--ref <ref>` → { core: ref }; `--ref <name>=<ref>` → { name: ref }.
+function parseRefs() {
+  const refs = {}
+  for (const raw of refFlags) {
+    const m = raw.match(/^([\w.-]+)=(.+)$/)
+    const [name, ref] = m ? [m[1], m[2]] : [CORE, raw]
+    if (refs[name] && refs[name] !== ref) throw new Error(`--ref given twice for source "${name}" (${refs[name]}, ${ref})`)
+    refs[name] = ref
+  }
+  return refs
+}
+// The sources this run installs from: the lock's (or core alone on a first add), each
+// at its --ref. Without one, core follows defaultRef, as it always has, and every
+// other source replays its locked ref.
+function resolveSources(locked, refs) {
+  const sources = (locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]).map(s => ({ ...s }))
+  const unknown = Object.keys(refs).filter(n => !sources.some(s => s.name === n))
+  if (unknown.length)
+    throw new Error(`--ref names unknown source(s): ${unknown.join(', ')}. Locked: ${sources.map(s => s.name).join(', ')}`)
+  for (const s of sources) s.ref = refs[s.name] || (s.name === CORE ? registry.defaultRef : s.ref)
+  return sources
+}
+const sourcesLabel = sources => sources.map(s => `${s.name}@${s.ref}`).join(', ')
 
 function parseLevel() {
   if (!levelFlag) return null
@@ -484,8 +528,8 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.ref, remaining, agents, modules, levels, codex?.inventory)
-    console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory)
+    console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
   console.log('• Review the deletions with `git status` / `git diff` before committing.')
@@ -510,6 +554,9 @@ function readLock() {
   if (!existsSync(LOCK)) return null
   safePath(LOCK)
   const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
+  lock.sources = lockSources(lock)
+  delete lock.repo
+  delete lock.ref
   lock.profiles = unpackNames(lock.profiles, true)
   lock.modules = normalizeModules(lock.profiles, lock.modules)
   if (lock.levels) {
@@ -549,8 +596,8 @@ function purgeRetiredSkills(agents, codexOwned) {
     }
   }
 }
-function writeLock(ref, profiles, agents, modules, levels, codex) {
-  const lock = { repo: registry.repo, ref, profiles, agents, modules: normalizeModules(profiles, modules, false) }
+function writeLock(sources, profiles, agents, modules, levels, codex) {
+  const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
@@ -572,7 +619,8 @@ const FINAL_MSG = {
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
-async function install(profiles, ref, agents, modules, levels) {
+async function install(profiles, sources, agents, modules, levels) {
+  const ref = sources[0].ref
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {
@@ -596,7 +644,7 @@ async function install(profiles, ref, agents, modules, levels) {
   const prefixesOf = owners => owners.some(p => !prefixesFor(p, modules).length) ? [] : [...new Set(owners.flatMap(p => prefixesFor(p, modules)))]
   const scopes = Object.entries(modules || {}).map(([d, ps]) => `${d} → ${ps.join(', ')}`)
   const lv = profiles.map(p => `${p}@${levels[p] || 'rules'}`).join(', ')
-  console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
+  console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${sourcesLabel(sources)}${localFlag ? ` (core read from ${localFlag})` : ''}`)
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
@@ -659,11 +707,11 @@ async function install(profiles, ref, agents, modules, levels) {
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
-    writeLock(ref, profiles, agents, modules, levels, codex?.inventory)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory)
   } finally {
     for (const { s } of staged) if (s.temp) rmSync(s.dir, { recursive: true, force: true })
   }
-  console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
+  console.log(`\nPinned in ${LOCK} (${sourcesLabel(sources)}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
     console.log([...new Set(notes)].join('\n'))
@@ -1260,7 +1308,7 @@ function doctor() {
   const unknownP = lock.profiles.filter(p => !registry.profiles[p])
   for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
   for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
-  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}`)
+  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}`)
   // A module path that does not exist anchors every one of its globs to nothing —
   // the rules are emitted, look installed, and can never match a file.
   for (const [dir, ps] of Object.entries(lock.modules || {})) {
@@ -1363,9 +1411,10 @@ function doctor() {
 // the lock and leaves no way to find them.
 // `agentsRaw`/`levelName`/`rootDirRaw` are null for "use the flag/lock default";
 // the interactive prompt below passes explicit answers instead of CLI flags.
-async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
+async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw }) {
   const requested = unpackNames(requestedRaw)
   const lock = readLock()
+  const sources = resolveSources(lock?.sources, parseRefs())
   const migrated = migrateLegacyLock(lock)
   const profiles = [...new Set([...migrated.profiles, ...requested])]
   // Same rule for agents: no explicit choice on an existing install keeps its
@@ -1396,7 +1445,7 @@ async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
   const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.entries(modules).some(([d, ps]) => d !== '.' && ps.includes(p)))
   if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
   if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-  await install(profiles, ref, agents, modules, levels)
+  await install(profiles, sources, agents, modules, levels)
 }
 
 // -------------------------------------------------------------- interactive add
@@ -1454,14 +1503,14 @@ async function promptAdd() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlag
+      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlags.length
       if (!positional.length && bare && process.stdin.isTTY) {
         const answers = await promptAdd()
-        await runAdd({ ...answers, ref: registry.defaultRef })
+        await runAdd(answers)
         break
       }
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
-      await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag, ref: refFlag || registry.defaultRef })
+      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>]'); process.exit(1) }
+      await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag })
       break
     }
     case 'update': {
@@ -1470,7 +1519,7 @@ async function main() {
       const { kept, dropped } = agentsFromLock(lock)
       if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
       const migrated = migrateLegacyLock(lock)
-      await install(migrated.profiles, refFlag || registry.defaultRef, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+      await install(migrated.profiles, resolveSources(lock.sources, parseRefs()), [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
       break
     }
     case 'remove': {
@@ -1496,18 +1545,18 @@ async function main() {
       }
       console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (new installs: claude,codex; select with --agent)`)
       console.log(`Levels: ${LEVELS.join(' | ')} (default on add: rules; never ratchet)`)
-      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
+      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
       break
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
+        + '  add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>]\n'
         + '                                   install/pin profiles (default: claude,codex, --level rules)\n'
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
-        + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
+        + '  update [--ref <ref>|<source>=<ref>]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
