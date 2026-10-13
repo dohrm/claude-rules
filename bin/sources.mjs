@@ -66,6 +66,20 @@ function editSources(list, { add, drop } = {}) {
   }
   return list
 }
+// After `remove --source`, a profile only that source defined is in no registry left:
+// it goes with the source, from profiles, modules and levels alike.
+export function dropUndefined(lock, registry) {
+  const gone = lock.profiles.filter(p => !registry.profiles[p])
+  if (!gone.length) return lock
+  console.log(`Dropping [${gone.join(', ')}]: no remaining source defines ${gone.length > 1 ? 'them' : 'it'}.\n`)
+  const keep = ps => ps.filter(p => !gone.includes(p))
+  return {
+    ...lock,
+    profiles: keep(lock.profiles),
+    modules: Object.fromEntries(Object.entries(lock.modules || {}).map(([d, ps]) => [d, keep(ps)])),
+    ...(lock.levels ? { levels: Object.fromEntries(Object.entries(lock.levels).filter(([p]) => !gone.includes(p))) } : {}),
+  }
+}
 export const sourcesLabel = sources => sources.map(s => `${s.name}@${s.ref}`).join(', ')
 
 // -------------------------------------------------------------------- fetching

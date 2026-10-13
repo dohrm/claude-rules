@@ -21,7 +21,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, withSources as fetchSources, stageTree } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
@@ -1566,21 +1566,6 @@ async function reinstall(lock, fetched) {
   const migrated = migrateLegacyLock(lock)
   await install(migrated.profiles, fetched, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
 }
-// After `remove --source`, a profile only that source defined is in no registry left:
-// it goes with the source, from profiles, modules and levels alike.
-function dropUndefined(lock) {
-  const gone = lock.profiles.filter(p => !registry.profiles[p])
-  if (!gone.length) return lock
-  console.log(`Dropping [${gone.join(', ')}]: no remaining source defines ${gone.length > 1 ? 'them' : 'it'}.\n`)
-  const keep = ps => ps.filter(p => !gone.includes(p))
-  return {
-    ...lock,
-    profiles: keep(lock.profiles),
-    modules: Object.fromEntries(Object.entries(lock.modules || {}).map(([d, ps]) => [d, keep(ps)])),
-    ...(lock.levels ? { levels: Object.fromEntries(Object.entries(lock.levels).filter(([p]) => !gone.includes(p))) } : {}),
-  }
-}
-
 // -------------------------------------------------------------- interactive add
 // A bare `add` in a real terminal, with no flag at all — the "I don't know the
 // flags yet" path. Any flag alongside a missing profile list is a mistake, not
@@ -1655,7 +1640,7 @@ async function main() {
     case 'remove': {
       if (sourceFlag) {
         if (!existsSync(LOCK)) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
-        await withSources(fetched => reinstall(dropUndefined(readLock({ known: false })), fetched), { drop: sourceFlag })
+        await withSources(fetched => reinstall(dropUndefined(readLock({ known: false }), registry), fetched), { drop: sourceFlag })
         break
       }
       if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
