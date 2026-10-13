@@ -377,8 +377,6 @@ function stageTree(layers, froms) {
   const origin = {}
   try {
     for (const from of froms) {
-      // `from` comes from a fetched registry now: it must stay inside the source tree.
-      if (isAbsolute(from) || from.split(/[\\/]/).includes('..')) throw new Error(`registry entry "${from}" must be a relative path inside the source`)
       const layer = layers.find(l => existsSync(join(l.dir, from)))
       if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
       assertInside(realpathSync(layer.dir), join(layer.dir, from))
@@ -463,6 +461,20 @@ const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside th
 // agent, and update the lock. Symmetric with the EMITTERS/destination logic.
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
+
+// Every destination is derived from an entry, and both its sources are now content
+// this CLI did not ship: a fetched registry, and the lock's inventory. An entry may
+// only name a path under the root its kind owns, or a forged `to: "src"` would let
+// emit (resetDir) and remove (rmSync) wipe a project directory.
+const ENTRY_ROOT = { rule: '.claude/rules/', agent: '.claude/agents' }
+const plainPath = p => typeof p === 'string' && p !== '' && !isAbsolute(p) && !p.split(/[\\/]/).some(seg => seg === '..' || seg === '.' || seg === '')
+function assertEntry(e, where) {
+  const name = e && typeof e.from === 'string' ? basename(e.from) : ''
+  const ok = e && ['rule', 'agent', 'skill', 'kit'].includes(e.kind) && plainPath(e.from) && name
+    && (!ENTRY_ROOT[e.kind] || (plainPath(e.to) && (e.to === ENTRY_ROOT[e.kind].replace(/\/$/, '') && e.kind === 'agent'
+      || e.to.startsWith(ENTRY_ROOT[e.kind].replace(/\/?$/, '/')))))
+  if (!ok) throw new Error(`${where}: entry ${JSON.stringify(e)} — a ${e?.kind} must come from a relative path and land under ${ENTRY_ROOT[e?.kind] || 'its fixed root'}`)
+}
 
 // Filesystem targets that add() created for (entry, agent) — mirror of the emitters.
 function destsFor(entry, agent) {
@@ -633,6 +645,10 @@ function readLock({ known = true } = {}) {
   safePath(LOCK)
   const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
   lock.sources = lockSources(lock)
+  if (lock.installed !== undefined) {
+    if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
+    for (const e of lock.installed) assertEntry(e, `${LOCK} installed`)
+  }
   delete lock.repo
   delete lock.ref
   lock.profiles = unpackNames(lock.profiles, true)
@@ -738,6 +754,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   let codex
   try {
     // Stage every entry before changing any destination.
+    for (const { e } of owned) assertEntry(e, 'registry')
     const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
     tree = stagedTree.tree
     installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
@@ -785,11 +802,18 @@ async function install(profiles, fetched, agents, modules, levels) {
     // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
     // active, and with its record gone from the inventory no `remove` could reach it.
     // Codex-owned paths are pruned by its own inventory (prepareCodex).
+    // Only for the agents the previous install wrote for: a target added by this run
+    // never held anything of ours. A destination moved into or out of a fresh one is
+    // refused — removing the old one would delete the new, keeping it leaves stale files.
+    const previous = readLock()
     const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
-    const overlaps = d => [...fresh].some(f => f === d || f.startsWith(d + '/') || d.startsWith(f + '/'))
-    const stale = [...new Set((readLock()?.installed || []).flatMap(e => agents.flatMap(a => destsFor(e, a)
+    const stale = [...new Set((previous?.installed || []).flatMap(e => agentsFromLock(previous).kept.flatMap(a => destsFor(e, a)
       .filter(d => !(codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
-      .filter(d => !overlaps(d))
+      .filter(d => !fresh.has(d))
+    for (const d of stale) {
+      const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))
+      if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
+    }
     for (const dest of stale) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)

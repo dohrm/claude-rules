@@ -190,7 +190,7 @@ test('a registry entry that climbs out of its source is refused', () => {
     writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
     const r = cli(['add', 'escape'], repo)
     assert.equal(r.status, 1)
-    assert.match(r.stderr, /registry entry "\.\.\/outside" must be a relative path inside the source/)
+    assert.match(r.stderr, /registry: entry .*"\.\.\/outside".* must come from a relative path/)
     assert.ok(!has(repo, '.claude/rules/escape'))
   })
 })
@@ -295,5 +295,67 @@ test('update to a registry that moves a destination removes the old copy; remove
     ok(cli(['remove', 'all'], repo))
     assert.deepEqual(readdirSync(join(repo, '.claude/rules')), [], 'nothing of the install survives')
     assert.ok(!has(repo, LOCK))
+  })
+})
+
+// Stale cleanup only covers the agents the previous install wrote for: a target
+// added in this run never held anything of ours.
+test('stale cleanup never touches a target the previous install did not write for', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'rules/rust-extra', to: '.claude/rules/rust-extra', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'rules/rust-extra/x.md': '# extra\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/rust-extra/x.md'))
+    mkdirSync(join(repo, '.cursor/rules/rust-extra'), { recursive: true })
+    writeFileSync(join(repo, '.cursor/rules/rust-extra/mine.mdc'), 'hand-written\n')
+
+    core.commit({ 'registry.json': read(REPO, 'registry.json') })   // upstream drops the entry
+    ok(cli(['update', '--agent', 'cursor'], repo))
+    assert.ok(!has(repo, '.claude/rules/rust-extra'), 'the claude copy we wrote is pruned')
+    assert.equal(read(repo, '.cursor/rules/rust-extra/mine.mdc'), 'hand-written\n', 'cursor was never ours there')
+  })
+})
+
+test('a forged inventory destination outside the installer\'s roots is refused before any deletion', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    mkdirSync(join(repo, 'src'))
+    writeFileSync(join(repo, 'src/main.rs'), 'fn main() {}\n')
+    const lock = lockOf(repo)
+    lock.installed.find(i => i.from === 'rules/rust').to = 'src'
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    for (const args of [['remove', 'rust'], ['update']]) {
+      const r = cli(args, repo)
+      assert.equal(r.status, 1, args.join(' '))
+      assert.match(r.stderr, /installed: entry .*"to":"src".* land under \.claude\/rules\//)
+      assert.equal(read(repo, 'src/main.rs'), 'fn main() {}\n', `${args[0]} must not touch src`)
+    }
+  })
+})
+
+test('a registry that moves a destination into a child of itself is refused', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/rust/current' } : e)
+    core.commit({ 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const before = read(repo, LOCK)
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /\.claude\/rules\/rust moved to \.claude\/rules\/rust\/current, which overlaps it/)
+    assert.equal(read(repo, LOCK), before)
+    assert.ok(!has(repo, '.claude/rules/rust/current'), 'nothing written')
   })
 })
