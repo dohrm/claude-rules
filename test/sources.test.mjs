@@ -524,3 +524,54 @@ test('registries merge: an overlay-only profile installs, a known profile gains 
     assert.deepEqual(lockOf(repo).profiles, ['team-only', 'rust'], 'rust-api unpacks to the overlay\'s list, not core\'s')
   })
 })
+
+// A source registry's `exclude` removes paths from the merged tree; the emitters'
+// cleanup then deletes the copies an earlier install wrote.
+test('exclude: an excluded core rule and skill disappear on update, for Claude and Codex', () => {
+  withTmpRepo(root => {
+    const reg = withSkill(JSON.parse(read(REPO, 'registry.json')))
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'skills/team/SKILL.md': SKILL })
+    const team = makeSource(root, 'team', [], { 'registry.json': '{}\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['rust'], ['claude', 'codex'])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/rust/logging.md') && has(repo, '.agents/rules/rust/logging.md'))
+    assert.ok(has(repo, '.claude/skills/team/SKILL.md'))
+
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['rules/rust/logging.md', 'skills/team'] }) + '\n' })
+    ok(cli(['update'], repo))
+    assert.ok(!has(repo, '.claude/rules/rust/logging.md'), 'the excluded rule file is gone')
+    assert.ok(!has(repo, '.agents/rules/rust/logging.md'), 'from the Codex tree too')
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'the rest of the rule stays')
+    assert.ok(!has(repo, '.claude/skills/team') && !has(repo, '.agents/skills/team'), 'the excluded skill is gone')
+    assert.ok(!lockOf(repo).installed.some(i => i.from === 'skills/team'), 'and out of the inventory')
+
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['skills/team/SKILL.md'] }) + '\n' })
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /exclude skills\/team\/SKILL\.md: a skill is excluded whole/)
+  })
+})
+
+// Agent and kit directories are not reset on emit (the kit is "copy and own"), so a
+// file excluded inside one is deleted by name — and only that file.
+test('exclude: a file inside an agent directory is deleted by name', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents', to: '.claude/agents', kind: 'agent' }]
+    const core = makeSource(root, 'core', [...CORE_PATHS, 'agents'], { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const team = makeSource(root, 'team', [], { 'registry.json': '{}\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    writeFileSync(join(repo, '.claude/agents/mine.md'), 'the repo\'s own\n')
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['agents/code-simplifier.md'] }) + '\n' })
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /− agents\/code-simplifier\.md {2}\(excluded\)/)
+    assert.ok(!has(repo, '.claude/agents/code-simplifier.md'))
+    assert.ok(has(repo, '.claude/agents/code-reviewer.md'))
+    assert.equal(read(repo, '.claude/agents/mine.md'), 'the repo\'s own\n')
+  })
+})

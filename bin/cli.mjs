@@ -374,6 +374,10 @@ function mergeRegistries(fetched) {
     const shape = [['profiles', isListMap], ['aliases', isListMap], ['shared', isList]]
     for (const [key, ok] of shape)
       if (reg[key] !== undefined && !ok(reg[key])) throw new Error(`source ${source.name}: registry.json "${key}" has the wrong shape`)
+    // Paths this source removes from the layers before it (stageTree).
+    source.exclude = reg.exclude ?? []
+    if (!isList(source.exclude) || !source.exclude.every(plainPath))
+      throw new Error(`source ${source.name}: registry.json "exclude" must be a list of relative paths`)
     for (const e of [...(reg.shared || []), ...Object.values(reg.profiles || {}).flat()])
       if (e && typeof e === 'object') declaredBy.set(e, source.name)
     if (!merged) { merged = { ...reg, shared: reg.shared || [], profiles: { ...reg.profiles } }; continue }
@@ -408,13 +412,27 @@ function assertInside(root, abs, seen = new Set()) {
 // order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
 // whole directory for a skill — a later skill replaces the earlier one entirely, so
 // a skill is never half one layer, half another.
+// A layer's `exclude` removes what the layers before it put there; a later layer may
+// put it back. Returns { tree, excluded }: the [{ from, rel }] removed inside an entry
+// that is still staged (rel '' when the whole entry went).
+const under = (path, dir) => path === dir || path.startsWith(dir + '/')
 function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
+  const excluded = []
   try {
     for (const { from, kind } of entries) {
       const dest = join(tree, from)
       let found = false
+      const gone = new Set()
       for (const layer of layers) {
+        for (const path of layer.exclude || []) {
+          if (!under(path, from) && !under(from, path)) continue
+          if (kind === 'skill' && path !== from && under(path, from))
+            throw new Error(`source ${layer.name}: exclude ${path}: a skill is excluded whole (exclude ${from})`)
+          const rel = under(from, path) ? '' : path.slice(from.length + 1)
+          rmSync(rel ? join(dest, rel) : dest, { recursive: true, force: true })
+          gone.add(rel)
+        }
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
         assertInside(realpathSync(layer.dir), src)
@@ -423,10 +441,11 @@ function stageTree(layers, entries) {
         cpSync(src, dest, { recursive: true, dereference: true })
         found = true
       }
-      if (!found) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      if (!found && !gone.size) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      for (const rel of gone) if (!existsSync(rel ? join(dest, rel) : dest)) excluded.push({ from, rel })
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return tree
+  return { tree, excluded }
 }
 // Returns { dir, isFile, name } — a readable view of the entry inside the staged tree.
 function makeStaged(root, entry) {
@@ -795,7 +814,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   }
   // Carry the profile each entry came from: it is what maps an entry to the
   // module(s) that asked for it, and therefore to its glob prefixes.
-  const owned = [
+  let owned = [
     ...registry.shared.map(e => ({ e, profile: null })),
     ...profiles.flatMap(p => entriesAt(p, levels[p] || 'rules').map(e => ({ e, profile: p }))),
   ]
@@ -829,7 +848,17 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    tree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    tree = stagedTree.tree
+    // An entry excluded whole is not installed: dropped here, its old copy is stale.
+    // A path excluded inside one goes with the re-emit, which resets rule directories;
+    // agent and kit directories are not reset, so their copy is deleted by name below.
+    for (const { from, rel } of stagedTree.excluded) console.log(`  − ${rel ? `${from}/${rel}` : from}  (excluded)`)
+    owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
+    const excludedInside = stagedTree.excluded.filter(x => x.rel).flatMap(({ from, rel }) => owned
+      .filter(({ e }) => e.from === from && (e.kind === 'agent' || e.kind === 'kit'))
+      .flatMap(({ e }) => agents.flatMap(a => destsFor(e, a)).map(d => join(d, rel))))
+    for (const dest of excludedInside) safePath(dest)
     installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
@@ -904,6 +933,8 @@ async function install(profiles, fetched, agents, modules, levels) {
     if (codex) applyCodex(codex)
     for (const dest of stale)
       if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
+    for (const dest of new Set(excludedInside))
+      if (existsSync(dest)) { safePath(dest); rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (excluded)`) }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
