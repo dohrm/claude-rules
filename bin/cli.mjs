@@ -484,6 +484,8 @@ function remove(profilesArg) {
       safePath(path)
       if (!existsSync(path)) throw new Error(`Missing Codex asset: ${path}; update before removing profiles`)
       const content = readFileSync(path)
+      // Refused even under --force: a retained rule is rescoped from its installed text,
+      // and an edited copy has none left to rescope. `update --force` restores it first.
       if (hash(content) !== asset.hash) throw new Error(`Modified owned file: ${path}; reconcile before removing profiles`)
       files[path] = { ...asset, profiles: owners, content }
     }
@@ -758,15 +760,19 @@ async function install(profiles, fetched, agents, modules, levels) {
     const recorded = ownedFiles(previous)
     const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
     const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)
-    plan.corrupt = settleCorruption(checkTree({
+    const corrupt = checkTree({
       ...plan,
       owned: recorded,
       // A skill is one unit: its directory holds nothing else. An adopted destination
-      // is overwritten whole, so whatever this run does not write in it goes — except
-      // the agents root, which holds the repo's own agents beside ours.
-      dirs: adopted.length ? adopted.filter(d => d !== ENTRY_ROOT.agent)
+      // is overwritten whole, so whatever this run does not write in it goes.
+      dirs: adopted.length ? adopted
         : [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
-    }), forceFlag || adopted.length > 0)
+    })
+    // The agents root also holds the repo's own agents, and an unhashed lock cannot
+    // tell them from one of ours dropped upstream: adoption never decides that alone,
+    // only an explicit --force does.
+    const ambiguous = [...corrupt.keys()].some(path => path.startsWith(`${ENTRY_ROOT.agent}/`))
+    plan.corrupt = settleCorruption(corrupt, forceFlag || (adopted.length > 0 && !ambiguous))
     if (codexInput) codex = prepareCodex(...codexInput, modules, previous?.codex)
     // Apply: what the previous install wrote and this one no longer produces goes first
     // (an entry dropped upstream, a destination moved), then every write.

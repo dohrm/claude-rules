@@ -326,3 +326,19 @@ test('adoption overwrites a moved destination and a file dropped upstream, liste
   assert.ok(existsSync(join(dir, '.claude/rules/rust/code-style.md')))
   assert.deepEqual(snapshot(dir)['.claude/rules/rust/code-style.md'], read(REPO, 'rules/rust/code-style.md'))
 }))
+
+// Tier 3, round 2: the agents root holds the repo's agents beside ours.
+test('adoption never decides alone about an unexplained file in the agents root', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'agent', '--agent', 'claude'], dir))
+  const lock = JSON.parse(read(dir, LOCK))
+  for (const record of lock.installed) delete record.files
+  writeFileSync(join(dir, LOCK), JSON.stringify(lock, null, 2) + '\n')
+  write(dir, '.claude/agents/dropped-upstream.md', 'one of ours, or the repo\'s?\n')
+  const before = snapshot(dir)
+  const r = runCli(['update'], dir)
+  assert.equal(r.status, 1)
+  assert.deepEqual(snapshot(dir), before)
+  const forced = ok(runCli(['update', '--force'], dir))
+  assert.match(forced.stdout, /! \.claude\/agents\/dropped-upstream\.md — /)
+  assert.ok(!existsSync(join(dir, '.claude/agents/dropped-upstream.md')), 'gone, and listed, under an explicit --force')
+}))
