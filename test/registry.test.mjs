@@ -178,3 +178,13 @@ test('review contract: the shared block is byte-identical in the agent and the h
   assert.equal(block('kit/common/review-prompt.md'), agent,
     'agents/code-reviewer.md and kit/common/review-prompt.md have drifted — edit both, or neither')
 })
+
+// `npm test` is one `node --test f1 f2 …`, and node treats those arguments as globs: a
+// listed file that does not exist is dropped without a word as soon as another one
+// matches. So a renamed or not-yet-written test file would leave the suite green.
+test('npm test: every listed test file exists, and every test file is listed', () => {
+  const listed = JSON.parse(read(REPO, 'package.json')).scripts.test.split(/\s+/).filter(a => a.endsWith('.test.mjs'))
+  for (const f of listed) assert.ok(existsSync(join(REPO, f)), `package.json lists ${f}, which does not exist`)
+  const files = readdirSync(join(REPO, 'test')).filter(f => f.endsWith('.test.mjs')).map(f => `test/${f}`)
+  for (const f of files) assert.ok(listed.includes(f), `${f} is not in package.json's test script`)
+})
