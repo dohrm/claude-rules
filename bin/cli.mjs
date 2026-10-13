@@ -1393,7 +1393,10 @@ function doctor() {
 
   // ---- 1. the lock itself
   console.log('Install')
-  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
+  // A hashed inventory says what was installed, from whichever sources: no registry is
+  // needed to audit it. A lock without one falls back to the bundled registry.
+  const inventory = recordsHashes(lock) ? lock.installed : null
+  const unknownP = inventory ? [] : lock.profiles.filter(p => !registry.profiles[p])
   for (const p of unknownP) bad.push(`lock references profile "${p}", unknown to the registry bundled with this CLI — its files cannot be audited here (run doctor from the CLI at the locked ref)`)
   for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
   console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}`)
@@ -1408,13 +1411,25 @@ function doctor() {
 
   // ---- 2. what the lock promises vs what is on disk
   const expected = new Map()
-  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
+  const lockedEntries = inventory
+    ? inventory.map(e => [e.profile ?? '(shared)', [e]])
+    : [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
+  // From the inventory, a destination is promised only when a recorded file sits in it.
+  const promised = (e, d) => !inventory || Object.keys(e.files).some(f => f === d || f.startsWith(d + '/'))
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
-      for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
+      for (const d of destsFor(e, a).filter(d => promised(e, d))) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
 
   for (const [dest, meta] of expected)
     if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
+  // Every inventoried file, as it was written. Codex's own assets are audited below.
+  for (const e of inventory || []) for (const [path, digest] of Object.entries(e.files)) {
+    if (lock.codex?.files?.[path]) continue
+    safePath(path)
+    if (!existsSync(path)) bad.push(`${path} — installed by "${e.profile ?? '(shared)'}", missing on disk (run \`update\`)`)
+    else if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== digest)
+      bad.push(`${path} — edited since it was installed: move the change to .dev/overrides/, or \`update --force\` to restore it`)
+  }
 
   for (const dir of RETIRED_DIRS)
     if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Delete it: \`update\` purges it only when it adopts a lock without file hashes.`)
@@ -1433,8 +1448,11 @@ function doctor() {
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
     for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind === 'kit') known.add(d)
+  // A directory around an inventoried destination (`.claude/agents` around an overlay's
+  // single agent file) is explained by it.
+  const holds = d => [...expected.keys()].some(x => x.startsWith(d + '/'))
   for (const d of known)
-    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
+    if (existsSync(d) && !expected.has(d) && !holds(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
 
   // ---- 3. rules that can never fire here
   const files = repoFiles()
