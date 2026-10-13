@@ -157,17 +157,15 @@ test('the source\'s registry decides: a profile only it defines installs', () =>
     assert.ok(has(repo, '.claude/rules/team-only/house.md'), 'update reads the lock against the same registry')
 
     // The offline commands keep the bundled registry, which does not know team-only.
-    // They must still read the lock — and remove must refuse rather than guess.
+    // They must still read the lock; remove works from the lock's inventory.
     assert.match(ok(cli(['list'], repo)).stdout, /Installed: \[rust, team-only\]/)
     const doc = cli(['doctor'], repo)
     assert.equal(doc.status, 1)
     assert.match(doc.stdout, /profile "team-only", unknown to the registry bundled with this CLI/)
-    const before = read(repo, LOCK)
-    const rm = cli(['remove', 'all'], repo)
-    assert.equal(rm.status, 1)
-    assert.match(rm.stderr, /does not know \[team-only\]/)
-    assert.equal(read(repo, LOCK), before)
-    assert.ok(has(repo, '.claude/rules/team-only/house.md') && has(repo, '.claude/rules/rust/code-style.md'), 'nothing deleted')
+    ok(cli(['remove', 'team-only'], repo))
+    assert.ok(!has(repo, '.claude/rules/team-only'))
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'the other profile stays')
+    assert.deepEqual(lockOf(repo).profiles, ['rust'])
   })
 })
 
@@ -222,5 +220,54 @@ test('a link in a source that resolves outside it is refused before any write', 
     core.commit({})
     ok(cli(['update'], repo))
     assert.equal(read(repo, '.claude/rules/rust/alias.md'), read(REPO, STYLE), 'an inside link is copied as its content')
+  })
+})
+
+// remove deletes what was installed, from the lock's inventory — never from a registry.
+// Here the source maps `rust` somewhere the bundled registry does not: removing it must
+// delete exactly that, and leave alone the path the bundled registry would have named.
+test('remove deletes from the inventory: a source that redefines a known profile\'s `to` is removed exactly', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/team-rust' } : e)
+    const core = makeSource(root, 'core', [...CORE_PATHS, 'rules/go', ...registry.profiles.go.map(e => e.from)], { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['add', 'go'], repo))
+    assert.ok(has(repo, '.claude/rules/team-rust/code-style.md'))
+    assert.ok(has(repo, '.claude/rules/go'))
+    const inv = lockOf(repo).installed
+    assert.deepEqual(inv.find(i => i.from === 'rules/rust'), { source: 'core', kind: 'rule', from: 'rules/rust', to: '.claude/rules/team-rust', profile: 'rust' })
+    assert.ok(inv.some(i => i.profile === null && i.from === 'rules/common'), 'shared entries are inventoried with profile null')
+    // The bundled destination holds something this install never wrote.
+    mkdirSync(join(repo, '.claude/rules/rust'), { recursive: true })
+    writeFileSync(join(repo, '.claude/rules/rust/mine.md'), 'not installed\n')
+
+    ok(cli(['remove', 'rust'], repo))
+    assert.ok(!has(repo, '.claude/rules/team-rust'), 'the installed copy is gone')
+    assert.equal(read(repo, '.claude/rules/rust/mine.md'), 'not installed\n', 'the bundled path was never ours')
+    assert.ok(has(repo, '.claude/rules/go') && has(repo, '.claude/rules/common'), 'go and the shared rules stay')
+    const after = lockOf(repo)
+    assert.deepEqual(after.profiles, ['go'])
+    assert.ok(!after.installed.some(i => i.profile === 'rust'), 'the lock forgets rust')
+    assert.ok(after.installed.some(i => i.profile === 'go'))
+  })
+})
+
+test('remove refuses a lock with no inventory', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    const lock = lockOf(repo)
+    delete lock.installed
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    const r = cli(['remove', 'rust'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /no "installed" inventory; run `update` once/)
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'))
   })
 })

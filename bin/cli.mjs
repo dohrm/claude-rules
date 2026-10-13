@@ -371,8 +371,10 @@ function assertInside(root, abs, seen = new Set()) {
 // The emitters read ONE tree, never a source: each entry's `from` is copied out of
 // the fetched sources into a temp dir, removed by the caller, so private content
 // never lands in the repo and no emitter knows where a file came from.
+// Returns { tree, origin }: origin maps each `from` to the source it was copied from.
 function stageTree(layers, froms) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
+  const origin = {}
   try {
     for (const from of froms) {
       // `from` comes from a fetched registry now: it must stay inside the source tree.
@@ -381,9 +383,10 @@ function stageTree(layers, froms) {
       if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
       assertInside(realpathSync(layer.dir), join(layer.dir, from))
       cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
+      origin[from] = layer.name
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return tree
+  return { tree, origin }
 }
 // Returns { dir, isFile, name } — a readable view of the entry inside the staged tree.
 function makeStaged(root, entry) {
@@ -519,14 +522,13 @@ function purgeRetired() {
 function remove(profilesArg) {
   const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
-  // remove derives every destination from the registry. One it does not know — a
-  // profile the source's own registry defined — would leave its files behind, or
-  // delete files it shares with what is removed. Refuse before touching anything.
-  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
-  if (unknownP.length) {
-    console.error(`remove: the registry bundled with this CLI does not know [${unknownP.join(', ')}] (defined by the installing source, ${sourcesLabel(lock.sources)}). Run remove from the CLI at that ref: npx github:<repo>#<ref> remove …`)
-    process.exit(1)
-  }
+  // remove deletes what was installed, read from the lock — never from a registry:
+  // the one bundled with this CLI is not the one the source installed from, and may
+  // map the same profile elsewhere. A lock without the inventory cannot say, so it
+  // is refused rather than guessed at.
+  if (!Array.isArray(lock.installed))
+    throw new Error(`${LOCK} has no "installed" inventory; run \`update\` once to record it before removing profiles`)
+  const installedOf = p => lock.installed.filter(i => i.profile === p)
   const { kept, dropped } = agentsFromLock(lock)
   if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
   const agents = kept.length ? kept : ['claude']
@@ -542,11 +544,9 @@ function remove(profilesArg) {
   const levels = { ...(lock.levels || {}) }
   for (const p of toRemove) delete levels[p]
   const modules = normalizeModules(remaining, Object.fromEntries(Object.entries(lock.modules || {})
-    .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false)
-  const stillNeeded = new Set([
-    ...remaining.flatMap(p => entriesAt(p, levels[p] || 'rules')),
-    ...(fullUninstall ? [] : registry.shared),
-  ].flatMap(e => agents.flatMap(a => destsFor(e, a))))
+    .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false, false)
+  const keptInstalled = lock.installed.filter(i => i.profile === null ? !fullUninstall : remaining.includes(i.profile))
+  const stillNeeded = new Set(keptInstalled.flatMap(e => agents.flatMap(a => destsFor(e, a))))
   let codex
   if (lock.codex) {
     const files = {}
@@ -574,7 +574,8 @@ function remove(profilesArg) {
     codex = prepareCodex(files, rules, fullUninstall ? {} : modules, lock.codex)
   }
   // Preflight every removal before deleting anything.
-  for (const entry of [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])])
+  const entries = [...toRemove.flatMap(installedOf), ...(fullUninstall ? installedOf(null) : [])]
+  for (const entry of entries)
     for (const agent of agents) for (const dest of destsFor(entry, agent)) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
@@ -582,7 +583,6 @@ function remove(profilesArg) {
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
-  const entries = [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])]
   let removedKit = false
   for (const entry of entries) {
     if (entry.kind === 'kit') removedKit = true
@@ -602,7 +602,7 @@ function remove(profilesArg) {
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory)
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
   if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
@@ -674,9 +674,12 @@ function purgeRetiredSkills(agents, codexOwned) {
     }
   }
 }
-function writeLock(sources, profiles, agents, modules, levels, codex) {
-  const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false) }
+// `installed` is the inventory: one { source, kind, from, to, profile } per entry
+// emitted (profile null for the shared ones). remove deletes from it.
+function writeLock(sources, profiles, agents, modules, levels, codex, installed) {
+  const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
+  lock.installed = installed
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
@@ -731,10 +734,13 @@ async function install(profiles, fetched, agents, modules, levels) {
   const notes = []
   const staged = []
   let tree = null
+  let installed = []
   let codex
   try {
     // Stage every entry before changing any destination.
-    tree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
+    const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
+    tree = stagedTree.tree
+    installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
@@ -788,7 +794,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
-    writeLock(sources, profiles, agents, modules, levels, codex?.inventory)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
   }
