@@ -841,3 +841,22 @@ test('doctor fails once a file inventoried inside an agent directory is deleted'
     assert.match(bad.stdout, /\.claude\/agents\/team\/two\.md — promised by "team-only"/)
   })
 })
+
+// A registry with no aliases is recorded as such: an offline remove must not fall back
+// to the bundled aliases and unpack a name the installing sources never defined.
+test('an installing registry with no aliases records {}, so the bundled ones never apply offline', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.aliases = {}
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.deepEqual(lockOf(repo).aliases, {})
+    const r = cli(['remove', 'rust-api'], repo)
+    assert.equal(r.status, 1)
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'rust-api is no alias here: nothing removed')
+    assert.deepEqual(lockOf(repo).profiles, ['rust'])
+  })
+})

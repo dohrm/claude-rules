@@ -815,7 +815,7 @@ function purgeRetiredSkills(agents, codexOwned) {
 function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases) {
   const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
-  if (aliases && Object.keys(aliases).length) lock.aliases = aliases
+  if (aliases) lock.aliases = aliases   // {} too: it means "none", not "the bundled ones"
   lock.installed = installed
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
@@ -1011,7 +1011,7 @@ async function install(profiles, layers, agents, modules, levels) {
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()
-    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases)
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases || {})
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
   }
