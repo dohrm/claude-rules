@@ -13,8 +13,8 @@ const lockOf = dir => JSON.parse(read(dir, LOCK))
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
 
 // No --local: the CLI must fetch core from the lock's URL.
-function cli(args, cwd) {
-  const r = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' })
+function cli(args, cwd, env = {}) {
+  const r = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
   if (r.error) throw r.error
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' }
 }
@@ -105,5 +105,23 @@ test('an option-shaped URL or ref never reaches git as a flag', () => {
     assert.equal(r.status, 1)
     assert.match(r.stderr, /must not start with "-"/)
     assert.ok(!has(repo, 'pwned'))
+  })
+})
+
+// The fetched sources and the merged tree may hold private content: they live in temp
+// dirs, and none survives the run — success or failure.
+test('no fetched source or staged tree outlives the run', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    const tmp = join(root, 'tmp')
+    mkdirSync(repo)
+    mkdirSync(tmp)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo, { TMPDIR: tmp }))
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'))
+    assert.deepEqual(readdirSync(tmp), [], 'after success')
+    assert.equal(cli(['update', '--ref', 'no-such-ref'], repo, { TMPDIR: tmp }).status, 1)
+    assert.deepEqual(readdirSync(tmp), [], 'after a failed fetch')
   })
 })

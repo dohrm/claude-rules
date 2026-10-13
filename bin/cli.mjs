@@ -16,7 +16,7 @@
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -328,11 +328,24 @@ function fetchSource(source) {
 }
 
 // -------------------------------------------------------------------- staging
-// Returns { dir, isFile, name } — a readable view of the entry inside a source tree.
+// The emitters read ONE tree, never a source: each entry's `from` is copied out of
+// the fetched sources into a temp dir, removed by the caller, so private content
+// never lands in the repo and no emitter knows where a file came from.
+function stageTree(layers, froms) {
+  const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
+  try {
+    for (const from of froms) {
+      const layer = layers.find(l => existsSync(join(l.dir, from)))
+      if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
+    }
+  } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
+  return tree
+}
+// Returns { dir, isFile, name } — a readable view of the entry inside the staged tree.
 function makeStaged(root, entry) {
   const isFile = /\.[a-z0-9]+$/i.test(entry.from)
   const abs = join(root, entry.from)
-  if (!existsSync(abs)) throw new Error(`${entry.from}: not found in the source tree`)
   return { dir: isFile ? dirname(abs) : abs, isFile, name: basename(entry.from) }
 }
 const stagedFiles = s => s.isFile ? [{ abs: join(s.dir, s.name), rel: s.name }] : walk(s.dir)
@@ -661,17 +674,19 @@ async function install(profiles, sources, agents, modules, levels) {
   const notes = []
   const staged = []
   const fetched = []
+  let tree = null
   let codex
   try {
     // Fetch every source before changing any destination.
     if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
     for (const source of sources) fetched.push(fetchSource(source))
+    tree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
       if (stagedKeys.has(key)) continue
       stagedKeys.add(key)
-      staged.push({ ...item, s: makeStaged(fetched[0].dir, item.e) })
+      staged.push({ ...item, s: makeStaged(tree, item.e) })
     }
     for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
     for (const { e, s } of staged) for (const agent of agents) {
@@ -721,6 +736,7 @@ async function install(profiles, sources, agents, modules, levels) {
     purgeLegacyKit()
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory)
   } finally {
+    if (tree) rmSync(tree, { recursive: true, force: true })
     for (const f of fetched) if (f.temp) rmSync(f.dir, { recursive: true, force: true })
   }
   console.log(`\nPinned in ${LOCK} (${sourcesLabel(sources)}, agents: ${agents.join(', ')}).`)
