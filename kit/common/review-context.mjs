@@ -3,7 +3,7 @@
 // The `=== RFC ===` section of a review prompt: the frame the change was cut against,
 // handed to the reviewer instead of left for it to find.
 //
-// The reviewer is read-only on purpose — no shell, no network — so it can read a local
+// The reviewer is read-only on purpose — no writes, no network — so it can read a local
 // RFC but never follow a ticket RFC's pointer: there, `.work/<slug>/rfc.md` holds only
 // `**Ticket**: <URL>`, and the review ran without its frame while saying nothing about
 // it. In ticket mode the implementing agent caches the ticket, raw, in
