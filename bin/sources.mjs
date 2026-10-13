@@ -149,10 +149,17 @@ export async function withSources({ lockFile, refFlags, localDir, registry, edit
 // `declaredBy` maps each entry to the source whose registry named it: that is the
 // entry's `source` in the inventory, whichever layers its files are staged from.
 const isList = v => Array.isArray(v)
-const isListMap = v => Boolean(v) && typeof v === 'object' && !isList(v) && Object.values(v).every(isList)
+const isMap = v => Boolean(v) && typeof v === 'object' && !isList(v)
+const isListMap = v => isMap(v) && Object.values(v).every(isList)
 // The lock records the merged aliases, and reads them back with this same check.
 export const isAliasMap = v => isListMap(v) && Object.values(v).every(ps => ps.every(p => typeof p === 'string'))
-const SHAPE = { profiles: [isListMap, 'map names to lists'], aliases: [isAliasMap, 'map names to lists of profile names'], shared: [isList, 'be a list'] }
+const isRetired = v => isMap(v) && (v.profiles === undefined || isMap(v.profiles))
+const SHAPE = {
+  profiles: [isListMap, 'map names to lists'],
+  aliases: [isAliasMap, 'map names to lists of profile names'],
+  shared: [isList, 'be a list'],
+  retired: [isRetired, 'be an object whose "profiles" maps names to reasons'],
+}
 function mergeRegistries(fetched) {
   let merged = null
   const declaredBy = new Map()
@@ -226,7 +233,7 @@ export function stageTree(layers, entries) {
         overlay(src, dest, from, layer.name)
         found = true
       }
-      if (!found && !gone.size) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      if (!found && !gone.has(from)) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
       for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }

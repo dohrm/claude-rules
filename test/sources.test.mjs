@@ -553,7 +553,8 @@ test('an overlay registry of the wrong shape is refused before any write', () =>
     const core = teamCore(root)
     const cases = [[{ profiles: { team: 'rules/team' } }, /source team: registry\.json "profiles" must map names to lists/],
       // An alias the lock could not read back would make every later command fail.
-      [{ aliases: { unused: [42] } }, /source team: registry\.json "aliases" must map names to lists of profile names/]]
+      [{ aliases: { unused: [42] } }, /source team: registry\.json "aliases" must map names to lists of profile names/],
+      [{ retired: { profiles: 'all of them' } }, /source team: registry\.json "retired" must be an object/]]
     for (const [i, [reg, why]] of cases.entries()) {
       const at = join(root, `case${i}`)
       mkdirSync(at)
@@ -730,5 +731,21 @@ test('the lock records the merged aliases: an offline remove unpacks one only an
     assert.deepEqual(lockOf(repo).profiles, ['rust'])
     assert.ok(!has(repo, '.claude/rules/team-extra') && !has(repo, '.claude/rules/team'))
     assert.deepEqual(lockOf(repo).aliases['team-all'], ['team', 'team-extra'], 'kept for the next remove')
+  })
+})
+
+test('an entry no layer holds is refused, even when an exclude names a path inside it', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({
+      profiles: { ghost: [{ from: 'rules/ghost', to: '.claude/rules/ghost', kind: 'rule' }] },
+      exclude: ['rules/ghost/x.md'],
+    }) })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    const r = cli(['add', 'ghost'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /rules\/ghost: not found in source core, team/)
+    assert.equal(read(repo, LOCK), before)
   })
 })
