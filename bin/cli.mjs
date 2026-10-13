@@ -21,7 +21,7 @@ import { join, dirname, basename } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
-// giget is imported lazily (only add/update without --local need it) so init/list run with no deps.
+// No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the one their
 // fetched source carries (withSources): what a ref installs is that ref's registry, not

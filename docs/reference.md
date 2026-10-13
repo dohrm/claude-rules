@@ -482,7 +482,7 @@ merge. `kit/common/hooks/README.md` says so at length; do not sell more.
 claude-rules/
 ├── registry.json    # drives the installer: profile → source dirs → destinations
 ├── justfile         # self-host: imports kit/common/gate.just in place (.claude/ and .agents/ are symlinks)
-├── bin/cli.mjs      # the npx installer (giget-based; dumb by design, data-driven)
+├── bin/cli.mjs      # the npx installer (git-fetched sources; dumb by design, data-driven)
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat portal-http tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent

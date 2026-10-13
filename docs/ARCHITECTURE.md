@@ -37,7 +37,7 @@ sources merged into one staged tree before emitting.
 | Layer | Choice | Why (1 line) | ADR |
 |-------|--------|--------------|-----|
 | Installer runtime | Node.js ≥ 18, ESM, no build step | runs through `npx` with nothing to compile | — |
-| Installer dependencies | `giget` only, removed by ADR-0008 for `git` | a dumb, data-driven CLI with no dependency tree | ADR-0008 |
+| Installer dependencies | none — sources are fetched with the `git` on PATH | a dumb, data-driven CLI with no dependency tree | ADR-0008 |
 | Emission targets | Claude Code and Codex by default, Cursor optional | one authored source, explicit routing limits | ADR-0003 (supersedes the scope of ADR-0001) |
 | Assets | Markdown with YAML frontmatter; kit in shell, Node and `just` | read by agents as is; copied, owned, pinned | — |
 | Quality gates (shipped) | `just` recipes + `lefthook`; mutation as a PR gate | one gate entry point per repo | ADR-0002 |
@@ -64,7 +64,7 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 
 | Boundary | Contract | If it fails |
 |---|---|---|
-| GitHub (assets) | `github:dohrm/claude-rules` at a ref via `giget`; raw endpoint for file entries | `add`/`update` fail before writing anything |
+| GitHub (assets) | `github:dohrm/claude-rules` at a ref, shallow `git fetch` over HTTPS | `add`/`update` fail before writing anything |
 | `npx` | runs `bin/cli.mjs` from the package at `#<ref>` | no install |
 | Agent harnesses (Claude Code, Codex, Cursor) | their on-disk layouts for rules, skills, agents | assets land but are not loaded |
 
