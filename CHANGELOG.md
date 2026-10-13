@@ -36,8 +36,9 @@ Four behaviours change:
   `doctor` reports the retired-target trees.
 - **`remove` deletes only the files it recorded.** It reads the lock's `installed`
   inventory, not a registry, and refuses a lock without hashes: run `update` once
-  first. A file it did not write survives; an edited one stops it (`--force`
-  overwrites).
+  first. A file it did not write survives. An edited file it would delete stops it;
+  `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
+  rescope stops it even under `--force`: restore it with `update --force` first.
 
 ### Added — layered sources and `.dev/overrides/`
 
@@ -62,13 +63,13 @@ See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrid
 - **Overrides are listed.** The lock records `overrides: [{ path, by, over,
   baseHash }]`, and `add`/`update` print each one. When a replaced file changed in the
   layer under it, `update` warns
-  `⚠ <path> changed in <over> (overridden by <by>)`; **`update --strict`** fails
-  before writing anything.
+  `⚠ <path> changed in <over> (overridden by <by>)` (`removed from <over>` when it is
+  gone there); **`update --strict`** fails before writing anything.
 - **The lock records the merged `aliases`**, so an offline `remove` unpacks an alias
   only an overlay defined, and **`doctor` audits the hashed inventory** offline: an
   overlay-only profile passes, an edited or deleted installed file fails.
-- **Two new refusals:** two registry entries that install the same source path to two
-  destinations, and a skill directory that an `exclude`, a dropped entry or a
+- **Three new refusals:** two registry entries that install the same source path to
+  two destinations, two entries whose source paths nest, and a skill directory that an `exclude`, a dropped entry or a
   `remove` empties while it still holds a file the installer did not write
   (`--force` removes it).
 

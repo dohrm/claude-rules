@@ -159,7 +159,7 @@ npx github:dohrm/claude-rules remove --source team       # drop it, its files, i
 - The lock also keeps the merged `aliases`, so an offline `remove` understands an
   alias only your source defines.
 - Refused, never guessed: two entries that install the same source path to two
-  places, and a skill directory that is emptied while it holds a file the installer
+  places, two entries whose source paths nest, and a skill directory that is emptied while it holds a file the installer
   did not write.
 
 See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrides).

@@ -331,7 +331,7 @@ installer never asks for or stores a token. `github:owner/repo` means
   the later source winning on the same key, and a source may define profiles only it
   has. Its `exclude` lists paths (files, or whole skill directories) removed from the
   layers before it; their installed copies are deleted. Two entries that install
-  the same source path to two destinations are refused.
+  the same source path to two destinations, or whose source paths nest, are refused.
 - **`.dev/overrides/`** is the repo's own last layer. It mirrors the source layout
   (`.dev/overrides/rules/common/language.md`), has no ref and no lock entry, and the
   installer never writes it. That is where a local edit to an installed file lives
@@ -341,8 +341,8 @@ installer never asks for or stores a token. `github:owner/repo` means
   (for a skill, of its sorted `(path, sha256)` list). `add` and `update` print each
   one (`↻ rules/common/language.md  (team over core)`). When the replaced version
   changed since the last install, `update` warns
-  `⚠ rules/common/language.md changed in core (overridden by team)` and records the
-  new base; `update --strict` fails instead, before writing anything, so CI can hold
+  `⚠ rules/common/language.md changed in core (overridden by team)` — or `removed
+  from core` when it is gone there — and records the new base; `update --strict` fails instead, before writing anything, so CI can hold
   the change until someone reads it.
 
 An override is a fork of one file: it no longer receives upstream fixes, and the
@@ -363,8 +363,11 @@ exits 1 and changes nothing. Two ways out:
 
 - **Fix the tree**: move the edit to `.dev/overrides/` (or out of the installed
   path) and re-run.
-- **`--force`**: overwrite exactly the listed paths and record them again. It is
-  all or nothing; read the list first.
+- **`--force`**: overwrite exactly the listed paths and record them again; on
+  `remove`, delete the listed files it was removing. It is all or nothing; read the
+  list first. One case it does not cover: `remove` keeps and rescopes a Codex rule
+  a remaining profile shares, and an edited copy has nothing left to rescope — it
+  stops `remove` even under `--force`. Restore it with `update --force` first.
 
 `update` deletes what it recorded and no longer produces (an entry dropped upstream,
 an excluded path), then writes; it never reconciles a state it cannot explain.
