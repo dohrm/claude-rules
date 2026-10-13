@@ -1,7 +1,7 @@
 // Codex output and ownership. Rule selection is requested reading, not native loading.
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { relative, dirname, join, isAbsolute, sep, posix } from 'node:path'
-import { hash, safePath, planFiles, applyFiles } from './ownership.mjs'
+import { hash, safePath } from './ownership.mjs'
 
 export const START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
 export const END = '<!-- claude-rules:end -->'
@@ -74,8 +74,9 @@ export function prepareCodex(files, rules, modules, previous = {}) {
   checkInventory(previous)
   const blocks = instructionBlocks(rules, modules)
   const inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
-  const owned = Object.fromEntries(Object.entries(previous.files || {}).map(([path, f]) => [path, f.hash]))
-  const { writes, deletes } = planFiles(Object.fromEntries(Object.entries(files).map(([path, asset]) => [path, asset.content])), owned)
+  // The asset files themselves are written, checked and pruned by the shared ownership
+  // model (bin/ownership.mjs); this plan holds only the instruction blocks.
+  const writes = new Map(), deletes = []
   for (const [path, asset] of Object.entries(files))
     inventory.files[path] = { hash: hash(asset.content), profiles: asset.profiles, kind: asset.kind }
   for (const path of new Set([...Object.keys(blocks), ...(previous.blocks || [])])) {
@@ -93,7 +94,10 @@ export function prepareCodex(files, rules, modules, previous = {}) {
   return { writes, deletes, inventory }
 }
 
-export const applyCodex = applyFiles
+export function applyCodex(plan) {
+  for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
+  for (const path of plan.deletes) rmSync(path)
+}
 
 export function auditCodex(lock, bad, warn) {
   if (!lock.codex) { bad.push('Codex ownership inventory missing — explicitly update to adopt the installation'); return }

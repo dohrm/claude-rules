@@ -289,7 +289,7 @@ test('update to a registry that moves a destination removes the old copy; remove
     reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/team-rust' } : e)
     core.commit({ 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
     const r = ok(cli(['update'], repo))
-    assert.match(r.stdout, /✗ \.claude\/rules\/rust {2}\(no longer installed\)/)
+    assert.match(r.stdout, /✗ \.claude\/rules\/rust\/code-style\.md {2}\(no longer installed\)/)
     assert.ok(!has(repo, '.claude/rules/rust'), 'the old destination is gone')
     assert.ok(has(repo, '.claude/rules/team-rust/code-style.md'))
     assert.ok(has(repo, '.claude/rules/common'), 'what is still installed stays')
@@ -343,7 +343,9 @@ test('a forged inventory destination outside the installer\'s roots is refused b
   })
 })
 
-test('a registry that moves a destination into a child of itself is refused', () => {
+// ADR-0010: deleting what is owned and unchanged before writing makes a move into a
+// child of the old destination an ordinary update, with nothing left of the old copy.
+test('a registry that moves a destination into a child of itself needs nothing special', () => {
   withTmpRepo(root => {
     const core = makeSource(root, 'core', CORE_PATHS)
     const repo = join(root, 'consumer')
@@ -353,12 +355,9 @@ test('a registry that moves a destination into a child of itself is refused', ()
     const reg = JSON.parse(read(REPO, 'registry.json'))
     reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/rust/current' } : e)
     core.commit({ 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
-    const before = read(repo, LOCK)
-    const r = cli(['update'], repo)
-    assert.equal(r.status, 1)
-    assert.match(r.stderr, /\.claude\/rules\/rust moved to \.claude\/rules\/rust\/current, which overlaps it/)
-    assert.equal(read(repo, LOCK), before)
-    assert.ok(!has(repo, '.claude/rules/rust/current'), 'nothing written')
+    ok(cli(['update'], repo))
+    assert.deepEqual(readdirSync(join(repo, '.claude/rules/rust')), ['current'], 'the old copy is gone')
+    assert.equal(read(repo, '.claude/rules/rust/current/code-style.md'), read(REPO, STYLE))
   })
 })
 
@@ -420,7 +419,9 @@ test('a registry whose entries nest is refused before any write', () => {
   })
 })
 
-test('remove refuses to delete a destination that holds one a remaining entry owns', () => {
+// remove deletes the files a record holds, never a directory a `to` names: a forged
+// nesting in the lock cannot take a remaining entry's files with it.
+test('remove deletes recorded files only, whatever the records\' destinations claim', () => {
   withTmpRepo(root => {
     const core = makeSource(root, 'core', [...CORE_PATHS, ...registry.profiles.go.map(e => e.from)])
     const repo = join(root, 'consumer')
@@ -431,10 +432,9 @@ test('remove refuses to delete a destination that holds one a remaining entry ow
     // A forged nesting: go stays installed, and its record now sits inside rust's.
     lock.installed.find(i => i.from === 'rules/go').to = '.claude/rules/rust/go'
     writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
-    const r = cli(['remove', 'rust'], repo)
-    assert.equal(r.status, 1)
-    assert.match(r.stderr, /Removing \.claude\/rules\/rust would delete \.claude\/rules\/rust\/go/)
-    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'nothing deleted')
+    ok(cli(['remove', 'rust'], repo))
+    assert.ok(!has(repo, '.claude/rules/rust'), 'rust is gone')
+    assert.ok(has(repo, '.claude/rules/go/quality-gates.md'), 'go is untouched')
   })
 })
 

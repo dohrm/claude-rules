@@ -744,13 +744,16 @@ test('remove drops the module bindings of the profiles it removes', () => {
   })
 })
 
-test('update clears a rule directory instead of leaving orphans in it', () => {
+// The installer deletes only what it wrote (ADR-0010): a file it never recorded is the
+// repo's, kept alongside the installed rules; one it wrote and upstream dropped is
+// pruned (test/ownership.test.mjs).
+test('update keeps a file it did not write in a rule directory', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
-    writeFileSync(join(dir, '.claude/rules/rust/dropped-upstream.md'), '---\ntitle: x\n---\nstale\n')
+    writeFileSync(join(dir, '.claude/rules/rust/mine.md'), '---\ntitle: x\n---\nmine\n')
 
     ok(runCli(['update'], dir))
-    assert.ok(!has(dir, '.claude/rules/rust/dropped-upstream.md'), 'a rule dir is library-owned; update must not leave orphans')
+    assert.ok(has(dir, '.claude/rules/rust/mine.md'), 'never recorded, so never deleted')
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     // kit is the "copy and own" surface — update must NOT wipe what the repo added.
     writeFileSync(join(dir, '.dev/kit/rust/mine.toml'), 'x = 1\n')

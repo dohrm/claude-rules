@@ -32,36 +32,6 @@ export function walk(dir) {
   return out
 }
 
-// `files`: path → content to write; `previous`: path → hash the last install wrote.
-export function planFiles(files, previous = {}) {
-  const writes = new Map(), deletes = []
-  for (const [path, content] of Object.entries(files)) {
-    safePath(path)
-    if (existsSync(path)) {
-      if (!lstatSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
-      const current = hash(readFileSync(path)), old = previous[path]
-      if (current !== hash(content) && current !== old) throw new Error(`Conflicting local content: ${path}; reconcile before updating`)
-    }
-    writes.set(path, content)
-  }
-  for (const [path, old] of Object.entries(previous)) {
-    if (files[path] || !existsSync(path)) continue
-    if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== old) throw new Error(`Modified owned file would be removed: ${path}`)
-    deletes.push(path)
-  }
-  return { writes, deletes }
-}
-
-export function applyFiles(plan) {
-  for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
-  for (const path of plan.deletes) {
-    rmSync(path)
-    // Remove empty asset directories only; never remove a module directory.
-    let dir = dirname(path)
-    while (dir.startsWith('.agents/') && existsSync(dir) && !readdirSync(dir).length) { rmSync(dir, { recursive: true }); dir = dirname(dir) }
-  }
-}
-
 // ------------------------------------------------------------ the tree check
 // Every file the lock says the installer wrote, path → hash. Codex's own inventory
 // (`codex.files`) reads as the same record: one model, whichever wrote it.
@@ -125,4 +95,23 @@ export function checkTree({ writes, deletes, owned, dirs }) {
       if (!writes.has(f) && !owned.has(f) && !corrupt.has(f)) corrupt.set(f, 'not written by claude-rules, inside an installed directory')
   }
   return corrupt
+}
+
+// Apply a checked plan, in order: under --force, the listed paths no write replaces;
+// then every owned file no longer produced; then every write. Deleting first is what
+// lets a file turn into a directory, or back, with no special case.
+export function applyTree({ writes, deletes, corrupt = new Map() }, onDelete = () => {}) {
+  for (const path of corrupt.keys()) if (!writes.has(path)) removePath(path)
+  for (const path of deletes) if (existsSync(path)) { removePath(path); onDelete(path) }
+  for (const [path, content] of writes) {
+    if (existsSync(path) && lstatSync(path).isDirectory()) rmSync(path, { recursive: true })
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, content)
+  }
+}
+function removePath(path) {
+  rmSync(path, { recursive: true, force: true })
+  // The directories it leaves empty go too, down to the root a kind writes under
+  // (`.claude/rules`, `.dev/kit`), which stays.
+  for (let dir = dirname(path); dir.split('/').length > 2 && existsSync(dir) && !readdirSync(dir).length; dir = dirname(dir)) rmSync(dir, { recursive: true })
 }

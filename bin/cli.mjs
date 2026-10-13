@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
-import { safePath, hash, walk, ownedFiles, checkTree } from './ownership.mjs'
+import { safePath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
 import { SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
@@ -237,13 +237,6 @@ function isLanguageDead(globs, profiles) {
   return !exts.some(e => locked.has(e))
 }
 
-// Rules are library-owned and never hand-edited (that is the whole point of the
-// per-agent emitters), so a rule directory is cleared before it is rewritten:
-// otherwise a rule dropped upstream — or skipped by the language filter — survives
-// on disk as an orphan that `update` can never reach. Kit is deliberately NOT
-// cleared: it is the "copy and own" surface, and the repo may have added to it.
-function resetDir(dir) { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) }
-
 // ----------------------------------------------------------------- transforms
 // Claude rule (.md, `paths:`/`title:`) → Cursor rule (.mdc, `globs:`/`alwaysApply`).
 function toMdcText(text, prefixes = []) {
@@ -302,7 +295,6 @@ function emitKit(s, entry, agent, ctx) {
 // then only the `paths:` list is rewritten. Agents carry no `paths:` and are untouched.
 function emitClaudeRaw(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
-  if (entry.kind === 'rule' && !s.isFile) ctx.resets.push(entry.to)
   let n = 0
   for (const f of stagedFiles(s)) {
     const text = f.rel.endsWith('.md') ? readFileSync(f.abs, 'utf8') : null
@@ -318,7 +310,6 @@ function emitClaudeRaw(s, entry, agent, ctx) {
 function emitCursorRule(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
   const root = '.cursor/rules'
-  if (!s.isFile) ctx.resets.push(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8')
     if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
@@ -348,7 +339,7 @@ const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
 // Every destination is derived from an entry, and both its sources are now content
 // this CLI did not ship: a fetched registry, and the lock's inventory. An entry may
 // only name a path under the root its kind owns, or a forged `to: "src"` would let
-// emit (resetDir) and remove (rmSync) wipe a project directory.
+// emit write into a project directory.
 const ENTRY_ROOT = { rule: '.claude/rules/', agent: '.claude/agents' }
 const plainPath = p => typeof p === 'string' && p !== '' && !isAbsolute(p) && !p.split(/[\\/]/).some(seg => seg === '..' || seg === '.' || seg === '')
 function assertEntry(e, where) {
@@ -433,7 +424,8 @@ function remove(profilesArg) {
   // is refused rather than guessed at.
   if (!Array.isArray(lock.installed))
     throw new Error(`${LOCK} has no "installed" inventory; run \`update\` once to record it before removing profiles`)
-  const installedOf = p => lock.installed.filter(i => i.profile === p)
+  if (!recordsHashes(lock))
+    throw new Error(`${LOCK} records no file hashes; run \`update\` once to adopt the install before removing profiles`)
   const { kept, dropped } = agentsFromLock(lock)
   if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
   const agents = kept.length ? kept : ['claude']
@@ -451,8 +443,10 @@ function remove(profilesArg) {
   for (const p of toRemove) delete levels[p]
   const modules = normalizeModules(remaining, Object.fromEntries(Object.entries(lock.modules || {})
     .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false, false)
-  const keptInstalled = lock.installed.filter(i => i.profile === null ? !fullUninstall : remaining.includes(i.profile))
-  const stillNeeded = new Set(keptInstalled.flatMap(e => agents.flatMap(a => destsFor(e, a))))
+  const isKept = i => i.profile === null ? !fullUninstall : remaining.includes(i.profile)
+  const keptInstalled = lock.installed.filter(isKept).map(i => ({ ...i, files: { ...i.files } }))
+  // Codex rules shared with a remaining profile are rescoped to it, and rewritten.
+  const writes = new Map(), codexDropped = []
   let codex
   if (lock.codex) {
     const files = {}
@@ -474,35 +468,26 @@ function remove(profilesArg) {
       if (JSON.stringify(globs) !== JSON.stringify(r.globs)) {
         const { fm, body } = splitFm(files[r.path].content.toString())
         files[r.path].content = Buffer.from(`---\n${dumpFm({ ...fm, paths: globs })}\n---\n${body}`)
+        writes.set(r.path, files[r.path].content)
       }
       return { ...r, profiles: owners, globs }
     })
+    codexDropped.push(...Object.keys(lock.codex.files).filter(path => !files[path]))
     codex = prepareCodex(files, rules, fullUninstall ? {} : modules, lock.codex)
   }
-  // Preflight every removal before deleting anything.
-  const entries = [...toRemove.flatMap(installedOf), ...(fullUninstall ? installedOf(null) : [])]
-  const skipped = (entry, agent, dest) => stillNeeded.has(dest) || (codex && (agent === 'codex' && entry.kind !== 'kit' || dest.startsWith('.agents/skills/')))
-  for (const entry of entries)
-    for (const agent of agents) for (const dest of destsFor(entry, agent)) {
-      safePath(dest)
-      if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
-      // A recursive delete must not take a destination something else still owns.
-      const kept = !skipped(entry, agent, dest) && [...stillNeeded].find(d => d.startsWith(dest + '/'))
-      if (kept) throw new Error(`Removing ${dest} would delete ${kept}, which a remaining entry owns; reconcile the lock first`)
-    }
+  // The kept records follow: a rewritten file gets its new hash, a dropped one goes.
+  for (const record of keptInstalled) for (const path of Object.keys(record.files)) {
+    if (codexDropped.includes(path)) delete record.files[path]
+    else if (writes.has(path)) record.files[path] = hash(writes.get(path))
+  }
+  // Delete exactly the files the removed records hold that no kept record still does.
+  const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
+  const plan = { writes, deletes: [...new Set([...lock.installed.filter(i => !isKept(i)).flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
+  refuseCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: [] }))
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
-  let removedKit = false
-  for (const entry of entries) {
-    if (entry.kind === 'kit') removedKit = true
-    for (const agent of agents) {
-      for (const dest of destsFor(entry, agent)) {
-        if (skipped(entry, agent, dest)) continue
-        if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
-      }
-    }
-  }
+  applyTree(plan, path => console.log(`  ✗ ${path}`))
   if (codex) applyCodex(codex)
   if (fullUninstall) {
     purgeRetired()
@@ -515,7 +500,8 @@ function remove(profilesArg) {
     writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled)
     console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
-  if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
+  if (lock.installed.some(i => !isKept(i) && i.kind === 'kit'))
+    console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
   console.log('• Review the deletions with `git status` / `git diff` before committing.')
 }
 
@@ -665,7 +651,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), byEntry: new Map(), resets: [], key: null }
+  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), byEntry: new Map(), key: null }
   const notes = []
   const staged = []
   let tree = null
@@ -675,8 +661,8 @@ async function install(profiles, fetched, agents, modules, levels) {
     // Stage every entry before changing any destination.
     for (const { e } of owned) assertEntry(e, 'registry')
     assertRetiredSkills()
-    // Two entries must not nest: emitting one resets its directory, removing one
-    // deletes it recursively — either way the other entry's files go with it.
+    // Two entries must not share or nest destinations: each installed path belongs to
+    // one entry, so that entry's record alone says who wrote it.
     const destOwner = new Map()
     for (const { e } of owned) for (const a of agents) for (const d of destsFor(e, a)) {
       const key = entryKey(e)
@@ -733,52 +719,17 @@ async function install(profiles, fetched, agents, modules, levels) {
     // absent, or owned and unchanged. A skill is one unit, so its directory holds nothing
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
     const recorded = ownedFiles(readLock())
+    const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
     refuseCorruption(checkTree({
-      writes: ctx.out,
-      deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)),
+      ...plan,
       owned: recorded,
       dirs: [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
     }))
     if (codexInput) codex = prepareCodex(...codexInput, modules, readLock()?.codex)
-    for (const { e, s } of staged) for (const agent of agents) {
-      for (const dest of destsFor(e, agent)) {
-        safePath(dest)
-        if (existsSync(dest) && statSync(dest).isFile() !== s.isFile) throw new Error(`Conflicting destination: ${dest}`)
-        if (existsSync(dest) && statSync(dest).isDirectory())
-          for (const f of walk(dest)) safePath(f.abs)
-      }
-      if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
-        const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
-        safePath(path)
-        if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
-      }
-    }
-    // What the previous install wrote and this one no longer does — an entry dropped
-    // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
-    // active, and with its record gone from the inventory no `remove` could reach it.
-    // Paths the PREVIOUS Codex inventory owns are pruned by it (prepareCodex); a Cursor
-    // skill written before Codex was adopted is not in it, so it is pruned here.
-    // Only for the agents the previous install wrote for: a target added by this run
-    // never held anything of ours. A destination moved into or out of a fresh one is
-    // refused — removing the old one would delete the new, keeping it leaves stale files.
-    const previous = readLock()
-    const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
-    const stale = [...new Set((previous?.installed || []).flatMap(e => agentsFromLock(previous).kept.flatMap(a => destsFor(e, a)
-      .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
-      .filter(d => !fresh.has(d))
-    for (const d of stale) {
-      const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))
-      if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
-    }
-    for (const dest of stale) {
-      safePath(dest)
-      if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
-    }
-    for (const dir of ctx.resets) resetDir(dir)
-    for (const [path, content] of ctx.out) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
+    // Apply: what the previous install wrote and this one no longer produces goes first
+    // (an entry dropped upstream, a destination moved), then every write.
+    applyTree(plan, path => console.log(`  ✗ ${path}  (no longer installed)`))
     if (codex) applyCodex(codex)
-    for (const dest of stale)
-      if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()

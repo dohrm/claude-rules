@@ -2,10 +2,10 @@
 // it cannot explain. Black-box, offline (--local), every target.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readdirSync, lstatSync, mkdirSync, writeFileSync, cpSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
-import { runCli, withTmpRepo, read } from './helpers.mjs'
+import { REPO, runCli, runCliBare, withTmpRepo, read } from './helpers.mjs'
 
 const LOCK = '.claude-rules.lock'
 const ok = r => { assert.equal(r.status, 0, `cli failed (${r.status}):\n${r.stderr}${r.stdout}`); return r }
@@ -116,4 +116,73 @@ test('a forged inventory path outside the installer\'s roots is refused, and the
   assert.equal(r.status, 1)
   assert.match(r.stderr, /records src\/main\.rs — an inventoried file must be a sha256 under/)
   assert.equal(read(dir, 'src/main.rs'), 'fn main() {}\n')
+}))
+
+// ------------------------------------------------------------------- apply
+// A source on disk (`--local`): the shared entries, plus `profiles` and `files`.
+function source(root, profiles, files) {
+  const dir = join(root, `source-${source.n = (source.n || 0) + 1}`)
+  const reg = JSON.parse(read(REPO, 'registry.json'))
+  reg.profiles = profiles
+  reg.aliases = {}
+  write(dir, 'registry.json', JSON.stringify(reg, null, 2) + '\n')
+  cpSync(join(REPO, 'CHANGELOG.md'), join(dir, 'CHANGELOG.md'))
+  cpSync(join(REPO, 'rules/common'), join(dir, 'rules/common'), { recursive: true })
+  for (const [path, text] of Object.entries(files)) write(dir, path, text)
+  return dir
+}
+const at = (dir, args, src) => runCliBare([...args, '--local', src], dir)
+const isFile = (dir, path) => lstatSync(join(dir, path)).isFile()
+
+test('a file turning into a directory, and back, over an unchanged install needs nothing', () => withTmpRepo(root => {
+  const repo = join(root, 'repo'); mkdirSync(repo)
+  const asFile = source(root, { team: [{ from: 'rules/team.md', to: '.claude/rules/team', kind: 'rule' }] }, { 'rules/team.md': '# one file\n' })
+  const asDir = source(root, { team: [{ from: 'rules/team', to: '.claude/rules/team', kind: 'rule' }] }, { 'rules/team/a.md': '# a\n' })
+  ok(at(repo, ['add', 'team', '--agent', 'claude'], asFile))
+  assert.ok(isFile(repo, '.claude/rules/team'))
+  ok(at(repo, ['update'], asDir))
+  assert.equal(read(repo, '.claude/rules/team/a.md'), '# a\n')
+  ok(at(repo, ['update'], asFile))
+  assert.equal(read(repo, '.claude/rules/team'), '# one file\n')
+  assert.deepEqual(Object.keys(owned(JSON.parse(read(repo, LOCK)))).filter(p => p.startsWith('.claude/rules/team')), ['.claude/rules/team'])
+}))
+
+test('a file dropped upstream is pruned, rule and kit alike; a repo file is never deleted', () => withTmpRepo(root => {
+  const repo = join(root, 'repo'); mkdirSync(repo)
+  const team = [{ from: 'rules/team', to: '.claude/rules/team', kind: 'rule' }, { from: 'kit/team', to: '.dev/kit/team', kind: 'kit' }]
+  const v1 = source(root, { team }, { 'rules/team/a.md': '# a\n', 'rules/team/b.md': '# b\n', 'kit/team/x.sh': 'x\n', 'kit/team/y.sh': 'y\n' })
+  const v2 = source(root, { team }, { 'rules/team/a.md': '# a\n', 'kit/team/x.sh': 'x\n' })
+  const v3 = source(root, { team: [] }, {})
+  ok(at(repo, ['add', 'team', '--agent', 'claude,cursor', '--level', 'gates'], v1))
+  write(repo, '.claude/rules/team/mine.md', 'mine\n')
+  write(repo, '.cursor/rules/team/mine.mdc', 'mine\n')
+  write(repo, '.dev/kit/team/mine.toml', 'mine\n')
+
+  const r = ok(at(repo, ['update'], v2))
+  assert.match(r.stdout, /✗ \.claude\/rules\/team\/b\.md {2}\(no longer installed\)/)
+  for (const gone of ['.claude/rules/team/b.md', '.cursor/rules/team/b.mdc', '.dev/kit/team/y.sh']) assert.ok(!existsSync(join(repo, gone)), gone)
+  for (const kept of ['.claude/rules/team/a.md', '.cursor/rules/team/a.mdc', '.dev/kit/team/x.sh']) assert.ok(existsSync(join(repo, kept)), kept)
+
+  ok(at(repo, ['update'], v3))   // the entry itself goes upstream
+  assert.ok(!existsSync(join(repo, '.claude/rules/team/a.md')) && !existsSync(join(repo, '.dev/kit/team/x.sh')))
+  for (const mine of ['.claude/rules/team/mine.md', '.cursor/rules/team/mine.mdc', '.dev/kit/team/mine.toml'])
+    assert.equal(read(repo, mine), 'mine\n', `${mine} was never the installer's`)
+  ok(at(repo, ['remove', 'all'], v3))
+  for (const mine of ['.claude/rules/team/mine.md', '.cursor/rules/team/mine.mdc', '.dev/kit/team/mine.toml'])
+    assert.equal(read(repo, mine), 'mine\n', `remove all keeps ${mine}`)
+}))
+
+test('remove deletes only the files its profiles recorded', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', 'go', '--agent', 'claude,codex,cursor', '--level', 'gates'], dir))
+  write(dir, '.claude/rules/rust/mine.md', 'mine\n')
+  write(dir, '.dev/kit/rust/mine.toml', 'mine\n')
+  const lock = JSON.parse(read(dir, LOCK))
+  const rust = lock.installed.filter(i => i.profile === 'rust').flatMap(i => Object.keys(i.files))
+  const kept = lock.installed.filter(i => i.profile !== 'rust').flatMap(i => Object.keys(i.files))
+  ok(runCli(['remove', 'rust'], dir))
+  for (const path of rust.filter(p => !kept.includes(p))) assert.ok(!existsSync(join(dir, path)), path)
+  for (const path of kept) assert.ok(existsSync(join(dir, path)), path)
+  assert.equal(read(dir, '.claude/rules/rust/mine.md'), 'mine\n')
+  assert.equal(read(dir, '.dev/kit/rust/mine.toml'), 'mine\n')
+  assert.ok(!JSON.parse(read(dir, LOCK)).installed.some(i => i.profile === 'rust'))
 }))
