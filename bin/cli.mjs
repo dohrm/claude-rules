@@ -833,14 +833,15 @@ async function install(profiles, fetched, agents, modules, levels) {
     // What the previous install wrote and this one no longer does — an entry dropped
     // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
     // active, and with its record gone from the inventory no `remove` could reach it.
-    // Codex-owned paths are pruned by its own inventory (prepareCodex).
+    // Paths the PREVIOUS Codex inventory owns are pruned by it (prepareCodex); a Cursor
+    // skill written before Codex was adopted is not in it, so it is pruned here.
     // Only for the agents the previous install wrote for: a target added by this run
     // never held anything of ours. A destination moved into or out of a fresh one is
     // refused — removing the old one would delete the new, keeping it leaves stale files.
     const previous = readLock()
     const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
     const stale = [...new Set((previous?.installed || []).flatMap(e => agentsFromLock(previous).kept.flatMap(a => destsFor(e, a)
-      .filter(d => !(codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
+      .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
       .filter(d => !fresh.has(d))
     for (const d of stale) {
       const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))

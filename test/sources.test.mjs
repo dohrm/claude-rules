@@ -435,3 +435,24 @@ test('remove refuses to delete a destination that holds one a remaining entry ow
     assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'nothing deleted')
   })
 })
+
+// A Cursor skill written before Codex was adopted is in no Codex inventory: when the
+// source drops it, the stale cleanup must reach it, or nothing ever will.
+test('a skill dropped upstream while Codex is adopted is still pruned, and remove all leaves nothing', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'skills/team', to: '.claude/skills/team', kind: 'skill' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'skills/team/SKILL.md': '---\nname: team\ndescription: x\n---\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeFileSync(join(repo, LOCK), JSON.stringify({ sources: [{ name: 'core', url: core.url, ref: 'main' }], profiles: ['rust'], agents: ['cursor'], levels: { rust: 'rules' } }, null, 2) + '\n')
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.agents/skills/team/SKILL.md'))
+
+    core.commit({ 'registry.json': read(REPO, 'registry.json') })   // upstream drops the skill
+    ok(cli(['update', '--agent', 'codex'], repo))
+    assert.ok(!has(repo, '.agents/skills/team'), 'pruned although Codex now owns .agents/skills')
+    ok(cli(['remove', 'all'], repo))
+    assert.ok(!has(repo, '.agents/skills/team'))
+  })
+})
