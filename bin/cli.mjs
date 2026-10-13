@@ -781,6 +781,19 @@ async function install(profiles, fetched, agents, modules, levels) {
       }
       codex = prepareCodex(files, [...rules.values()], modules, readLock()?.codex)
     }
+    // What the previous install wrote and this one no longer does — an entry dropped
+    // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
+    // active, and with its record gone from the inventory no `remove` could reach it.
+    // Codex-owned paths are pruned by its own inventory (prepareCodex).
+    const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
+    const overlaps = d => [...fresh].some(f => f === d || f.startsWith(d + '/') || d.startsWith(f + '/'))
+    const stale = [...new Set((readLock()?.installed || []).flatMap(e => agents.flatMap(a => destsFor(e, a)
+      .filter(d => !(codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
+      .filter(d => !overlaps(d))
+    for (const dest of stale) {
+      safePath(dest)
+      if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
+    }
     for (const { e: entry, s } of staged) {
       ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
       for (const agent of agents) {
@@ -791,6 +804,8 @@ async function install(profiles, fetched, agents, modules, levels) {
       }
     }
     if (codex) applyCodex(codex)
+    for (const dest of stale)
+      if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}  (no longer installed)`) }
     purgeRetired()
     purgeRetiredSkills(agents, Boolean(codex))
     purgeLegacyKit()

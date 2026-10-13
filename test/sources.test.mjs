@@ -271,3 +271,29 @@ test('remove refuses a lock with no inventory', () => {
     assert.ok(has(repo, '.claude/rules/rust/code-style.md'))
   })
 })
+
+// An update whose registry maps an entry elsewhere must not leave the old copy active
+// and out of the inventory, where no remove could reach it.
+test('update to a registry that moves a destination removes the old copy; remove all then leaves nothing', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'))
+
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/team-rust' } : e)
+    core.commit({ 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /✗ \.claude\/rules\/rust {2}\(no longer installed\)/)
+    assert.ok(!has(repo, '.claude/rules/rust'), 'the old destination is gone')
+    assert.ok(has(repo, '.claude/rules/team-rust/code-style.md'))
+    assert.ok(has(repo, '.claude/rules/common'), 'what is still installed stays')
+
+    ok(cli(['remove', 'all'], repo))
+    assert.deepEqual(readdirSync(join(repo, '.claude/rules')), [], 'nothing of the install survives')
+    assert.ok(!has(repo, LOCK))
+  })
+})
