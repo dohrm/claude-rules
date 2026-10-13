@@ -12,6 +12,7 @@ Run these phases in order. The level (`agent/autonomy.md` § Levels — from the
 - *L1* — stop at the end of each phase and wait for validation before the next. A loop set up on a vague objective burns tokens for hours.
 - *L2* — run phases 1–4 in one pass, then present the diagnosis, the done-command and the guardrails **once**.
 - *L3* — run phases 1–5 without stopping. The diagnosis is yours to act on: set the guardrails' values from it yourself — tighter for an open loop, a token budget either way — write them, then launch.
+- *L4* — run as L3, and write L3 in the header: a loop has no checkpoint a delegation board could take over (`agent/autonomy.md` § L4).
 
 The stops below that say "stop and say so" (one-shot work, no measurable objective) still stop at every level: L3 launches a bounded loop, never a wandering one.
 

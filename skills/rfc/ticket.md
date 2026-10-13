@@ -108,6 +108,10 @@ Phases may be mirrored as sub-tickets when the tracker has them, for the board o
 each holds a link to the RFC and its phase's PR, never state. The parent body stays
 the RFC, and a sub-ticket event is an event on the RFC.
 
+At L4, the `ODD:` lines (or `dropped to L3: <why>`), the dependency graph before any
+parallel phases, and each delegated decision with its proof are comments, like any
+other history. The final report is the `rfc/<slug>` PR's description, linked in a comment.
+
 `.work/<slug>/rfc.md` is only a pointer, so the tree's tools still see the RFC: the
 header lines `Status`, `Autonomy`, `Repository`, `Base branch`, `Branch`, plus
 `**Ticket**: <URL>`, and `## Blocked on the human` while blocked. Mirror the status

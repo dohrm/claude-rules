@@ -24,6 +24,7 @@ on:
   pull_request:
     branches:
       - main
+      - 'rfc/**'   # L4 phase PRs merge on this proof (rules/agent/autonomy.md § L4)
 
 jobs:
   coverage:

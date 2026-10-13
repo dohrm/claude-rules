@@ -32,6 +32,10 @@ We will declare autonomy as a level chosen per run, not per model or per repo.
 - One authored skill per procedure, with marked level branches. No per-level
   variants in the registry.
 
+> **Amended 2026-10-13.** ADR-0009 adds L4, where an RFC's delegation board may
+> delegate a few hard checkpoints (a phase merge into `rfc/<slug>`, a hold with a check
+> command, a `changed:` decision). Below L4, the hard checkpoints stay identical.
+
 ## Consequences
 
 The skills grow by about 15% and carry conditional steps. For a small model, those

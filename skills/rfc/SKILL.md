@@ -12,7 +12,8 @@ stopping condition — pausing only where the RFC or the autonomy level says so.
 the RFC's `**Autonomy**` header, else **L1**. Write an explicitly passed level into
 that header. Never raise it yourself. The level changes how much you settle without
 asking while drafting, and how far you run once the RFC is `ready`. It never lets you
-set `ready` yourself.
+set `ready` yourself. L4 also needs a `## Delegation board`, written by the human or
+proposed by you and kept by them. While drafting, L4 behaves as L3.
 
 ## Where the RFC lives — read your mode first
 
@@ -133,8 +134,9 @@ Only the human moves the status to `ready`.
 ## 4. Implement — only on `/rfc implement`, only from `ready`
 
 Take the RFC (one writer), set `implementing`. Each phase branches from
-`**Base branch**` (once the previous phase is merged, if they build on each other) and
-ends in its PR. Write the phase's branch into `**Branch**` when you create it: the gates
+`**Base branch**`, or `rfc/<slug>` at L4 (once the previous phase is merged, if they build on each other), and
+ends in its PR. Write the phase's branch into `**Branch**` when you create it (at L4,
+`rfc/<slug>`: the gates find a `phase/<slug>/<n>` branch's RFC by its name): the gates
 find the RFC by that header, so the review reads it and its marker lands beside it. In
 ticket mode, cache the ticket for the review first (`ticket.md` § Implementation). Run the steps in order, each closed by its proof, inside the loop of
 `agent/autonomy.md`: `just check` green per step, `just code-review` once the phase
@@ -146,6 +148,36 @@ condition is the RFC's and whose state file is `.work/<slug>/rfc.md`. At every l
 stop on a hard checkpoint (an ADR status, a new acceptance criterion, a scope change,
 a gate bypass) and on a hold.
 
+**At L4** (`agent/autonomy.md` § L4), you orchestrate, and executors implement:
+
+1. **Check the domain first.** Log one `ODD:` line per prerequisite. On any failure,
+   rewrite `**Autonomy**` to L3, log `dropped to L3: <why>`, and run as L3.
+2. **Open and push the integration branch** `rfc/<slug>` from `**Base branch**`, in
+   your tree, and write it into `**Branch**`. Only you write the RFC, and only there.
+   Push each of your RFC commits.
+3. **Give each phase to an executor** the board lists, on `phase/<slug>/<n>` in its own
+   tree. Pull `rfc/<slug>` first, then cut the tree from yours
+   (`just tree <slug>-p<n> phase/<slug>/<n>`), so the phase starts after the merged ones.
+   The brief is the path of this RFC, the phase number, the executor's level (L3 at
+   most), the gate base (`just base=origin/rfc/<slug> code-review`), and this clause. The executor opens its PR against
+   `rfc/<slug>` and puts its report in the description. To run phases in parallel,
+   first write the dependency graph you rely on under `## Log`.
+4. **Judge the artifacts.** Re-run `just check` on the phase branch, read the diff and
+   the review report, wait for CI. If the board delegates phase merges, merge on gates
+   green, Tier 3 clean and Tier 4 green. Otherwise stop as at L3. A rejected phase goes
+   back to its executor, up to the board's cap.
+5. **Settle what the board covers** (a hold with a command, a `changed:` decision), and
+   log each one with its proof. Stop on everything else: that is the minimal-risk
+   condition.
+6. **Hand back one PR**, `rfc/<slug>` → `**Base branch**`. Its description is the final
+   report: every delegated decision with its proof and reversibility, the assumptions,
+   the `changed:` lines, each hold with its check output, and the divergences from the
+   plan. Record it under `## Blocked on the human` and stop. The human merges it.
+
+**Briefed as an L4 executor**, you implement one phase and nothing else: never edit
+`rfc.md`, never merge, and never take the RFC. Your report is your PR's description.
+Escalate in it, then stop.
+
 **At a hold**, stop with the RFC still `implementing` and yours: record the hold and
 its check under `## Blocked on the human`. `/rfc implement` resumes it: run the
 hold's check first, and go on only if it passes — otherwise say so and stop again.
@@ -153,16 +185,17 @@ A discovery that changes a local decision is recorded as `changed: <decision> �
 <why>`. One that changes the scope sends the RFC back to `draft`.
 
 Set `done` when the last phase is merged and the stopping condition passes on a
-fresh run.
+fresh run. At L4, the run ends at the hand-back. The human's merge of `rfc/<slug>`
+closes the RFC.
 
 <rfc-body>
 # RFC — <the change in one line>
 
 - **Status**: draft | ready | implementing | done
-- **Autonomy**: L1 | L2 | L3 — absent means L1
+- **Autonomy**: L1 | L2 | L3 | L4 — absent means L1
 - **Repository**: <origin URL>
 - **Base branch**: <branch the RFC was started on>
-- **Branch**: <the branch of the phase being implemented — set at implementation>
+- **Branch**: <the branch of the phase being implemented, or `rfc/<slug>` at L4 — set at implementation>
 - **Stopping condition**: `<command, test or observable state>` — the end of the whole request
 - **Serves**: <PRD capability / acceptance criterion, if any>
 - **Constrained by**: <ADR-NNNN § section, shared decision — only those that bind>
@@ -183,6 +216,14 @@ fresh run.
 ## Local decisions
 
 - <decision> — <reason>
+
+## Delegation board
+
+<!-- L4 only. Absent, or a list left empty, means L3. -->
+
+- Delegated: <phase merges into `rfc/<slug>` | holds with a command | `changed:` decisions>
+- Executors: <coding agent · model, one per line>
+- Caps: <token or wall-time budget per executor; rejected rounds per phase>
 
 ## Steps
 

@@ -690,6 +690,24 @@ test('diff-since: an RFC whose Branch header names this branch owns the marker',
   })
 })
 
+test('diff-since: an L4 phase branch finds its RFC by name, the integration branch keeps the header', () => {
+  withTmpRepo((dir) => {
+    const [head] = commits(dir, 1)
+    // The RFC's **Branch** is the integration branch; git cannot hold `rfc/x` and
+    // `rfc/x/phase-2` at once, so phases live under `phase/<slug>/<n>`.
+    write(dir, '.work/l4/rfc.md', '- **Branch**: rfc/l4\n')
+    git(dir, 'checkout', '-q', '-b', 'phase/l4/2')
+    assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/l4/.latest_review')),
+      'a phase branch reviews against the RFC it belongs to')
+
+    // No RFC under that slug: the branch name, as before.
+    git(dir, 'checkout', '-q', '-b', 'phase/ghost/1')
+    assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/phase-ghost-1/.latest_review')))
+  })
+})
+
 // ------------------------------------------------------------- review-context.mjs
 const REVIEW_CONTEXT = join(REPO, 'kit', 'common', 'review-context.mjs')
 const POINTER = '# RFC — X\n\n- **Status**: implementing\n- **Branch**: work\n'

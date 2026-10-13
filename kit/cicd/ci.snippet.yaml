@@ -16,7 +16,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'rfc/**']   # rfc/**: L4 phase PRs (rules/agent/autonomy.md § L4)
   push:
     branches: [main]
 
