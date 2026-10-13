@@ -973,16 +973,22 @@ async function install(profiles, layers, agents, modules, levels) {
       if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
     }
     // Agent and kit directories are never reset, so a file the previous install wrote in
-    // one that is still installed, and that no layer supplies now (an overlay removed, a
-    // path excluded, a file dropped upstream), is pruned by name. The repo's own files
-    // there were never recorded, so they are never touched.
-    const staleFiles = [...new Set((previous?.installed || []).filter(r => ownsFiles(r) && Array.isArray(r.files)).flatMap(r => {
-      const now = installed.find(i => i.kind === r.kind && i.from === r.from)
-      if (!now) return []
-      return r.files.filter(f => !now.files.includes(f))
-        .flatMap(f => agentsFromLock(previous).kept.flatMap(a => destsFor(r, a)).filter(d => fresh.has(d)).map(d => join(d, f)))
-    }))]
+    // a destination still installed, and that no current entry writes (an overlay
+    // removed, a path excluded, a file dropped upstream), is pruned by name. Paths are
+    // compared, not entries: a destination another entry took over keeps what it writes.
+    // The repo's own files there were never recorded, so they are never touched. An
+    // inventory from before the file lists cannot tell them apart: it is listed instead.
+    const written = new Set(installed.filter(ownsFiles).flatMap(i => agents.flatMap(a => destsFor(i, a)).flatMap(d => i.files.map(f => join(d, f)))))
+    const resetRoots = [...new Set(staged.filter(({ e }) => !ownsFiles(e)).flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))]
+    const current = p => written.has(p) || resetRoots.some(d => under(p, d))
+    const prevDests = r => agentsFromLock(previous).kept.flatMap(a => destsFor(r, a)).filter(d => fresh.has(d))
+    const prevOwning = (previous?.installed || []).filter(ownsFiles)
+    const staleFiles = [...new Set(prevOwning.filter(r => Array.isArray(r.files))
+      .flatMap(r => prevDests(r).flatMap(d => r.files.map(f => join(d, f)))))].filter(p => !current(p))
     for (const dest of staleFiles) safePath(dest)
+    const unlisted = [...new Set(prevOwning.filter(r => !Array.isArray(r.files))
+      .flatMap(r => prevDests(r).filter(d => existsSync(d) && statSync(d).isDirectory()).flatMap(d => walk(d).map(f => f.abs))))].filter(p => !current(p))
+    if (unlisted.length) console.log(`  • the lock's inventory has no file list for agent and kit directories: files no layer supplies now may be stale: ${unlisted.join(', ')}\n    They may also be your own; check \`git status\`. The next update has the list.`)
     if (previous && !Array.isArray(previous.installed)) legacyStaleHint(previous, fresh)
     for (const dest of stale) {
       safePath(dest)
@@ -1629,7 +1635,11 @@ function doctor() {
     : [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
-      for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
+      for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') {
+        expected.set(d, { profile, agent: a })
+        // Agent and kit directories are never reset: each inventoried file is checked.
+        for (const f of Array.isArray(e.files) ? e.files : []) expected.set(join(d, f), { profile, agent: a })
+      }
 
   for (const [dest, meta] of expected)
     if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)

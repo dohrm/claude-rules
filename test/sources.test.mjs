@@ -774,3 +774,70 @@ test('remove --source prunes the files it supplied inside core\'s agent and kit 
     assert.equal(read(repo, '.dev/kit/rust/mine.sh'), 'ours\n')
   })
 })
+
+// File-level cleanup compares paths, not entries: a destination another entry now owns
+// keeps the files that entry has just written there.
+test('file cleanup never deletes a file a current entry just wrote at a reassigned destination', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents/a', to: '.claude/agents/a', kind: 'agent' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'agents/a/review.md': '# a review\n', 'agents/a/other.md': '# a other\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.deepEqual(lockOf(repo).installed.find(i => i.from === 'agents/a').files, ['other.md', 'review.md'])
+
+    reg.profiles.rust = [...reg.profiles.rust.filter(e => e.from !== 'agents/a'),
+      { from: 'agents/a', to: '.claude/agents/b', kind: 'agent' },
+      { from: 'agents/replacement', to: '.claude/agents/a', kind: 'agent' }]
+    git(['rm', '-q', 'agents/a/review.md'], join(root, 'core-work'))
+    core.commit({ 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'agents/replacement/review.md': '# replacement\n' })
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/agents/a/review.md'), '# replacement\n', 'the replacement keeps its fresh file')
+    assert.ok(!has(repo, '.claude/agents/a/other.md'), 'what only the moved entry wrote there is pruned')
+    assert.equal(read(repo, '.claude/agents/b/other.md'), '# a other\n')
+  })
+})
+
+// A lock written by phase 1 records agent and kit entries without their files: the
+// cleanup cannot tell ours from the repo's, so it lists what may be stale instead.
+test('an inventory without files lists what may be stale in an agent or kit directory', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents', to: '.claude/agents', kind: 'agent' }]
+    const core = makeSource(root, 'core', [...CORE_PATHS, 'agents'], { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const team = makeSource(root, 'team', [], { 'registry.json': '{}\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    const lock = lockOf(repo)
+    for (const i of lock.installed) delete i.files
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    team.commit({ 'registry.json': JSON.stringify({ exclude: ['agents/code-simplifier.md'] }) + '\n' })
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /no file list.*may be stale: \.claude\/agents\/code-simplifier\.md/s)
+    assert.ok(has(repo, '.claude/agents/code-simplifier.md'), 'listed, never deleted')
+  })
+})
+
+test('doctor fails once a file inventoried inside an agent directory is deleted', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-only': [{ from: 'agents/team', to: '.claude/agents/team', kind: 'agent' }] } }) + '\n',
+      'agents/team/one.md': '# one\n', 'agents/team/two.md': '# two\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['add', 'team-only'], repo))
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })
+    ok(cli(['doctor'], repo))
+    rmSync(join(repo, '.claude/agents/team/two.md'))
+    const bad = cli(['doctor'], repo)
+    assert.equal(bad.status, 1)
+    assert.match(bad.stdout, /\.claude\/agents\/team\/two\.md — promised by "team-only"/)
+  })
+})
