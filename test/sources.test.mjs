@@ -157,3 +157,20 @@ test('list fetches nothing and falls back to the bundled registry', () => {
     assert.match(r.stdout, /Installed: \[rust\] for \[claude\] @ core@main/)
   })
 })
+
+test('a registry entry that climbs out of its source is refused', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles['escape'] = [{ from: '../outside', to: '.claude/rules/escape', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg) })
+    mkdirSync(join(root, 'outside'))
+    writeFileSync(join(root, 'outside', 'stolen.md'), 'not the source\'s\n')
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = cli(['add', 'escape'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /registry entry "\.\.\/outside" must be a relative path inside the source/)
+    assert.ok(!has(repo, '.claude/rules/escape'))
+  })
+})

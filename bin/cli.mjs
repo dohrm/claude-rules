@@ -17,7 +17,7 @@
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
-import { join, dirname, basename } from 'node:path'
+import { join, dirname, basename, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
@@ -359,6 +359,8 @@ function stageTree(layers, froms) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   try {
     for (const from of froms) {
+      // `from` comes from a fetched registry now: it must stay inside the source tree.
+      if (isAbsolute(from) || from.split(/[\\/]/).includes('..')) throw new Error(`registry entry "${from}" must be a relative path inside the source`)
       const layer = layers.find(l => existsSync(join(l.dir, from)))
       if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
       cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
