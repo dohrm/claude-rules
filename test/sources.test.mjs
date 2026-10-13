@@ -3,7 +3,7 @@
 // `git fetch --depth 1 <url> <ref>`, `checkout FETCH_HEAD` — runs with no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync } from 'node:fs'
+import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
@@ -157,11 +157,9 @@ test('the source\'s registry decides: a profile only it defines installs', () =>
     assert.ok(has(repo, '.claude/rules/team-only/house.md'), 'update reads the lock against the same registry')
 
     // The offline commands keep the bundled registry, which does not know team-only.
-    // They must still read the lock; remove works from the lock's inventory.
+    // They must still read the lock; doctor and remove work from its inventory.
     assert.match(ok(cli(['list'], repo)).stdout, /Installed: \[rust, team-only\]/)
-    const doc = cli(['doctor'], repo)
-    assert.equal(doc.status, 1)
-    assert.match(doc.stdout, /profile "team-only", unknown to the registry bundled with this CLI/)
+    assert.doesNotMatch(ok(cli(['doctor'], repo)).stdout, /unknown to the registry/)
     ok(cli(['remove', 'team-only'], repo))
     assert.ok(!has(repo, '.claude/rules/team-only'))
     assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'the other profile stays')
@@ -631,5 +629,34 @@ test('add --source appends a source to the lock; remove --source drops it and wh
       assert.equal(bad.status, 1, args.join(' '))
       assert.match(bad.stderr, /cannot be removed|not locked/)
     }
+  })
+})
+
+// doctor explains what is installed from the lock's inventory, not from the registry
+// bundled with the CLI — so it audits an overlay's profile with no network at all.
+test('doctor audits an overlay-only profile offline, and fails once an inventoried file is deleted', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-only': [
+        { from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' },
+        { from: 'agents/team.md', to: '.claude/agents/team.md', kind: 'agent' },
+      ] } }) + '\n',
+      'rules/team-only/house.md': '# House rule\n',
+      'agents/team.md': '---\nname: team\ndescription: x\n---\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['add', 'team-only'], repo))
+    for (const name of ['core', 'team']) rmSync(join(root, `${name}.git`), { recursive: true })   // no source reachable
+    const r = cli(['doctor'], repo)
+    assert.equal(r.status, 0, r.stdout)
+    assert.doesNotMatch(r.stdout, /unknown to the registry/)
+
+    rmSync(join(repo, '.claude/agents/team.md'))
+    const bad = cli(['doctor'], repo)
+    assert.equal(bad.status, 1)
+    assert.match(bad.stdout, /\.claude\/agents\/team\.md — promised by "team-only" for claude, missing on disk/)
   })
 })

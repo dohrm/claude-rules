@@ -1566,8 +1566,14 @@ function doctor() {
 
   // ---- 1. the lock itself
   console.log('Install')
-  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
-  for (const p of unknownP) bad.push(`lock references profile "${p}", unknown to the registry bundled with this CLI — its files cannot be audited here (run doctor from the CLI at the locked ref)`)
+  // The inventory says what was installed, from whichever sources: no registry needed.
+  // A lock written before it falls back to the bundled registry, which may not match.
+  const inventory = Array.isArray(lock.installed) ? lock.installed : null
+  if (!inventory) {
+    warn.push(`${LOCK} has no "installed" inventory — audited against the registry bundled with this CLI; run \`update\` once to record it`)
+    for (const p of lock.profiles.filter(p => !registry.profiles[p]))
+      bad.push(`lock references profile "${p}", unknown to the registry bundled with this CLI — its files cannot be audited here (run \`update\` once to record the inventory)`)
+  }
   for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
   console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}`)
   // A module path that does not exist anchors every one of its globs to nothing —
@@ -1581,7 +1587,9 @@ function doctor() {
 
   // ---- 2. what the lock promises vs what is on disk
   const expected = new Map()
-  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
+  const lockedEntries = inventory
+    ? inventory.map(e => [e.profile ?? '(shared)', [e]])
+    : [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
       for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
@@ -1606,8 +1614,11 @@ function doctor() {
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
     for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind === 'kit') known.add(d)
+  // A directory that holds an inventoried destination (`.claude/agents` around an
+  // overlay's single agent file) is explained by it.
+  const holds = d => [...expected.keys()].some(x => x.startsWith(d + '/'))
   for (const d of known)
-    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
+    if (existsSync(d) && !expected.has(d) && !holds(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
 
   // ---- 3. rules that can never fire here
   const files = repoFiles()
