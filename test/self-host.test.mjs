@@ -8,23 +8,22 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO } from './helpers.mjs'
 
-// link → the canonical directory it must resolve to (what `add agent product` installs,
-// plus the Codex skill root).
+// link → [the canonical directory it must resolve to, its exact link text] (what
+// `add agent product` installs, plus the Codex skill root).
 const LINKS = {
-  '.claude/skills': 'skills',
-  '.agents/skills': 'skills',
-  '.claude/agents': 'agents',
-  '.claude/rules/agent': 'rules/agent',
-  '.claude/rules/product': 'rules/product',
+  '.claude/skills': ['skills', '../skills'],
+  '.agents/skills': ['skills', '../skills'],
+  '.claude/agents': ['agents', '../agents'],
+  '.claude/rules/agent': ['rules/agent', '../../rules/agent'],
+  '.claude/rules/product': ['rules/product', '../../rules/product'],
 }
 
-for (const [link, target] of Object.entries(LINKS)) {
+for (const [link, [target, text]] of Object.entries(LINKS)) {
   test(`${link} is a relative symlink to ${target}/`, () => {
     const abs = join(REPO, link)
     // lstat, not existsSync: a dangling link must fail on its target below, not here.
     assert.ok(lstatSync(abs, { throwIfNoEntry: false })?.isSymbolicLink(), `${link} must be a symlink`)
-    const rel = readlinkSync(abs)
-    assert.ok(!rel.startsWith('/'), `${link} must be relative, got ${rel}`)
+    assert.equal(readlinkSync(abs), text)
     assert.equal(realpathSync(abs), realpathSync(join(REPO, target)))
   })
 }
