@@ -23,9 +23,9 @@ import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
-// The registry bundled with the CLI. `add` and `update` replace it with the one their
-// fetched source carries (withSources): what a ref installs is that ref's registry, not
-// whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
+// The registry bundled with the CLI. `add` and `update` replace it with the merge of
+// the registries their fetched sources carry (withSources): what a ref installs is
+// that ref's registry, not whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
 // remove, doctor, init, budget) keep the bundled one.
 let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
@@ -345,14 +345,49 @@ async function withSources(fn) {
   process.on('exit', cleanup)
   try {
     for (const source of sources) fetched.push(fetchSource(source))
-    const file = join(fetched[0].dir, 'registry.json')
-    if (!existsSync(file)) throw new Error(`source ${CORE} (${sources[0].url}#${sources[0].ref}) has no registry.json`)
-    registry = JSON.parse(readFileSync(file, 'utf8'))
+    registry = mergeRegistries(fetched)
     return await fn([...fetched])
   } finally {
     cleanup()
     process.off('exit', cleanup)
   }
+}
+
+// Registries merge in source order (ADR-0008): a profile seen again appends its
+// entries, `shared` appends, aliases and `retired` merge with the later source winning
+// on the same key. Core must carry one; an overlay that only replaces files may not.
+// `declaredBy` remembers which source's registry named each entry: that is the
+// entry's `source` in the inventory, whichever layers its files were staged from.
+const declaredBy = new Map()
+const isList = v => Array.isArray(v)
+const isListMap = v => v && typeof v === 'object' && !isList(v) && Object.values(v).every(isList)
+function mergeRegistries(fetched) {
+  let merged = null
+  for (const source of fetched) {
+    const file = join(source.dir, 'registry.json')
+    if (!existsSync(file)) {
+      if (source.name === CORE) throw new Error(`source ${CORE} (${source.url}#${source.ref}) has no registry.json`)
+      continue
+    }
+    assertInside(realpathSync(source.dir), file)
+    const reg = JSON.parse(readFileSync(file, 'utf8'))
+    const shape = [['profiles', isListMap], ['aliases', isListMap], ['shared', isList]]
+    for (const [key, ok] of shape)
+      if (reg[key] !== undefined && !ok(reg[key])) throw new Error(`source ${source.name}: registry.json "${key}" has the wrong shape`)
+    for (const e of [...(reg.shared || []), ...Object.values(reg.profiles || {}).flat()])
+      if (e && typeof e === 'object') declaredBy.set(e, source.name)
+    if (!merged) { merged = { ...reg, shared: reg.shared || [], profiles: { ...reg.profiles } }; continue }
+    merged.shared = [...merged.shared, ...(reg.shared || [])]
+    for (const [name, entries] of Object.entries(reg.profiles || {})) merged.profiles[name] = [...(merged.profiles[name] || []), ...entries]
+    merged.aliases = { ...merged.aliases, ...reg.aliases }
+    if (reg.retired) merged.retired = {
+      ...merged.retired,
+      ...reg.retired,
+      profiles: { ...merged.retired?.profiles, ...reg.retired.profiles },
+      skills: [...new Set([...(merged.retired?.skills || []), ...(reg.retired.skills || [])])],
+    }
+  }
+  return merged
 }
 
 // -------------------------------------------------------------------- staging
@@ -373,13 +408,12 @@ function assertInside(root, abs, seen = new Set()) {
 // order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
 // whole directory for a skill — a later skill replaces the earlier one entirely, so
 // a skill is never half one layer, half another.
-// Returns { tree, origin }: origin maps each `from` to the first layer that held it.
 function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
-  const origin = {}
   try {
     for (const { from, kind } of entries) {
       const dest = join(tree, from)
+      let found = false
       for (const layer of layers) {
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
@@ -387,12 +421,12 @@ function stageTree(layers, entries) {
         if (existsSync(dest) && (kind === 'skill' || statSync(dest).isDirectory() !== statSync(src).isDirectory()))
           rmSync(dest, { recursive: true, force: true })
         cpSync(src, dest, { recursive: true, dereference: true })
-        origin[from] ??= layer.name
+        found = true
       }
-      if (!origin[from]) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      if (!found) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, origin }
+  return tree
 }
 // Returns { dir, isFile, name } — a readable view of the entry inside the staged tree.
 function makeStaged(root, entry) {
@@ -795,9 +829,8 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
-    tree = stagedTree.tree
-    installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
+    tree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)

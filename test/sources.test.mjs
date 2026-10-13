@@ -488,3 +488,39 @@ test('an overlay replaces a core rule file, and a core skill whole', () => {
     assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'])
   })
 })
+
+// Each source carries its own registry; they merge in source order (ADR-0008).
+test('registries merge: an overlay-only profile installs, a known profile gains entries, aliases merge', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({
+        profiles: {
+          'team-only': [{ from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' }],
+          rust: [{ from: 'rules/team-rust', to: '.claude/rules/team-rust', kind: 'rule' }],
+        },
+        aliases: { 'team-pack': ['team-only'], 'rust-api': ['rust'] },
+      }, null, 2) + '\n',
+      'rules/team-only/house.md': '# House rule\n',
+      'rules/team-rust/extra.md': '# Team Rust\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['add', 'team-pack'], repo))
+    assert.equal(read(repo, '.claude/rules/team-only/house.md'), '# House rule\n', 'a profile only the overlay defines')
+    assert.equal(read(repo, '.claude/rules/team-rust/extra.md'), '# Team Rust\n', 'rust gains the overlay entry')
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'and keeps its core ones')
+    const lock = lockOf(repo)
+    assert.deepEqual(lock.profiles, ['rust', 'team-only'])
+    const src = from => lock.installed.find(i => i.from === from).source
+    assert.equal(src('rules/team-only'), 'team')
+    assert.equal(src('rules/team-rust'), 'team')
+    assert.equal(src('rules/rust'), 'core')
+    // The later source wins on the same alias key.
+    ok(cli(['remove', 'all'], repo))
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }], ['team-only'])
+    ok(cli(['add', 'rust-api'], repo))
+    assert.deepEqual(lockOf(repo).profiles, ['team-only', 'rust'], 'rust-api unpacks to the overlay\'s list, not core\'s')
+  })
+})
