@@ -28,6 +28,7 @@ import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codex
 // that ref's registry, not whatever copy the CLI happened to be run from. Commands that fetch nothing (list,
 // remove, doctor, init, budget) keep the bundled one.
 let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
+const BUNDLED = registry
 const LOCK = '.claude-rules.lock'
 const KNOWN_AGENTS = ['claude', 'codex', 'cursor']
 const DEFAULT_AGENTS = ['claude', 'codex']
@@ -823,6 +824,22 @@ function migrateLegacyLock(lock) {
   return { profiles, levels, migrated: true }
 }
 
+// A lock written before the inventory cannot say where the previous install wrote, so
+// the stale cleanup above has nothing to compare. The best guess is the registry
+// bundled with this CLI: what it maps for the locked profiles, on disk, and not
+// installed now. Listed for the human, never deleted — it is a guess.
+function legacyStaleHint(previous, fresh) {
+  const levels = previous.levels || {}
+  const entries = [...BUNDLED.shared, ...previous.profiles.flatMap(p => (BUNDLED.profiles[p] || [])
+    .filter(e => levelRank(entryLevel(e)) <= levelRank(levels[p] || 'gates')))]
+  const agents = agentsFromLock(previous).kept
+  const guess = [...new Set(entries.flatMap(e => (agents.length ? agents : ['claude']).flatMap(a => destsFor(e, a)
+    .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
+    .filter(d => !fresh.has(d) && existsSync(d))
+  console.log(`  • ${LOCK} had no "installed" inventory: this update records it, but cannot know where an earlier install wrote.`)
+  if (guess.length) console.log(`    Mapped by this CLI's own registry, on disk, not installed now — may be stale: ${guess.join(', ')}\n    Check \`git status\` and delete what you no longer want.`)
+}
+
 const FINAL_MSG = {
   claude: 'Claude: .claude/rules/ auto-load (language rules path-scoped via `paths:`); .claude/agents/ + .claude/skills/ auto-discovered.',
   codex: 'Codex: root/module AGENTS.md guide explicit reads of .agents/rules; skills in .agents/skills. Routing is advisory, not native glob loading.',
@@ -951,6 +968,7 @@ async function install(profiles, layers, agents, modules, levels) {
       const nested = [...fresh].find(f => f.startsWith(d + '/') || d.startsWith(f + '/'))
       if (nested) throw new Error(`${d} moved to ${nested}, which overlaps it: remove the profile, then add it again`)
     }
+    if (previous && !Array.isArray(previous.installed)) legacyStaleHint(previous, fresh)
     for (const dest of stale) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)

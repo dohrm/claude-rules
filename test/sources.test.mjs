@@ -686,3 +686,24 @@ test('remove unpacks a source-only alias offline, from the lock', () => {
     assert.deepEqual(lockOf(repo).aliases['team-pack'], ['team-only'], 'remove keeps what the sources defined')
   })
 })
+
+// A lock written before the inventory cannot say where an earlier install wrote: the
+// first update says so, and lists what may be stale — it deletes none of it.
+test('the first update from a lock with no inventory lists what may be stale', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = reg.profiles.rust.map(e => e.from === 'rules/rust' ? { ...e, to: '.claude/rules/team-rust' } : e)
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(join(repo, '.claude/rules/rust'), { recursive: true })
+    writeFileSync(join(repo, '.claude/rules/rust/code-style.md'), 'from an older install\n')
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /had no "installed" inventory/)
+    assert.match(r.stdout, /may be stale: \.claude\/rules\/rust$/m)
+    assert.doesNotMatch(r.stdout, /may be stale:.*\.claude\/rules\/common/, 'what is installed now is not listed')
+    assert.equal(read(repo, '.claude/rules/rust/code-style.md'), 'from an older install\n', 'listed, never deleted')
+    assert.ok(Array.isArray(lockOf(repo).installed))
+    assert.doesNotMatch(ok(cli(['update'], repo)).stdout, /inventory/, 'said once: the next update has one')
+  })
+})
