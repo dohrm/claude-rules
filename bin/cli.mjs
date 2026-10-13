@@ -16,7 +16,7 @@
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync } from 'node:fs'
 import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
@@ -485,6 +485,7 @@ function remove(profilesArg) {
       if (fullUninstall || (asset.profiles.length && !owners.length)) continue
       safePath(path)
       if (!existsSync(path)) throw new Error(`Missing Codex asset: ${path}; update before removing profiles`)
+      if (!lstatSync(path).isFile()) throw new Error(`Not a regular file: ${path}; update --force before removing profiles`)
       const content = readFileSync(path)
       // Refused even under --force: a retained rule is rescoped from its installed text,
       // and an edited copy has none left to rescope. `update --force` restores it first.

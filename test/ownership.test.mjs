@@ -372,3 +372,16 @@ test('--force replaces a special file where a file goes', () => withTmpRepo(dir 
   assert.ok(lstatSync(join(dir, '.claude/rules/rust/code-style.md')).isFile())
   assert.equal(owned(JSON.parse(read(dir, LOCK)))['.claude/rules/rust/code-style.md'], sha256(read(REPO, 'rules/rust/code-style.md')))
 }))
+
+// Tier 3, round 5: remove reads the retained Codex assets it rescopes.
+test('remove refuses a retained asset that is not a regular file, without blocking', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', 'product', '--agent', 'codex'], dir))
+  rmSync(join(dir, '.agents/skills/architect/SKILL.md'))
+  const fifo = spawnSync('mkfifo', [join(dir, '.agents/skills/architect/SKILL.md')])
+  if (fifo.error || fifo.status !== 0) return   // no mkfifo on this host
+  const before = snapshot(dir)
+  const r = spawnSync(process.execPath, [CLI, 'remove', 'rust'], { cwd: dir, encoding: 'utf8', timeout: 20000 })
+  assert.equal(r.status, 1, r.stderr + r.stdout)
+  assert.match(r.stderr, /Not a regular file: \.agents\/skills\/architect\/SKILL\.md/)
+  assert.deepEqual(snapshot(dir), before)
+}))
