@@ -664,9 +664,10 @@ const FINAL_MSG = {
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
-// `fetched` are the run's sources, already on disk (withSources).
+// `fetched` are the run's layers, already on disk (withSources): the sources, then the
+// project layer, which the lock never records.
 async function install(profiles, fetched, agents, modules, levels) {
-  const sources = fetched.map(({ name, url, ref }) => ({ name, url, ref }))
+  const sources = fetched.filter(l => !l.project).map(({ name, url, ref }) => ({ name, url, ref }))
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {

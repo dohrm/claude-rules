@@ -1,7 +1,7 @@
 // Sources (ADR-0008): what the lock pins, how each source is fetched, and the one
 // tree the emitters read. No emitter and no ownership logic lives here.
 import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, mkdirSync, rmSync, realpathSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { join, sep, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { safePath, plainPath } from './ownership.mjs'
@@ -76,6 +76,16 @@ function fetchSource(source, localDir) {
   return { ...source, dir, temp: true }
 }
 
+// The repo's own layer (ADR-0008): last, no ref, no registry, never written by the
+// installer and never locked — the one place a repo's edit to an installed file
+// survives `update`. It mirrors the source layout (.dev/overrides/rules/common/x.md).
+export const OVERRIDES = '.dev/overrides'
+function projectLayer() {
+  if (!existsSync(OVERRIDES)) return []
+  safePath(OVERRIDES)
+  return [{ name: OVERRIDES, dir: resolve(OVERRIDES), temp: false, project: true }]
+}
+
 // Fetch the run's sources, merge their registries, hand both to `fn` with the source
 // that declared each entry, and remove every temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
@@ -91,7 +101,7 @@ export async function withSources({ lockFile, refFlags, localDir, registry }, fn
   try {
     for (const source of sources) fetched.push(fetchSource(source, localDir))
     const { registry: merged, declaredBy } = mergeRegistries(fetched)
-    return await fn([...fetched], merged, declaredBy)
+    return await fn([...fetched, ...projectLayer()], merged, declaredBy)
   } finally {
     cleanup()
     process.off('exit', cleanup)

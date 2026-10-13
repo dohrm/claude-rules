@@ -603,3 +603,24 @@ test('an exclude inside a skill, or one that is not a plain relative path, is re
     }
   })
 })
+
+test('.dev/overrides/ is the last layer: a repo-owned rule survives update, and is never written or locked', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], { 'rules/common/language.md': '# team language\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    const mine = '# Language\n\n- This repo writes in French.\n'
+    mkdirSync(join(repo, '.dev/overrides/rules/common'), { recursive: true })
+    writeFileSync(join(repo, '.dev/overrides/rules/common/language.md'), mine)
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/common/language.md'), mine, 'the project layer wins over every source')
+    core.commit({ 'rules/common/language.md': '# Language v2\n' })
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/common/language.md'), mine, 'and survives an upstream change')
+    assert.equal(read(repo, '.dev/overrides/rules/common/language.md'), mine, 'never written')
+    assert.deepEqual(readdirSync(join(repo, '.dev/overrides')), ['rules'])
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'], 'no ref, no lock entry')
+  })
+})
