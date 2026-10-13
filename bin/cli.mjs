@@ -443,6 +443,16 @@ function assertInside(root, abs, seen = new Set()) {
 // A layer's `exclude` removes what the layers before it put there; a later layer may
 // put it back. Returns { tree, excluded }: the [{ from, rel }] removed inside an entry
 // that is still staged (rel '' when the whole entry went).
+// Copy `src` over `dest`, the later path winning at every depth: a file replaces a
+// directory and a directory a file, wherever they meet. `src` was checked by
+// assertInside, so following its links stays inside the source.
+function overlay(src, dest) {
+  const isDir = statSync(src).isDirectory()
+  if (existsSync(dest) && statSync(dest).isDirectory() !== isDir) rmSync(dest, { recursive: true, force: true })
+  if (!isDir) { ensureDir(dirname(dest)); copyFileSync(src, dest); return }
+  ensureDir(dest)
+  for (const name of readdirSync(src)) overlay(join(src, name), join(dest, name))
+}
 const under = (path, dir) => path === dir || path.startsWith(dir + '/')
 function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
@@ -464,9 +474,10 @@ function stageTree(layers, entries) {
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
         assertInside(realpathSync(layer.dir), src)
-        if (existsSync(dest) && (kind === 'skill' || statSync(dest).isDirectory() !== statSync(src).isDirectory()))
+        if (kind === 'skill') {
           rmSync(dest, { recursive: true, force: true })
-        cpSync(src, dest, { recursive: true, dereference: true })
+          cpSync(src, dest, { recursive: true, dereference: true })
+        } else overlay(src, dest)
         found = true
       }
       if (!found && !gone.size) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
@@ -917,6 +928,11 @@ async function install(profiles, layers, agents, modules, levels) {
     // reset) or with the file-level cleanup below (agent and kit directories).
     for (const { from, rel } of stagedTree.excluded) console.log(`  − ${rel ? `${from}/${rel}` : from}  (excluded)`)
     owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
+    // Everywhere else (makeStaged, destsFor, the inventory) a file entry is told from a
+    // directory by its extension: an entry that contradicts it would be half-installed.
+    for (const { e } of owned)
+      if (statSync(join(tree, e.from)).isFile() !== isFileFrom(e.from))
+        throw new Error(`registry: ${e.from}: a file entry needs an extension, a directory entry none`)
     installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile,
       ...(ownsFiles(e) ? { files: stagedFiles(makeStaged(tree, e)).map(f => f.rel).sort() } : {}) }))
     const stagedKeys = new Set()

@@ -884,3 +884,48 @@ test('excluding the only file of a rule directory uninstalls the entry, and doct
     assert.doesNotMatch(cli(['doctor'], repo).stdout, /missing on disk/)
   })
 })
+
+// Last path wins at every depth: a later layer may turn a file into a directory, or
+// a directory into a file, anywhere inside an entry.
+test('a later layer replaces a file by a directory and a directory by a file inside an entry', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.rust = [...reg.profiles.rust, { from: 'agents/team', to: '.claude/agents/team', kind: 'agent' }]
+    const core = makeSource(root, 'core', CORE_PATHS, {
+      'registry.json': JSON.stringify(reg, null, 2) + '\n',
+      'agents/team/checks/run': 'a file in core\n',
+      'agents/team/notes/old.md': '# a directory in core\n',
+    })
+    const team = makeSource(root, 'team', [], {
+      'agents/team/checks/run/check.md': '# a directory in the overlay\n',
+      'agents/team/notes': 'a file in the overlay\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/agents/team/checks/run/check.md'), '# a directory in the overlay\n')
+    assert.equal(read(repo, '.claude/agents/team/notes'), 'a file in the overlay\n')
+  })
+})
+
+// The installer tells a file entry from a directory by its extension, everywhere: an
+// entry whose staged type contradicts it is refused, not half-installed.
+test('an entry whose type contradicts its extension is refused before any write', () => {
+  withTmpRepo(root => {
+    for (const [from, files] of [['agents/team.v1', { 'agents/team.v1/a.md': '# a\n' }], ['kit/check', { 'kit/check': 'echo\n' }]]) {
+      const reg = JSON.parse(read(REPO, 'registry.json'))
+      const kind = from.startsWith('kit') ? 'kit' : 'agent'
+      reg.profiles.rust = [...reg.profiles.rust, { from, to: kind === 'kit' ? `.dev/${from}` : '.claude/agents/team', kind, level: 'rules' }]
+      const name = from.replace(/\W/g, '-')
+      const core = makeSource(root, name, CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', ...files })
+      const repo = join(root, `consumer-${name}`)
+      mkdirSync(repo)
+      writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+      const r = cli(['update'], repo)
+      assert.equal(r.status, 1, from)
+      assert.match(r.stderr, /a file entry needs an extension, a directory entry none/, from)
+      assert.deepEqual(readdirSync(repo), [LOCK], `${from}: nothing written`)
+    }
+  })
+})
