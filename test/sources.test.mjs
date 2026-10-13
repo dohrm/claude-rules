@@ -3,7 +3,7 @@
 // `git fetch --depth 1 <url> <ref>`, `checkout FETCH_HEAD` — runs with no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync } from 'node:fs'
+import { writeFileSync, mkdirSync, cpSync, readdirSync, existsSync, symlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
@@ -172,5 +172,33 @@ test('a registry entry that climbs out of its source is refused', () => {
     assert.equal(r.status, 1)
     assert.match(r.stderr, /registry entry "\.\.\/outside" must be a relative path inside the source/)
     assert.ok(!has(repo, '.claude/rules/escape'))
+  })
+})
+
+// Copying dereferences links, so a link committed in a source must not reach a file of
+// the machine running the install. A link that stays inside the source is fine.
+test('a link in a source that resolves outside it is refused before any write', () => {
+  withTmpRepo(root => {
+    const secret = join(root, 'secret.txt')
+    writeFileSync(secret, 'machine-local secret\n')
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const work = join(root, 'core-work')
+    symlinkSync(secret, join(work, 'rules/rust/leak.md'))
+    symlinkSync('code-style.md', join(work, 'rules/rust/alias.md'))
+    core.commit({})
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /rules\/rust\/leak\.md: resolves outside its source/)
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+    assert.equal(read(repo, LOCK), before)
+
+    git(['rm', '-q', 'rules/rust/leak.md'], work)
+    core.commit({})
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/rust/alias.md'), read(REPO, STYLE), 'an inside link is copied as its content')
   })
 })

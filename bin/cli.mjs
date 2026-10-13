@@ -16,8 +16,8 @@
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
-import { join, dirname, basename, isAbsolute } from 'node:path'
+import { readFileSync, writeFileSync, existsSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync, realpathSync } from 'node:fs'
+import { join, dirname, basename, isAbsolute, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
@@ -352,6 +352,17 @@ async function withSources(fn) {
 }
 
 // -------------------------------------------------------------------- staging
+// A fetched source is not trusted to stay inside itself: copying dereferences links,
+// so a link anywhere under `abs` that resolves outside `root` would pull a file of
+// this machine (a key, a config) into the consumer repo. Every path is checked once
+// resolved, links to directories included; `seen` stops a link cycle.
+function assertInside(root, abs, seen = new Set()) {
+  const real = realpathSync(abs)
+  if (real !== root && !real.startsWith(root + sep)) throw new Error(`${abs}: resolves outside its source (${real})`)
+  if (!statSync(real).isDirectory() || seen.has(real)) return
+  seen.add(real)
+  for (const name of readdirSync(real)) assertInside(root, join(real, name), seen)
+}
 // The emitters read ONE tree, never a source: each entry's `from` is copied out of
 // the fetched sources into a temp dir, removed by the caller, so private content
 // never lands in the repo and no emitter knows where a file came from.
@@ -363,6 +374,7 @@ function stageTree(layers, froms) {
       if (isAbsolute(from) || from.split(/[\\/]/).includes('..')) throw new Error(`registry entry "${from}" must be a relative path inside the source`)
       const layer = layers.find(l => existsSync(join(l.dir, from)))
       if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      assertInside(realpathSync(layer.dir), join(layer.dir, from))
       cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
