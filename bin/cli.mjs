@@ -47,12 +47,13 @@ const moduleFlag = flag('--module')
 const rootFlag = flag('--root')
 const levelFlag = flag('--level')
 const strictFlag = argv.includes('--strict')
+const sourceFlag = flag('--source')
 if (rootFlag && moduleFlag) {
   console.error('--root and --module are the same flag; pass one.')
   process.exit(1)
 }
 const scopeFlag = rootFlag || moduleFlag
-const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
+const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict', '--source', sourceFlag].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 const LEVELS = ['rules', 'gates', 'ratchet']
@@ -126,16 +127,35 @@ function parseRefs() {
   }
   return refs
 }
-// The sources this run installs from: the lock's (or core alone on a first add), each
-// at its --ref. Without one, core follows defaultRef, as it always has, and every
-// other source replays its locked ref.
-function resolveSources(locked, refs) {
-  const sources = (locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]).map(s => ({ ...s }))
+// The sources this run installs from, each at its --ref. Without one, core follows
+// defaultRef, as it always has, and every other source replays its locked ref.
+function resolveSources(list, refs) {
+  const sources = list.map(s => ({ ...s }))
   const unknown = Object.keys(refs).filter(n => !sources.some(s => s.name === n))
   if (unknown.length)
     throw new Error(`--ref names unknown source(s): ${unknown.join(', ')}. Locked: ${sources.map(s => s.name).join(', ')}`)
   for (const s of sources) s.ref = refs[s.name] || (s.name === CORE ? registry.defaultRef : s.ref)
   return sources
+}
+// `add --source <name>=<url>#<ref>`: the ref is the last `#`, so a URL may hold one.
+function parseSourceFlag(raw) {
+  const m = raw.match(/^([\w.-]+)=(.+)#([^#]+)$/)
+  if (!m) throw new Error(`--source ${raw}: expected <name>=<url>#<ref>`)
+  if (m[1] === CORE) throw new Error(`--source: "${CORE}" is this library; pin it with --ref`)
+  return { name: m[1], url: m[2], ref: m[3] }
+}
+// What this run changes in the lock's list: `add` appends a source, `remove` drops one.
+function editSources(list, { add, drop } = {}) {
+  if (add) {
+    if (list.some(s => s.name === add.name)) throw new Error(`source "${add.name}" is already locked; move it with --ref ${add.name}=<ref>`)
+    return [...list, add]
+  }
+  if (drop) {
+    if (drop === CORE) throw new Error(`source "${CORE}" cannot be removed; "remove all" uninstalls`)
+    if (!list.some(s => s.name === drop)) throw new Error(`source "${drop}" is not locked. Locked: ${list.map(s => s.name).join(', ')}`)
+    return list.filter(s => s.name !== drop)
+  }
+  return list
 }
 const sourcesLabel = sources => sources.map(s => `${s.name}@${s.ref}`).join(', ')
 
@@ -343,10 +363,10 @@ function projectLayer() {
 // Fetch the run's sources, adopt their merged registry, hand them to `fn`, and remove every
 // temp dir however `fn` ends. The lock is read raw here: normalizing it checks profile
 // names, and only the fetched registry knows them all.
-async function withSources(fn) {
-  let locked = null
+async function withSources(fn, edit) {
+  let locked = [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }]
   if (existsSync(LOCK)) { safePath(LOCK); locked = lockSources(JSON.parse(readFileSync(LOCK, 'utf8'))) }
-  const sources = resolveSources(locked, parseRefs())
+  const sources = resolveSources(editSources(locked, edit), parseRefs())
   const fetched = []
   // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
   // trees (private content, git objects included) must not outlive the run either way.
@@ -908,7 +928,7 @@ async function install(profiles, layers, agents, modules, levels) {
           if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
         }
       }
-      codex = prepareCodex(files, [...rules.values()], modules, readLock()?.codex)
+      codex = prepareCodex(files, [...rules.values()], modules, readLock({ known: false })?.codex)
     }
     // What the previous install wrote and this one no longer does — an entry dropped
     // upstream, or one the source's registry now maps elsewhere. Left on disk it stays
@@ -918,7 +938,7 @@ async function install(profiles, layers, agents, modules, levels) {
     // Only for the agents the previous install wrote for: a target added by this run
     // never held anything of ours. A destination moved into or out of a fresh one is
     // refused — removing the old one would delete the new, keeping it leaves stale files.
-    const previous = readLock()
+    const previous = readLock({ known: false })
     const fresh = new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))
     const stale = [...new Set((previous?.installed || []).flatMap(e => agentsFromLock(previous).kept.flatMap(a => destsFor(e, a)
       .filter(d => !(previous.codex && ((a === 'codex' && e.kind !== 'kit') || d.startsWith('.agents/skills/')))))))]
@@ -1688,6 +1708,28 @@ async function runAdd(fetched, { requestedRaw, agentsRaw, levelName, rootDirRaw 
   await install(profiles, fetched, agents, modules, levels)
 }
 
+// `update`: re-install the lock as it stands, under the run's merged registry.
+async function reinstall(lock, fetched) {
+  const { kept, dropped } = agentsFromLock(lock)
+  if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
+  const migrated = migrateLegacyLock(lock)
+  await install(migrated.profiles, fetched, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+}
+// After `remove --source`, a profile only that source defined is in no registry left:
+// it goes with the source, from profiles, modules and levels alike.
+function dropUndefined(lock) {
+  const gone = lock.profiles.filter(p => !registry.profiles[p])
+  if (!gone.length) return lock
+  console.log(`Dropping [${gone.join(', ')}]: no remaining source defines ${gone.length > 1 ? 'them' : 'it'}.\n`)
+  const keep = ps => ps.filter(p => !gone.includes(p))
+  return {
+    ...lock,
+    profiles: keep(lock.profiles),
+    modules: Object.fromEntries(Object.entries(lock.modules || {}).map(([d, ps]) => [d, keep(ps)])),
+    ...(lock.levels ? { levels: Object.fromEntries(Object.entries(lock.levels).filter(([p]) => !gone.includes(p))) } : {}),
+  }
+}
+
 // -------------------------------------------------------------- interactive add
 // A bare `add` in a real terminal, with no flag at all — the "I don't know the
 // flags yet" path. Any flag alongside a missing profile list is a mistake, not
@@ -1743,28 +1785,28 @@ async function promptAdd() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlags.length
+      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlags.length && !sourceFlag
       if (!positional.length && bare && process.stdin.isTTY) {
         await withSources(async fetched => runAdd(fetched, await promptAdd()))
         break
       }
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>]'); process.exit(1) }
+      // `add --source` alone re-installs what is locked, with the new layer on top.
+      if (!positional.length && !(sourceFlag && existsSync(LOCK))) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>] [--source <name>=<url>#<ref>]'); process.exit(1) }
       const options = { requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag }
-      await withSources(fetched => runAdd(fetched, options))
+      await withSources(fetched => runAdd(fetched, options), sourceFlag ? { add: parseSourceFlag(sourceFlag) } : undefined)
       break
     }
     case 'update': {
       if (!existsSync(LOCK)) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
-      await withSources(async fetched => {
-        const lock = readLock()
-        const { kept, dropped } = agentsFromLock(lock)
-        if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
-        const migrated = migrateLegacyLock(lock)
-        await install(migrated.profiles, fetched, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
-      })
+      await withSources(fetched => reinstall(readLock(), fetched))
       break
     }
     case 'remove': {
+      if (sourceFlag) {
+        if (!existsSync(LOCK)) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
+        await withSources(fetched => reinstall(dropUndefined(readLock({ known: false })), fetched), { drop: sourceFlag })
+        break
+      }
       if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
       remove(positional)
       break
@@ -1797,7 +1839,9 @@ async function main() {
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
+        + '  add --source <name>=<url>#<ref>  append a source (an overlay) to the lock and re-install with it\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
+        + '  remove --source <name>           drop a source from the lock and re-install without it\n'
         + '  update [--ref <ref>|<source>=<ref>]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'

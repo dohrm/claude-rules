@@ -595,3 +595,41 @@ test('.dev/overrides: a repo-owned rules/common/language.md survives update', ()
     assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core'], 'the project layer is no source: no ref, nothing locked')
   })
 })
+
+// Sources are added and dropped through the CLI, never by hand-editing the lock.
+test('add --source appends a source to the lock; remove --source drops it and what only it installed', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const team = makeSource(root, 'team', [], {
+      'registry.json': JSON.stringify({ profiles: { 'team-only': [{ from: 'rules/team-only', to: '.claude/rules/team-only', kind: 'rule' }] } }) + '\n',
+      'rules/team-only/house.md': '# House rule\n',
+      [STYLE]: '# team code style\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+
+    ok(cli(['add', '--source', `team=${team.url}#main`], repo))
+    assert.deepEqual(lockOf(repo).sources, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    assert.equal(read(repo, '.claude/rules/rust/code-style.md'), '# team code style\n', 'the new layer is installed at once')
+    ok(cli(['add', 'team-only'], repo))
+    assert.ok(has(repo, '.claude/rules/team-only/house.md'))
+    const twice = cli(['add', '--source', `team=${team.url}#main`], repo)
+    assert.equal(twice.status, 1)
+    assert.match(twice.stderr, /source "team" is already locked/)
+
+    const r = ok(cli(['remove', '--source', 'team'], repo))
+    assert.match(r.stdout, /team-only/)
+    const lock = lockOf(repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }])
+    assert.deepEqual(lock.profiles, ['rust'], 'a profile only the dropped source defined goes with it')
+    assert.ok(!has(repo, '.claude/rules/team-only'))
+    assert.equal(read(repo, '.claude/rules/rust/code-style.md'), read(REPO, STYLE), 'core\'s file is back')
+    for (const args of [['remove', '--source', 'core'], ['remove', '--source', 'nobody']]) {
+      const bad = cli(args, repo)
+      assert.equal(bad.status, 1, args.join(' '))
+      assert.match(bad.stderr, /cannot be removed|not locked/)
+    }
+  })
+})
