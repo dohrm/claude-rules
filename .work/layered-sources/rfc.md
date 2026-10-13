@@ -6,3 +6,7 @@
 - **Base branch**: next
 - **Branch**: rfc/layered-sources
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/33
+
+## Blocked on the human
+
+- Merge #42 into `next` — the human; the final report is its description.
