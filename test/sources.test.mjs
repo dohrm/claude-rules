@@ -123,6 +123,15 @@ test('no fetched source or staged tree outlives the run', () => {
     assert.deepEqual(readdirSync(tmp), [], 'after success')
     assert.equal(cli(['update', '--ref', 'no-such-ref'], repo, { TMPDIR: tmp }).status, 1)
     assert.deepEqual(readdirSync(tmp), [], 'after a failed fetch')
+    // Validation that exits after the fetch must not skip the cleanup.
+    const unknown = cli(['add', 'no-such-profile'], repo, { TMPDIR: tmp })
+    assert.equal(unknown.status, 1)
+    assert.match(unknown.stderr, /Unknown profile\(s\): no-such-profile/)
+    assert.deepEqual(readdirSync(tmp), [], 'after an unknown profile')
+    const agent = cli(['add', 'rust', '--agent', 'nobody'], repo, { TMPDIR: tmp })
+    assert.equal(agent.status, 1)
+    assert.match(agent.stderr, /Unknown agent\(s\): nobody/)
+    assert.deepEqual(readdirSync(tmp), [], 'after an unknown agent')
   })
 })
 
@@ -146,6 +155,19 @@ test('the source\'s registry decides: a profile only it defines installs', () =>
     assert.deepEqual(lockOf(repo).profiles, ['rust', 'team-only'])
     ok(cli(['update'], repo))
     assert.ok(has(repo, '.claude/rules/team-only/house.md'), 'update reads the lock against the same registry')
+
+    // The offline commands keep the bundled registry, which does not know team-only.
+    // They must still read the lock — and remove must refuse rather than guess.
+    assert.match(ok(cli(['list'], repo)).stdout, /Installed: \[rust, team-only\]/)
+    const doc = cli(['doctor'], repo)
+    assert.equal(doc.status, 1)
+    assert.match(doc.stdout, /profile "team-only", unknown to the registry bundled with this CLI/)
+    const before = read(repo, LOCK)
+    const rm = cli(['remove', 'all'], repo)
+    assert.equal(rm.status, 1)
+    assert.match(rm.stderr, /does not know \[team-only\]/)
+    assert.equal(read(repo, LOCK), before)
+    assert.ok(has(repo, '.claude/rules/team-only/house.md') && has(repo, '.claude/rules/rust/code-style.md'), 'nothing deleted')
   })
 })
 

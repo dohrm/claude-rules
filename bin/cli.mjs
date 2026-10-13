@@ -340,14 +340,19 @@ async function withSources(fn) {
   const sources = resolveSources(locked, parseRefs())
   if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
   const fetched = []
+  // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
+  // trees (private content, git objects included) must not outlive the run either way.
+  const cleanup = () => { for (const f of fetched.splice(0)) if (f.temp) rmSync(f.dir, { recursive: true, force: true }) }
+  process.on('exit', cleanup)
   try {
     for (const source of sources) fetched.push(fetchSource(source))
     const file = join(fetched[0].dir, 'registry.json')
     if (!existsSync(file)) throw new Error(`source ${CORE} (${sources[0].url}#${sources[0].ref}) has no registry.json`)
     registry = JSON.parse(readFileSync(file, 'utf8'))
-    return await fn(fetched)
+    return await fn([...fetched])
   } finally {
-    for (const f of fetched) if (f.temp) rmSync(f.dir, { recursive: true, force: true })
+    cleanup()
+    process.off('exit', cleanup)
   }
 }
 
@@ -512,8 +517,16 @@ function purgeRetired() {
 }
 
 function remove(profilesArg) {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
+  // remove derives every destination from the registry. One it does not know — a
+  // profile the source's own registry defined — would leave its files behind, or
+  // delete files it shares with what is removed. Refuse before touching anything.
+  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
+  if (unknownP.length) {
+    console.error(`remove: the registry bundled with this CLI does not know [${unknownP.join(', ')}] (defined by the installing source, ${sourcesLabel(lock.sources)}). Run remove from the CLI at that ref: npx github:<repo>#<ref> remove …`)
+    process.exit(1)
+  }
   const { kept, dropped } = agentsFromLock(lock)
   if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
   const agents = kept.length ? kept : ['claude']
@@ -597,12 +610,14 @@ function remove(profilesArg) {
 }
 
 // -------------------------------------------------------------------- install
-function normalizeModules(profiles, modules = {}, validateRoot = true) {
+// `known: false` skips the profile-name check, for the commands that fetch nothing:
+// the bundled registry may not know a profile the installing source defined.
+function normalizeModules(profiles, modules = {}, validateRoot = true, known = true) {
   const out = {}
   for (const [raw, names] of Object.entries(modules)) {
     const dir = modulePath(raw)
     const expanded = unpackNames(names, true)
-    if (expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
+    if (known && expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
     out[dir] = [...new Set([...(out[dir] || []), ...expanded])]
   }
   const bound = new Set(Object.entries(out).filter(([d]) => d !== '.').flatMap(([, ps]) => ps))
@@ -611,7 +626,9 @@ function normalizeModules(profiles, modules = {}, validateRoot = true) {
   out['.'] = profiles.filter(p => !bound.has(p))
   return { '.': out['.'], ...Object.fromEntries(Object.entries(out).filter(([d, ps]) => d !== '.' && ps.length)) }
 }
-function readLock() {
+// Strict by default (add/update, under the fetched registry); `{ known: false }` for
+// the offline commands, which must still read a lock the bundled registry cannot explain.
+function readLock({ known = true } = {}) {
   if (!existsSync(LOCK)) return null
   safePath(LOCK)
   const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
@@ -619,7 +636,7 @@ function readLock() {
   delete lock.repo
   delete lock.ref
   lock.profiles = unpackNames(lock.profiles, true)
-  lock.modules = normalizeModules(lock.profiles, lock.modules)
+  lock.modules = normalizeModules(lock.profiles, lock.modules, true, known)
   if (lock.levels) {
     const levels = {}
     for (const [name, level] of Object.entries(lock.levels))
@@ -1071,7 +1088,7 @@ function genClaudeMd(lock) {
 }
 
 function initRepo() {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — run "add <profile...>" first.`); process.exit(1) }
   const levels = lock.levels || Object.fromEntries((lock.profiles || []).map(p => [p, 'gates']))
   const techs = lock.profiles.filter(p => GLOB[p] && levelRank(levels[p] || 'rules') >= levelRank('gates'))
@@ -1214,7 +1231,7 @@ const sum = xs => xs.reduce((n, x) => n + x, 0)
 // unscoped rules on `alwaysApply: true`), so a routing change has to be checked
 // on both or it is only half verified.
 function budget(target, agent = null) {
-  if (agent === 'codex' || (!agent && installedRules().agent === 'codex')) return codexBudget(readLock(), target, globToRe)
+  if (agent === 'codex' || (!agent && installedRules().agent === 'codex')) return codexBudget(readLock({ known: false }), target, globToRe)
   const { root, complete, rules, agent: measured } = installedRules(agent)
   if (!root) {
     console.error(agent
@@ -1360,7 +1377,7 @@ function auditGateLayer(agents, bad, warn) {
 }
 
 function doctor() {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — nothing to audit. Run "add <profile...>" first.`); process.exit(1) }
   const { kept, dropped } = agentsFromLock(lock)
   const agents = kept.length ? kept : ['claude']
@@ -1370,7 +1387,7 @@ function doctor() {
   // ---- 1. the lock itself
   console.log('Install')
   const unknownP = lock.profiles.filter(p => !registry.profiles[p])
-  for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
+  for (const p of unknownP) bad.push(`lock references profile "${p}", unknown to the registry bundled with this CLI — its files cannot be audited here (run doctor from the CLI at the locked ref)`)
   for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
   console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}`)
   // A module path that does not exist anchors every one of its globs to nothing —
@@ -1601,7 +1618,7 @@ async function main() {
       break
     }
     case 'list': {
-      const lock = readLock()
+      const lock = readLock({ known: false })
       console.log('Available profiles:')
       for (const [name, entries] of Object.entries(registry.profiles)) console.log(`  ${name}  (${entries.map(e => e.from).join(', ')})`)
       if (registry.aliases) {
