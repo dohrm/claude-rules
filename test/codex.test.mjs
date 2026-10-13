@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, symlinkSync, rmSync, cpSync } from 'node:fs'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import { REPO, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 const ok = r => { assert.equal(r.status, 0, r.stderr + r.stdout); return r }
 const lock = dir => JSON.parse(read(dir, '.claude-rules.lock'))
@@ -228,6 +227,7 @@ test('canonical ownership paths cannot escape their asset tree', () => withTmpRe
 test('source failure preserves installed files; source deletion removes only owned files', () => withTmpRepo(dir => withTmpRepo(source => {
   cpSync(join(REPO, 'rules'), join(source, 'rules'), { recursive: true })
   cpSync(join(REPO, 'CHANGELOG.md'), join(source, 'CHANGELOG.md'))   // a shared entry
+  cpSync(join(REPO, 'registry.json'), join(source, 'registry.json'))  // the source's registry decides what it installs
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
   put(dir, '.agents/rules/rust/custom.md', 'mine')
   const before = read(dir, '.claude-rules.lock')
@@ -322,11 +322,11 @@ test('legacy Codex locks cannot authorize recursive removal of unowned trees', (
 }))
 
 test('alias cycles and unknown module aliases fail before writing an installation', () => withTmpRepo(dir => withTmpRepo(source => {
-  cpSync(join(REPO, 'bin'), join(source, 'bin'), { recursive: true })
+  // The registry that counts is the source's (the --local tree), not the CLI's own copy.
   const registry = JSON.parse(read(REPO, 'registry.json'))
   registry.aliases.loopA = ['loopB']; registry.aliases.loopB = ['loopA']
   put(source, 'registry.json', JSON.stringify(registry))
-  const result = spawnSync(process.execPath, [join(source, 'bin/cli.mjs'), 'add', 'loopA', '--local', REPO], { cwd: dir, encoding: 'utf8' })
+  const result = runCliBare(['add', 'loopA', '--local', source], dir)
   assert.equal(result.status, 1); assert.match(result.stderr, /Alias cycle/)
   assert.ok(!has(dir, '.claude-rules.lock'))
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))

@@ -46,8 +46,55 @@ test('add rust --agent claude: rules only by default; common language and the CH
     assert.deepEqual(lock.profiles, ['rust'])
     assert.equal(lock.levels.rust, 'rules')
     assert.deepEqual(lock.agents, ['claude'])
-    assert.equal(lock.ref, registry.defaultRef)
-    assert.equal(lock.repo, registry.repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: `github:${registry.repo}`, ref: registry.defaultRef }])
+    assert.ok(!('repo' in lock) && !('ref' in lock), 'sources replace repo + ref')
+  })
+})
+
+// ADR-0008: the lock pins an ordered list of sources. A lock written before that
+// (`repo` + `ref`) must still read, as core alone, and leave in the new shape.
+test('a legacy { repo, ref } lock reads as core and is rewritten as sources', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    delete lock.sources
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'someone/fork', ref: 'v0.9.0', ...lock }, null, 2) + '\n')
+    const r = ok(runCli(['update', '--ref', 'v1.0.0'], dir))
+    assert.match(r.stdout, /core@v1\.0\.0/)
+    const next = lockOf(dir)
+    assert.deepEqual(next.sources, [{ name: 'core', url: 'github:someone/fork', ref: 'v1.0.0' }])
+    assert.ok(!('repo' in next) && !('ref' in next), 'repo/ref are not written again')
+  })
+})
+
+test('--ref targets core; --ref <name>=<ref> must name a locked source', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--ref', 'v2.0.0'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, 'v2.0.0')
+    ok(runCli(['update', '--ref', 'core=v2.1.0'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, 'v2.1.0', 'core=<ref> is the long form of --ref <ref>')
+    ok(runCli(['update'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, registry.defaultRef, 'without --ref, core follows defaultRef')
+    const before = read(dir, '.claude-rules.lock')
+    const r = runCli(['update', '--ref', 'team=v1'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /--ref names unknown source\(s\): team\. Locked: core/)
+    assert.equal(read(dir, '.claude-rules.lock'), before, 'a refused update leaves the lock alone')
+    const twice = runCli(['update', '--ref', 'v1', '--ref', 'core=v2'], dir)
+    assert.equal(twice.status, 1)
+    assert.match(twice.stderr, /--ref given twice for source "core"/)
+  })
+})
+
+test('a lock whose sources do not start with core is refused', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    lock.sources = [{ name: 'team', url: 'file:///nowhere', ref: 'main' }, ...lock.sources]
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+    const r = runCli(['update'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /the first source must be "core", found "team"/)
   })
 })
 
