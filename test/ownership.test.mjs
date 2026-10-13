@@ -186,3 +186,53 @@ test('remove deletes only the files its profiles recorded', () => withTmpRepo(di
   assert.equal(read(dir, '.dev/kit/rust/mine.toml'), 'mine\n')
   assert.ok(!JSON.parse(read(dir, LOCK)).installed.some(i => i.profile === 'rust'))
 }))
+
+// ------------------------------------------------------------------ --force
+// Under --force each refused case above goes through: the listed paths are printed and
+// overwritten, and the tree and the inventory end up exactly as a clean install's.
+function forced(dir, args, paths, clean) {
+  const r = ok(runCli([...args, '--force'], dir))
+  assert.match(r.stdout, /--force: overwriting \d+ path\(s\)/)
+  for (const [path] of paths) assert.ok(r.stdout.includes(`! ${path} — `), `${path} printed`)
+  const expected = withTmpRepo(other => { ok(runCli(clean, other)); return snapshot(other) })
+  const tree = snapshot(dir)
+  const lockOf = t => JSON.parse(t[LOCK])
+  delete tree[LOCK]
+  const want = { ...expected }
+  delete want[LOCK]
+  for (const [path] of paths) if (!(path in want)) assert.ok(!(path in tree), `${path} removed`)
+  assert.deepEqual(Object.fromEntries(Object.entries(tree).filter(([p]) => p in want || ROOTS.some(r => p.startsWith(`${r}/`)))), want)
+  assert.deepEqual(owned(JSON.parse(read(dir, LOCK))), owned(lockOf(expected)), 'the inventory is recorded again')
+}
+
+test('--force overwrites an edited installed rule, for every target', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', '--agent', 'claude,codex,cursor'], dir))
+  write(dir, '.claude/rules/rust/code-style.md', 'my edit\n')
+  write(dir, '.cursor/rules/rust/code-style.mdc', 'my edit\n')
+  write(dir, '.agents/rules/rust/code-style.md', 'my edit\n')
+  forced(dir, ['update'], [['.claude/rules/rust/code-style.md'], ['.cursor/rules/rust/code-style.mdc'], ['.agents/rules/rust/code-style.md']],
+    ['add', 'rust', '--agent', 'claude,codex,cursor'])
+}))
+
+test('--force overwrites a file the installer did not write', () => withTmpRepo(dir => {
+  write(dir, '.claude/rules/rust/code-style.md', 'hand-copied\n')
+  forced(dir, ['add', 'rust', '--agent', 'claude'], [['.claude/rules/rust/code-style.md']], ['add', 'rust', '--agent', 'claude'])
+}))
+
+test('--force removes a foreign file inside an installed skill', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'product', '--agent', 'claude,codex'], dir))
+  write(dir, '.claude/skills/rfc/notes.md', 'mine\n')
+  write(dir, '.agents/skills/rfc/notes.md', 'mine\n')
+  forced(dir, ['update'], [['.claude/skills/rfc/notes.md'], ['.agents/skills/rfc/notes.md']], ['add', 'product', '--agent', 'claude,codex'])
+}))
+
+test('--force replaces foreign content where a directory goes', () => withTmpRepo(dir => {
+  write(dir, '.claude/skills/rfc', 'a file named like the skill\n')
+  forced(dir, ['add', 'product', '--agent', 'claude'], [['.claude/skills/rfc']], ['add', 'product', '--agent', 'claude'])
+}))
+
+test('--force replaces nested destinations', () => withTmpRepo(dir => {
+  write(dir, '.claude/rules/rust/code-style.md/mine.md', 'nested under a file destination\n')
+  write(dir, '.cursor/rules/rust', 'a file above the destinations\n')
+  forced(dir, ['add', 'rust', '--agent', 'claude,cursor'], [['.claude/rules/rust/code-style.md'], ['.cursor/rules/rust']], ['add', 'rust', '--agent', 'claude,cursor'])
+}))

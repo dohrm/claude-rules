@@ -10,7 +10,7 @@
 // Usage:
 //   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,codex,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
-//   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules update [--ref v1.3.0] [--force]  # re-install locked profiles+agents at ref
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
@@ -53,7 +53,7 @@ if (rootFlag && moduleFlag) {
   process.exit(1)
 }
 const scopeFlag = rootFlag || moduleFlag
-const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
+const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict', '--force'].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 const LEVELS = ['rules', 'gates', 'ratchet']
@@ -483,7 +483,7 @@ function remove(profilesArg) {
   // Delete exactly the files the removed records hold that no kept record still does.
   const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
   const plan = { writes, deletes: [...new Set([...lock.installed.filter(i => !isKept(i)).flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
-  refuseCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: [] }))
+  plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: [] }))
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
@@ -506,9 +506,17 @@ function remove(profilesArg) {
 }
 
 // -------------------------------------------------------------------- install
-// ADR-0010: a tree the installer cannot explain is refused, never reconciled.
-function refuseCorruption(corrupt) {
-  if (!corrupt.size) return
+// ADR-0010: a tree the installer cannot explain is refused, never reconciled. The way
+// out is the user's fix, or --force, which overwrites exactly the listed paths.
+// Returns what applyTree overwrites.
+function settleCorruption(corrupt) {
+  if (!corrupt.size) return corrupt
+  if (forceFlag) {
+    console.log(`--force: overwriting ${corrupt.size} path(s) claude-rules did not install as they are:`)
+    for (const [path, why] of corrupt) console.log(`  ! ${path} — ${why}`)
+    console.log()
+    return corrupt
+  }
   const lines = [...corrupt].map(([path, why]) => `  ✗ ${path} — ${why}`)
   throw new Error(`${corrupt.size} path(s) are not what claude-rules installed; nothing was changed:\n${lines.join('\n')}\n`
     + 'Move the change out of the installed path, or re-run with --force to overwrite the listed paths.')
@@ -720,7 +728,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
     const recorded = ownedFiles(readLock())
     const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
-    refuseCorruption(checkTree({
+    plan.corrupt = settleCorruption(checkTree({
       ...plan,
       owned: recorded,
       dirs: [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
@@ -1585,7 +1593,8 @@ async function main() {
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
-        + '  update [--ref <ref>|<source>=<ref>]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
+        + '  update [--ref <ref>|<source>=<ref>] [--force]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
+        + '                                   a path the installer did not write as it is stops add/update; --force overwrites the listed paths\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'
