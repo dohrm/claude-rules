@@ -399,3 +399,39 @@ test('remove keeps a source-defined profile that the bundled registry retired', 
     assert.ok(!has(repo, LOCK))
   })
 })
+
+// Emitting an entry resets its directory and removing one deletes it recursively:
+// two entries that nest would take each other's files.
+test('a registry whose entries nest is refused before any write', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles['team-a'] = [{ from: 'rules/team-a', to: '.claude/rules/team', kind: 'rule' }]
+    reg.profiles['team-b'] = [{ from: 'rules/team-b', to: '.claude/rules/team/extra', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n', 'rules/team-a/a.md': '# a\n', 'rules/team-b/b.md': '# b\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = cli(['add', 'team-a', 'team-b'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /installs to \.claude\/rules\/team\/extra, inside \.claude\/rules\/team/)
+    assert.deepEqual(readdirSync(repo), [LOCK])
+  })
+})
+
+test('remove refuses to delete a destination that holds one a remaining entry owns', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', [...CORE_PATHS, ...registry.profiles.go.map(e => e.from)])
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    ok(cli(['add', 'go'], repo))
+    const lock = lockOf(repo)
+    // A forged nesting: go stays installed, and its record now sits inside rust's.
+    lock.installed.find(i => i.from === 'rules/go').to = '.claude/rules/rust/go'
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    const r = cli(['remove', 'rust'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /Removing \.claude\/rules\/rust would delete \.claude\/rules\/rust\/go/)
+    assert.ok(has(repo, '.claude/rules/rust/code-style.md'), 'nothing deleted')
+  })
+})

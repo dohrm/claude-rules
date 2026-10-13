@@ -588,10 +588,14 @@ function remove(profilesArg) {
   }
   // Preflight every removal before deleting anything.
   const entries = [...toRemove.flatMap(installedOf), ...(fullUninstall ? installedOf(null) : [])]
+  const skipped = (entry, agent, dest) => stillNeeded.has(dest) || (codex && (agent === 'codex' && entry.kind !== 'kit' || dest.startsWith('.agents/skills/')))
   for (const entry of entries)
     for (const agent of agents) for (const dest of destsFor(entry, agent)) {
       safePath(dest)
       if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
+      // A recursive delete must not take a destination something else still owns.
+      const kept = !skipped(entry, agent, dest) && [...stillNeeded].find(d => d.startsWith(dest + '/'))
+      if (kept) throw new Error(`Removing ${dest} would delete ${kept}, which a remaining entry owns; reconcile the lock first`)
     }
   safePath(LOCK)
 
@@ -601,7 +605,7 @@ function remove(profilesArg) {
     if (entry.kind === 'kit') removedKit = true
     for (const agent of agents) {
       for (const dest of destsFor(entry, agent)) {
-        if (stillNeeded.has(dest) || (codex && (agent === 'codex' && entry.kind !== 'kit' || dest.startsWith('.agents/skills/')))) continue
+        if (skipped(entry, agent, dest)) continue
         if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
       }
     }
@@ -771,6 +775,18 @@ async function install(profiles, fetched, agents, modules, levels) {
     // Stage every entry before changing any destination.
     for (const { e } of owned) assertEntry(e, 'registry')
     assertRetiredSkills()
+    // Two entries must not nest: emitting one resets its directory, removing one
+    // deletes it recursively — either way the other entry's files go with it.
+    const destOwner = new Map()
+    for (const { e } of owned) for (const a of agents) for (const d of destsFor(e, a)) {
+      const key = `${e.kind}:${e.from}`
+      if (destOwner.has(d) && destOwner.get(d) !== key) throw new Error(`registry: ${destOwner.get(d)} and ${key} both install to ${d}`)
+      destOwner.set(d, key)
+    }
+    for (const d of destOwner.keys()) {
+      const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
+      if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
+    }
     const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
     tree = stagedTree.tree
     installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
