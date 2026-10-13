@@ -1,6 +1,6 @@
 # ADR-0009: Add an L4 level that delegates named checkpoints inside a verified domain
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-12
 
 ## Context
