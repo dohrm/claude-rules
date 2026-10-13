@@ -55,23 +55,26 @@ export function instructionBlocks(rules, modules) {
   return blocks
 }
 
-export function checkCodexInventory(previous = {}) {
+// `onDisk: false` checks the paths' shape only, as the lock is read: what stands on
+// disk there is the ownership check's to list (bin/ownership.mjs), --force included.
+export function checkCodexInventory(previous = {}, onDisk = true) {
   if (previous.version !== undefined && previous.version !== 1) throw new Error('Unsupported Codex ownership version')
+  const canonical = path => onDisk ? safePath(path) : posix.normalize(path)
   for (const path of Object.keys(previous.files || {})) {
     if (!/^\.agents\/(rules|skills)\/.+/.test(path)) throw new Error(`Invalid Codex-owned path: ${path}`)
-    if (safePath(path) !== path) throw new Error(`Noncanonical owned path: ${path}`)
+    if (canonical(path) !== path || path.split('/').includes('..')) throw new Error(`Noncanonical owned path: ${path}`)
   }
   for (const rule of previous.rules || []) {
     if (previous.files?.[rule.path]?.kind !== 'rule') throw new Error(`Unowned rule reference: ${rule.path}`)
   }
   for (const path of previous.blocks || []) {
     if (path !== 'AGENTS.md' && !path.endsWith('/AGENTS.md')) throw new Error(`Invalid instruction path: ${path}`)
-    if (safePath(path) !== path) throw new Error(`Noncanonical owned path: ${path}`)
+    if (canonical(path) !== path || path.split('/').includes('..')) throw new Error(`Noncanonical owned path: ${path}`)
   }
 }
 
 export function prepareCodex(files, rules, modules, previous = {}) {
-  checkCodexInventory(previous)
+  checkCodexInventory(previous, false)   // files: the ownership check stands on them; blocks: safePath below
   const blocks = instructionBlocks(rules, modules)
   const inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
   // The asset files themselves are written, checked and pruned by the shared ownership

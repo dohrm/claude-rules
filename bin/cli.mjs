@@ -269,15 +269,17 @@ const mdFiles = s => stagedFiles(s).filter(f => f.rel.endsWith('.md'))
 // Signature: (staged, entry, agent, ctx) => note | null. An emitter writes nothing:
 // it puts every file it produces into the run's plan, under the entry it came from.
 const entryKey = e => `${e.kind}:${e.from}`
-function put(ctx, path, content) {
+// `from`: the staged file copied verbatim, whose mode (an executable script) carries over.
+function put(ctx, path, content, from = null) {
   ctx.out.set(path, content)
+  if (from) ctx.modes.set(path, statSync(from).mode & 0o777)
   ctx.byEntry.set(ctx.key, [...(ctx.byEntry.get(ctx.key) || []), path])
 }
 function emitSkill(s, entry, agent, ctx) {
   const dest = join(SKILL_DIR[agent], basename(entry.from))
   if (ctx.skills.has(dest)) return null
   ctx.skills.add(dest)
-  for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs))
+  for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs), f.abs)
   logCopy(entry.from, dest); return null
 }
 function emitKit(s, entry, agent, ctx) {
@@ -287,8 +289,8 @@ function emitKit(s, entry, agent, ctx) {
   ctx.kit.add(entry.from)
   const dest = join(KIT_DIR, basename(entry.from))
   // A file entry (the CHANGELOG) lands AT dest, not inside a directory named after it.
-  if (s.isFile) put(ctx, dest, readFileSync(join(s.dir, s.name)))
-  else for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs))
+  if (s.isFile) put(ctx, dest, readFileSync(join(s.dir, s.name)), join(s.dir, s.name))
+  else for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs), f.abs)
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
 // Rules & agents for Claude. Verbatim, unless the profile is anchored to modules —
@@ -301,7 +303,7 @@ function emitClaudeRaw(s, entry, agent, ctx) {
     if (entry.kind === 'rule' && text && isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
     const t = s.isFile ? entry.to : join(entry.to, f.rel)
     const scoped = entry.kind === 'rule' && text ? toScopedRuleText(text, prefixes) : null
-    put(ctx, t, scoped ? Buffer.from(scoped) : readFileSync(f.abs))
+    if (scoped) put(ctx, t, Buffer.from(scoped)); else put(ctx, t, readFileSync(f.abs), f.abs)
     n++
   }
   logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
@@ -582,7 +584,7 @@ function readLock({ known = true } = {}) {
     for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
   }
   // Codex's inventory feeds the same ownership plan, whichever targets this run selects.
-  if (lock.codex !== undefined) checkCodexInventory(lock.codex)
+  if (lock.codex !== undefined) checkCodexInventory(lock.codex, false)
   delete lock.repo
   delete lock.ref
   lock.profiles = unpack(lock.profiles)
@@ -689,7 +691,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), byEntry: new Map(), key: null }
+  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), modes: new Map(), byEntry: new Map(), key: null }
   const notes = []
   const staged = []
   let tree = null
@@ -747,7 +749,7 @@ async function install(profiles, fetched, agents, modules, levels) {
           if (e.kind === 'rule') content = Buffer.from(toScopedRuleText(content.toString(), prefixes) || content)
           const path = join('.agents', e.kind === 'rule' ? 'rules' : 'skills', ...(s.isFile ? [] : [basename(e.from)]), f.rel)
           files[path] = { content, profiles: owners, kind: e.kind }
-          put({ ...ctx, key: entryKey(e) }, path, content)
+          put({ ...ctx, key: entryKey(e) }, path, content, e.kind === 'skill' ? f.abs : null)
           if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
         }
       }
@@ -758,7 +760,7 @@ async function install(profiles, fetched, agents, modules, levels) {
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
     const previous = readLock()
     const recorded = ownedFiles(previous)
-    const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
+    const plan = { writes: ctx.out, modes: ctx.modes, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
     const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)
     const corrupt = checkTree({
       ...plan,

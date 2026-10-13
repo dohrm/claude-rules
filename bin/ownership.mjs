@@ -1,6 +1,6 @@
 // Ownership (ADR-0010): which files the installer wrote, checked before anything is
 // written or deleted, then applied. Generalised from the Codex adapter (ADR-0003).
-import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, chmodSync } from 'node:fs'
 import { resolve, relative, dirname, join, isAbsolute, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 
@@ -105,13 +105,14 @@ export function checkTree({ writes, deletes, owned, dirs }) {
 // Apply a checked plan, in order: under --force, the listed paths no write replaces;
 // then every owned file no longer produced; then every write. Deleting first is what
 // lets a file turn into a directory, or back, with no special case.
-export function applyTree({ writes, deletes, corrupt = new Map() }, onDelete = () => {}) {
+export function applyTree({ writes, modes = new Map(), deletes, corrupt = new Map() }, onDelete = () => {}) {
   for (const path of corrupt.keys()) if (!writes.has(path)) removePath(path)
   for (const path of deletes) if (existsSync(path)) { removePath(path); onDelete(path) }
   for (const [path, content] of writes) {
     if (existsSync(path) && lstatSync(path).isDirectory()) rmSync(path, { recursive: true })
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
+    if (modes.has(path)) chmodSync(path, modes.get(path))
   }
 }
 function removePath(path) {

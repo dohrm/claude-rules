@@ -2,7 +2,7 @@
 // it cannot explain. Black-box, offline (--local), every target.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, lstatSync, mkdirSync, writeFileSync, cpSync, existsSync } from 'node:fs'
+import { readdirSync, lstatSync, mkdirSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { REPO, runCli, runCliBare, withTmpRepo, read } from './helpers.mjs'
@@ -341,4 +341,20 @@ test('adoption never decides alone about an unexplained file in the agents root'
   const forced = ok(runCli(['update', '--force'], dir))
   assert.match(forced.stdout, /! \.claude\/agents\/dropped-upstream\.md — /)
   assert.ok(!existsSync(join(dir, '.claude/agents/dropped-upstream.md')), 'gone, and listed, under an explicit --force')
+}))
+
+// Tier 3, round 3.
+test('a copied file keeps its mode: the kit\'s executable script stays executable', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', '--agent', 'claude', '--level', 'gates'], dir))
+  assert.equal(lstatSync(join(dir, '.dev/kit/rust/rust-fmt.sh')).mode & 0o111, lstatSync(join(REPO, 'kit/rust/rust-fmt.sh')).mode & 0o111)
+  assert.notEqual(lstatSync(join(dir, '.dev/kit/rust/rust-fmt.sh')).mode & 0o100, 0)
+}))
+
+test('a file where an installed Codex skill directory was is listed, and --force repairs it', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'product', '--agent', 'codex'], dir))
+  rmSync(join(dir, '.agents/skills/rfc'), { recursive: true })
+  write(dir, '.agents/skills/rfc', 'a file where the skill was\n')
+  refused(dir, ['update'], [['.agents/skills/rfc', 'a file where a directory goes']])
+  ok(runCli(['update', '--force'], dir))
+  assert.equal(read(dir, '.agents/skills/rfc/SKILL.md'), read(REPO, 'skills/rfc/SKILL.md'))
 }))
