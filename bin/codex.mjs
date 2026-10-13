@@ -55,7 +55,7 @@ export function instructionBlocks(rules, modules) {
   return blocks
 }
 
-function checkInventory(previous = {}) {
+export function checkCodexInventory(previous = {}) {
   if (previous.version !== undefined && previous.version !== 1) throw new Error('Unsupported Codex ownership version')
   for (const path of Object.keys(previous.files || {})) {
     if (!/^\.agents\/(rules|skills)\/.+/.test(path)) throw new Error(`Invalid Codex-owned path: ${path}`)
@@ -71,7 +71,7 @@ function checkInventory(previous = {}) {
 }
 
 export function prepareCodex(files, rules, modules, previous = {}) {
-  checkInventory(previous)
+  checkCodexInventory(previous)
   const blocks = instructionBlocks(rules, modules)
   const inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
   // The asset files themselves are written, checked and pruned by the shared ownership
@@ -102,7 +102,7 @@ export function applyCodex(plan) {
 export function auditCodex(lock, bad, warn) {
   if (!lock.codex) { bad.push('Codex ownership inventory missing — explicitly update to adopt the installation'); return }
   try {
-    checkInventory(lock.codex)
+    checkCodexInventory(lock.codex)
     for (const [path, asset] of Object.entries(lock.codex.files)) {
       if (!existsSync(path)) bad.push(`${path} — Codex asset missing`)
       else if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== asset.hash) bad.push(`${path} — Codex asset differs from its installed revision`)
@@ -126,7 +126,7 @@ export function auditCodex(lock, bad, warn) {
 
 export function codexBudget(lock, target, globToRe) {
   if (!lock?.codex) throw new Error('No Codex ownership inventory — install with --agent codex first')
-  checkInventory(lock.codex)
+  checkCodexInventory(lock.codex)
   const path = target ? safePath(target) : null
   const dir = path ? dirname(path) : '.'
   const chain = []

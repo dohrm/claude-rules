@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs'
 import { join, dirname, basename, isAbsolute } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { modulePath, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
+import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
 import { SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
@@ -351,19 +351,22 @@ function assertEntry(e, where) {
 }
 
 // Adoption, once (ADR-0010): a lock recorded without file hashes cannot tell a local
-// edit from a stale copy, so its first install overwrites every destination already on
-// disk, says so first, and needs --force when no terminal is there to read it.
-// Returns whether this run adopts.
-function adoption(previous, destinations) {
-  if (!previous || recordsHashes(previous)) return false
-  const present = destinations.filter(d => existsSync(safePath(d)))
-  if (!present.length) return false
+// edit from a stale copy, so its first install overwrites whole every destination
+// already on disk — this run's, the ones the old inventory names and no longer gets,
+// and the trees of retired targets — says so first, and needs --force when no terminal
+// is there to read it. Returns the paths it adopts (none: no adoption).
+function adoption(previous, destinations, agents) {
+  if (!previous || recordsHashes(previous)) return []
+  const before = agentsFromLock(previous).kept
+  const stale = (previous.installed || []).flatMap(e => { assertEntry(e, `${LOCK} installed`); return before.flatMap(a => destsFor(e, a)) })
+  const present = [...new Set([...destinations, ...stale, ...legacyTrees(agents)])].filter(d => existsSync(safePath(d)))
+  if (!present.length) return []
   console.log(`⚠ ${LOCK} records no file hashes: this run adopts the install. Every installed destination below is overwritten once, local edits included, then recorded:`)
   for (const d of present) console.log(`  ! ${d}`)
   console.log()
   if (!forceFlag && !process.stdin.isTTY)
     throw new Error('Adoption needs --force without a terminal: save any local edit under the destinations listed above, then re-run with --force. Nothing was changed.')
-  return true
+  return present
 }
 
 // The inventory's file paths are lock content too: each must sit under a root the
@@ -404,6 +407,15 @@ const kitNames = () => new Set([...registry.shared, ...Object.values(registry.pr
 // this change exists to kill: a justfile still pointing at it never sees an `update`
 // again. So add/update/remove purge it — BY NAME, one registry-known directory at a
 // time, never `rm -rf` on the root.
+// What the purges below would delete: the retired targets' trees, the registry-known
+// legacy kit directories and the retired skills' directories.
+function legacyTrees(agents) {
+  const known = kitNames()
+  const kit = existsSync(LEGACY_KIT_DIR) ? readdirSync(LEGACY_KIT_DIR).filter(n => known.has(n)).map(n => join(LEGACY_KIT_DIR, n)) : []
+  assertRetiredSkills()
+  const skills = agents.flatMap(a => (registry.retired?.skills || []).map(n => `${SKILL_DIR[a]}/${n}`))
+  return [...RETIRED_DIRS, ...kit, ...skills]
+}
 function purgeLegacyKit() {
   if (!existsSync(LEGACY_KIT_DIR)) return
   const known = kitNames()
@@ -506,8 +518,6 @@ function remove(profilesArg) {
   applyTree(plan, path => console.log(`  ✗ ${path}`))
   if (codex) applyCodex(codex)
   if (fullUninstall) {
-    purgeRetired()
-    purgeLegacyKit()
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
   } else {
@@ -569,6 +579,8 @@ function readLock({ known = true } = {}) {
     if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
     for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
   }
+  // Codex's inventory feeds the same ownership plan, whichever targets this run selects.
+  if (lock.codex !== undefined) checkCodexInventory(lock.codex)
   delete lock.repo
   delete lock.ref
   lock.profiles = unpack(lock.profiles)
@@ -745,20 +757,24 @@ async function install(profiles, fetched, agents, modules, levels) {
     const previous = readLock()
     const recorded = ownedFiles(previous)
     const plan = { writes: ctx.out, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
-    const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))])
+    const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)
     plan.corrupt = settleCorruption(checkTree({
       ...plan,
       owned: recorded,
-      dirs: [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
-    }), forceFlag || adopted)
+      // A skill is one unit: its directory holds nothing else. An adopted destination
+      // is overwritten whole, so whatever this run does not write in it goes — except
+      // the agents root, which holds the repo's own agents beside ours.
+      dirs: adopted.length ? adopted.filter(d => d !== ENTRY_ROOT.agent)
+        : [...new Set(staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))],
+    }), forceFlag || adopted.length > 0)
     if (codexInput) codex = prepareCodex(...codexInput, modules, previous?.codex)
     // Apply: what the previous install wrote and this one no longer produces goes first
     // (an entry dropped upstream, a destination moved), then every write.
     applyTree(plan, path => console.log(`  ✗ ${path}  (no longer installed)`))
     if (codex) applyCodex(codex)
-    purgeRetired()
-    purgeRetiredSkills(agents, Boolean(codex))
-    purgeLegacyKit()
+    // Retired targets and the legacy kit root are cleaned up once, by the adoption that
+    // listed them; a hashed install deletes only what it recorded.
+    if (adopted.length) { purgeRetired(); purgeRetiredSkills(agents, Boolean(codex)); purgeLegacyKit() }
     for (const record of installed)
       record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed)
@@ -1383,7 +1399,7 @@ function doctor() {
     if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
 
   for (const dir of RETIRED_DIRS)
-    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Run \`update\` to purge it.`)
+    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Delete it: \`update\` purges it only when it adopts a lock without file hashes.`)
   if (agents.includes('codex')) {
     for (const rule of lock.codex?.rules || []) {
       const owners = rule.profiles.filter(p => lock.profiles.includes(p))

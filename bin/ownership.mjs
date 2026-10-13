@@ -67,9 +67,10 @@ const filesUnder = dir => walk(dir).map(f => slash(f.abs))
 
 // The check before writing. `writes`: path → content this run produces; `deletes`:
 // owned paths it no longer produces; `owned`: path → recorded hash; `dirs`: installed
-// directories whose every file must be explained. A path is fine when it is absent,
-// owned and unchanged, or already holds exactly what will be written. Anything else
-// is a corruption — listed, never reconciled. Returns Map path → why.
+// destinations whose every file must be explained. A path is fine when it is absent,
+// or owned and unchanged; a directory where a file goes, only when every file in it is
+// owned and goes first. Anything else is a corruption — listed, never reconciled.
+// Returns Map path → why.
 export function checkTree({ writes, deletes, owned, dirs }) {
   const corrupt = new Map()
   const gone = new Set(deletes)
@@ -78,19 +79,23 @@ export function checkTree({ writes, deletes, owned, dirs }) {
     if (at.kind === 'file') { if (hash(readFileSync(path)) !== owned.get(path)) corrupt.set(path, 'edited since it was installed') }
     else if (at.kind !== 'absent') corrupt.set(path, 'not a file, where an installed file was')
   }
-  for (const [path, content] of writes) {
+  for (const path of writes.keys()) {
     const at = stand(path)
     if (at.blocker) { if (!gone.has(at.blocker)) corrupt.set(at.blocker, 'a file where a directory goes'); continue }
     if (at.kind === 'file') {
-      const current = hash(readFileSync(path))
-      if (current !== hash(content) && current !== owned.get(path))
-        corrupt.set(path, owned.has(path) ? 'edited since it was installed' : 'not written by claude-rules')
+      if (!owned.has(path)) corrupt.set(path, 'not written by claude-rules')
+      else if (hash(readFileSync(path)) !== owned.get(path)) corrupt.set(path, 'edited since it was installed')
     } else if (at.kind === 'dir') {
-      if (filesUnder(path).some(f => !gone.has(f))) corrupt.set(path, 'a directory where a file goes')
+      const inside = filesUnder(path)
+      if (!inside.length || inside.some(f => !gone.has(f))) corrupt.set(path, 'a directory where a file goes')
     } else if (at.kind === 'other') corrupt.set(path, 'not a regular file')
   }
   for (const dir of dirs) {
-    if (stand(dir).kind !== 'dir') continue
+    const kind = stand(dir).kind
+    if (kind !== 'dir') {
+      if (kind !== 'absent' && !writes.has(dir) && !owned.has(dir) && !corrupt.has(dir)) corrupt.set(dir, 'not written by claude-rules, at an installed destination')
+      continue
+    }
     for (const f of filesUnder(dir))
       if (!writes.has(f) && !owned.has(f) && !corrupt.has(f)) corrupt.set(f, 'not written by claude-rules, inside an installed directory')
   }

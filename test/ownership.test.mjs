@@ -281,3 +281,48 @@ test('a lock without hashes and nothing installed on disk is no adoption', () =>
   const r = ok(runCli(['update'], dir))
   assert.doesNotMatch(r.stdout, /adopts the install/)
 }))
+
+// ------------------------------------------------- Tier 3, round 1 findings
+test('a forged Codex inventory path is refused even when Codex is not a target', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+  write(dir, 'src/main.rs', 'fn main() {}\n')
+  const lock = JSON.parse(read(dir, LOCK))
+  lock.codex = { version: 1, files: { 'src/main.rs': { hash: sha256('fn main() {}\n'), profiles: [], kind: 'rule' } }, rules: [], blocks: [] }
+  writeFileSync(join(dir, LOCK), JSON.stringify(lock, null, 2) + '\n')
+  const r = runCli(['update'], dir)
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /Invalid Codex-owned path: src\/main\.rs/)
+  assert.equal(read(dir, 'src/main.rs'), 'fn main() {}\n')
+}))
+
+test('a hashed install never purges a retired skill directory it did not record', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'product', '--agent', 'claude'], dir))
+  write(dir, '.claude/skills/plan/mine.md', 'mine\n')
+  ok(runCli(['update'], dir))
+  assert.equal(read(dir, '.claude/skills/plan/mine.md'), 'mine\n')
+}))
+
+test('identical content and an empty directory are not ownership', () => withTmpRepo(dir => {
+  write(dir, '.claude/rules/rust/code-style.md', read(REPO, 'rules/rust/code-style.md'))
+  mkdirSync(join(dir, '.claude/rules/rust/logging.md'))
+  refused(dir, ['add', 'rust', '--agent', 'claude'], [
+    ['.claude/rules/rust/code-style.md', 'not written by claude-rules'],
+    ['.claude/rules/rust/logging.md', 'a directory where a file goes'],
+  ])
+}))
+
+test('adoption overwrites a moved destination and a file dropped upstream, listed first', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+  const lock = JSON.parse(read(dir, LOCK))
+  for (const record of lock.installed) delete record.files
+  lock.installed.find(i => i.from === 'rules/rust').to = '.claude/rules/team'   // where a phase-1 source put it
+  writeFileSync(join(dir, LOCK), JSON.stringify(lock, null, 2) + '\n')
+  write(dir, '.claude/rules/team/code-style.md', 'the old copy\n')
+  write(dir, '.claude/rules/rust/dropped-upstream.md', 'stale\n')
+  const r = ok(runCli(['update', '--force'], dir))
+  assert.match(r.stdout, /^ {2}! \.claude\/rules\/team$/m)
+  assert.ok(!existsSync(join(dir, '.claude/rules/team')), 'the moved destination goes')
+  assert.ok(!existsSync(join(dir, '.claude/rules/rust/dropped-upstream.md')), 'the adopted destination is overwritten whole')
+  assert.ok(existsSync(join(dir, '.claude/rules/rust/code-style.md')))
+  assert.deepEqual(snapshot(dir)['.claude/rules/rust/code-style.md'], read(REPO, 'rules/rust/code-style.md'))
+}))

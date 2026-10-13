@@ -233,14 +233,18 @@ test('the kit has one home whatever the agents, and is copied once', () => {
 // An install that predates the move leaves .claude/kit/ behind, and a justfile still
 // importing from it never sees an `update` again — the exact drift the move fixes. So
 // add/update purge it, BY NAME: a directory the repo put there itself survives.
-test('add purges the legacy .claude/kit, keeping what is not ours', () => {
+// Legacy trees go once, with the adoption that lists them (ADR-0010): a pre-RFC lock.
+test('adoption purges the legacy .claude/kit, keeping what is not ours', () => {
   withTmpRepo(dir => {
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
+
     mkdirSync(join(dir, '.claude/kit/rust'), { recursive: true })
     writeFileSync(join(dir, '.claude/kit/rust/deny.toml'), 'stale\n')
     mkdirSync(join(dir, '.claude/kit/mine'), { recursive: true })
     writeFileSync(join(dir, '.claude/kit/mine/notes.md'), 'mine\n')
 
-    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
+    assert.match(r.stdout, /^  ! \.claude\/kit\/rust$/m, 'listed before it goes')
     assert.ok(!has(dir, '.claude/kit/rust'), 'the legacy kit copy must go')
     assert.ok(has(dir, '.claude/kit/mine/notes.md'), 'only registry-known kit dirs may be deleted')
     assert.match(r.stdout, /\.claude\/kit/, 'a silent move leaves the reader with two trees')
@@ -261,8 +265,10 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   })
 })
 
-test('add/update purge leftover trees from retired agent targets', () => {
+test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
+
     mkdirSync(join(dir, '.dev/rules/rust'), { recursive: true })
     writeFileSync(join(dir, '.dev/rules/rust/code-style.md'), 'stale\n')
     mkdirSync(join(dir, '.opencode/agent'), { recursive: true })
@@ -278,7 +284,8 @@ test('add/update purge leftover trees from retired agent targets', () => {
       '',
     ].join('\n'))
 
-    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
+    assert.match(r.stdout, /^  ! \.opencode$/m, 'listed before it goes')
     assert.ok(!has(dir, '.dev/rules'), 'Codex/opencode rule copies must go')
     assert.ok(!has(dir, '.opencode'), 'the opencode tree must go')
     assert.ok(has(dir, '.agents/rules'), 'unowned Codex bridge must survive')
@@ -287,18 +294,19 @@ test('add/update purge leftover trees from retired agent targets', () => {
   })
 })
 
-test('update drops a retired profile from an old lock and purges retired skills', () => {
+test('update drops a retired profile from an old lock; its adoption purges retired skills', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
     const lock = lockOf(dir)
     lock.profiles = [...lock.profiles, 'goal-setup']
     lock.modules['.'] = [...lock.modules['.'], 'goal-setup']
     lock.levels = { ...lock.levels, 'goal-setup': 'rules' }
+    for (const record of lock.installed) delete record.files   // an old lock: no hashes
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
     mkdirSync(join(dir, '.claude/skills/plan'), { recursive: true })
     writeFileSync(join(dir, '.claude/skills/plan/SKILL.md'), '---\nname: plan\n---\n')
 
-    const r = ok(runCli(['update'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
     const after = lockOf(dir)
     assert.ok(!after.profiles.includes('goal-setup'))
     assert.ok(!after.modules['.'].includes('goal-setup'))
