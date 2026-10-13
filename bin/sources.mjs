@@ -4,7 +4,7 @@ import { readFileSync, existsSync, cpSync, readdirSync, statSync, mkdtempSync, m
 import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { safePath } from './ownership.mjs'
+import { safePath, plainPath } from './ownership.mjs'
 
 // The lock pins an ordered list of sources. The first is this library, `core`; a lock
 // written before sources existed (`repo` + `ref`) reads as core alone and is rewritten
@@ -119,6 +119,10 @@ function mergeRegistries(fetched) {
     const reg = JSON.parse(readFileSync(file, 'utf8'))
     for (const [key, [valid, what]] of Object.entries(SHAPE))
       if (reg[key] !== undefined && !valid(reg[key])) throw new Error(`source ${source.name}: registry.json "${key}" must ${what}`)
+    // Paths this source removes from the layers before it (stageTree).
+    source.exclude = reg.exclude ?? []
+    if (!isList(source.exclude) || !source.exclude.every(plainPath))
+      throw new Error(`source ${source.name}: registry.json "exclude" must be a list of relative paths`)
     for (const e of [...(reg.shared || []), ...Object.values(reg.profiles || {}).flat()])
       if (e && typeof e === 'object') declaredBy.set(e, source.name)
     if (!merged) { merged = { ...reg, shared: reg.shared || [], profiles: { ...reg.profiles }, aliases: { ...reg.aliases } }; continue }
@@ -147,14 +151,27 @@ function assertInside(root, abs, seen = new Set()) {
 // in the repo and no emitter knows where a file came from. Layers are overlaid in
 // order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
 // whole directory for a skill, so a skill is never half one layer, half another.
-// Returns the tree's directory.
+// A layer's `exclude` removes what the layers before it put there, a file or a whole
+// skill; a later layer may put it back. Returns { tree, excluded }: excluded maps each
+// path that stays removed to the source that removed it.
+const under = (path, dir) => path === dir || path.startsWith(dir + '/')
 export function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
+  const excluded = new Map()
   try {
     for (const { from, kind } of entries) {
       const dest = join(tree, from)
       let found = false
+      const gone = new Map()
       for (const layer of layers) {
+        for (const path of layer.exclude || []) {
+          if (!under(path, from) && !under(from, path)) continue
+          if (kind === 'skill' && path !== from && under(path, from))
+            throw new Error(`source ${layer.name}: exclude ${path}: a skill is excluded whole (${from})`)
+          const at = under(from, path) ? from : path
+          rmSync(join(tree, at), { recursive: true, force: true })
+          gone.set(at, layer.name)
+        }
         const src = join(layer.dir, from)
         if (!existsSync(src)) continue
         assertInside(realpathSync(layer.dir), src)
@@ -162,10 +179,11 @@ export function stageTree(layers, entries) {
         overlay(src, dest, from, layer.name)
         found = true
       }
-      if (!found) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      if (!found && !gone.size) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
+      for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return tree
+  return { tree, excluded }
 }
 // One layer over the tree, file by file. A path that is a file in one layer and a
 // directory in another has no answer: it is refused, never resolved (ADR-0010).

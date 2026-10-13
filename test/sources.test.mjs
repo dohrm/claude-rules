@@ -561,3 +561,45 @@ test('an overlay registry of the wrong shape is refused before any write', () =>
     assert.deepEqual(readdirSync(repo), [LOCK])
   })
 })
+
+test('an overlay\'s exclude removes core paths from the merged tree, and update deletes their installed copies', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const team = makeSource(root, 'team', [], { 'registry.json': JSON.stringify({ exclude: ['rules/team/b.md', 'skills/team'] }) })
+    const coreOnly = [{ name: 'core', url: core.url, ref: 'main' }]
+    const repo = consumer(root, coreOnly)
+    ok(cli(['update'], repo))
+    assert.ok(has(repo, '.claude/rules/team/b.md') && has(repo, '.claude/skills/team/SKILL.md'))
+
+    const lock = lockOf(repo)
+    lock.sources = [...coreOnly, { name: 'team', url: team.url, ref: 'main' }]
+    writeFileSync(join(repo, LOCK), JSON.stringify(lock, null, 2) + '\n')
+    const r = ok(cli(['update'], repo))
+    assert.match(r.stdout, /− rules\/team\/b\.md {2}\(excluded by team\)/)
+    assert.match(r.stdout, /− skills\/team {2}\(excluded by team\)/)
+    assert.ok(!has(repo, '.claude/rules/team/b.md'), 'the excluded rule disappears')
+    assert.ok(!has(repo, '.claude/skills/team'), 'the excluded skill disappears whole')
+    assert.equal(read(repo, '.claude/rules/team/a.md'), '# core a\n', 'the rest of the entry stays')
+    const after = lockOf(repo)
+    assert.ok(!after.installed.some(i => i.from === 'skills/team'), 'an entry excluded whole is not inventoried')
+    assert.ok(!Object.keys(after.installed.find(i => i.from === 'rules/team').files).includes('.claude/rules/team/b.md'))
+  })
+})
+
+test('an exclude inside a skill, or one that is not a plain relative path, is refused', () => {
+  withTmpRepo(root => {
+    const core = teamCore(root)
+    const cases = [[['skills/team/notes.md'], /exclude skills\/team\/notes\.md: a skill is excluded whole \(skills\/team\)/],
+      [['../outside'], /source team: registry\.json "exclude" must be a list of relative paths/]]
+    for (const [i, [exclude, why]] of cases.entries()) {
+      const at = join(root, `case${i}`)
+      mkdirSync(at)
+      const team = makeSource(at, 'team', [], { 'registry.json': JSON.stringify({ exclude }) })
+      const repo = consumer(at, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+      const r = cli(['update'], repo)
+      assert.equal(r.status, 1, exclude[0])
+      assert.match(r.stderr, why)
+      assert.deepEqual(readdirSync(repo), [LOCK])
+    }
+  })
+})

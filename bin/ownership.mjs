@@ -7,6 +7,10 @@ import { createHash } from 'node:crypto'
 export const hash = content => createHash('sha256').update(content).digest('hex')
 const slash = path => path.split(sep).join('/')
 
+// A path named by content this CLI did not ship (a registry, a lock): relative, with
+// no `.`, `..` or empty segment.
+export const plainPath = p => typeof p === 'string' && p !== '' && !isAbsolute(p) && !p.split(/[\\/]/).some(seg => seg === '..' || seg === '.' || seg === '')
+
 // Check every ancestor, including dangling symlinks, before reading or writing.
 export function safePath(path) {
   const root = process.cwd(), abs = resolve(path), rel = relative(root, abs)

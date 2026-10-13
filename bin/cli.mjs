@@ -17,10 +17,10 @@
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync } from 'node:fs'
-import { join, dirname, basename, isAbsolute } from 'node:path'
+import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
-import { safePath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
+import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
 import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, withSources as fetchSources, stageTree } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
@@ -346,7 +346,6 @@ const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
 // only name a path under the root its kind owns, or a forged `to: "src"` would let
 // emit write into a project directory.
 const ENTRY_ROOT = { rule: '.claude/rules/', agent: '.claude/agents' }
-const plainPath = p => typeof p === 'string' && p !== '' && !isAbsolute(p) && !p.split(/[\\/]/).some(seg => seg === '..' || seg === '.' || seg === '')
 function assertEntry(e, where) {
   const name = e && typeof e.from === 'string' ? basename(e.from) : ''
   const ok = e && ['rule', 'agent', 'skill', 'kit'].includes(e.kind) && plainPath(e.from) && name
@@ -683,7 +682,7 @@ async function install(profiles, fetched, agents, modules, levels) {
   }
   // Carry the profile each entry came from: it is what maps an entry to the
   // module(s) that asked for it, and therefore to its glob prefixes.
-  const owned = [
+  let owned = [
     ...registry.shared.map(e => ({ e, profile: null })),
     ...profiles.flatMap(p => entriesAt(p, levels[p] || 'rules').map(e => ({ e, profile: p }))),
   ]
@@ -717,7 +716,12 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    tree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    const staging = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    tree = staging.tree
+    // An entry excluded whole is not installed; a file excluded inside one is not
+    // emitted. Their copies are then owned and no longer produced: the apply deletes them.
+    for (const [path, by] of staging.excluded) console.log(`  − ${path}  (excluded by ${by})`)
+    owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
     installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
