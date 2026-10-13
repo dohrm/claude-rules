@@ -21,7 +21,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
-import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides } from './sources.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides, changedUpstream } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
 // The registry bundled with the CLI. `add` and `update` replace it with the merge of
@@ -798,6 +798,12 @@ async function install(profiles, fetched, agents, modules, levels) {
     // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
     // Read as written: its profiles may be ones no source defines any more (remove --source).
     const previous = readLock({ known: false })
+    // An override no longer receives what changed under it: say so, and under
+    // `update --strict` stop before anything is written.
+    const moved = changedUpstream(previous?.overrides, staging.overrides)
+    for (const o of moved) console.log(`⚠ ${o.path} changed in ${o.over} (overridden by ${o.by})`)
+    if (moved.length && strictFlag && cmd === 'update')
+      throw new Error(`--strict: ${moved.length} overridden path(s) changed upstream; nothing was changed. Review each change, then run \`update\` without --strict to record the new base.`)
     const recorded = ownedFiles(previous)
     const plan = { writes: ctx.out, modes: ctx.modes, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
     const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)

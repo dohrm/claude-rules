@@ -850,6 +850,33 @@ test('add and update record every override in the lock, with the base it replace
   })
 })
 
+test('update warns when a replaced path changed in the layer under it; --strict fails and changes nothing', () => {
+  withTmpRepo(root => {
+    const { core, team, repo } = layered(root)
+    ok(cli(['update'], repo))
+    core.commit({ 'rules/team/a.md': '# core a v2\n', 'skills/team/notes.md': 'core notes v2\n' })
+    team.commit({ 'rules/team/a.md': '# overlay a v2\n' })
+
+    const before = read(repo, LOCK)
+    const strict = cli(['update', '--strict'], repo)
+    assert.equal(strict.status, 1, strict.stdout + strict.stderr)
+    assert.ok(strict.stdout.includes('⚠ rules/team/a.md changed in core (overridden by team)'))
+    assert.ok(strict.stdout.includes('⚠ rules/team/a.md changed in team (overridden by .dev/overrides)'))
+    assert.ok(strict.stdout.includes('⚠ skills/team changed in core (overridden by team)'))
+    assert.ok(!strict.stdout.includes('⚠ rules/team/b.md'), 'b.md did not change upstream')
+    assert.match(strict.stderr, /--strict: 3 overridden path\(s\) changed upstream; nothing was changed/)
+    assert.equal(read(repo, LOCK), before, 'lock unchanged')
+
+    const r = ok(cli(['update'], repo))
+    assert.ok(r.stdout.includes('⚠ rules/team/a.md changed in core (overridden by team)'), 'without --strict: a warning, and the install goes on')
+    const base = lockOf(repo).overrides.find(o => o.path === 'rules/team/a.md' && o.by === 'team').baseHash
+    assert.equal(base, sha('# core a v2\n'), 'the new base is recorded')
+    // Recorded, so the next strict run passes.
+    const again = ok(cli(['update', '--strict'], repo))
+    assert.ok(!again.stdout.includes('⚠'))
+  })
+})
+
 test('remove drops the overrides of the entries it removes', () => {
   withTmpRepo(root => {
     const { repo } = layered(root)

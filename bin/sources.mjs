@@ -286,3 +286,10 @@ export function assertOverrides(list, lockName) {
     && typeof o.over === 'string' && o.over && typeof o.baseHash === 'string' && /^[0-9a-f]{64}$/.test(o.baseHash))
   if (!valid) throw new Error(`${lockName}: "overrides" must be a list of { path, by, over, baseHash }`)
 }
+// An override whose replaced file moved since the last install (ADR-0008): the same
+// path, layer and replaced layer, with another base. A replacement new to this run has
+// no earlier base, so nothing to compare.
+export function changedUpstream(previous = [], current) {
+  const base = new Map(previous.map(o => [`${o.path}\0${o.by}\0${o.over}`, o.baseHash]))
+  return current.filter(o => { const was = base.get(`${o.path}\0${o.by}\0${o.over}`); return was !== undefined && was !== o.baseHash })
+}
