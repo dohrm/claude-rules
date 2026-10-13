@@ -9,4 +9,4 @@
 
 ## Blocked on the human
 
-- The stopping condition passes without its witness (missing test file ignored by `node --test`); amend it, then raise the level back if wanted — see the ticket.
+- Autonomy is L3 after the failed launch check; the human raises it back to L4 if wanted, then `/rfc implement #33`.
