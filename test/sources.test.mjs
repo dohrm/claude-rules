@@ -456,3 +456,35 @@ test('a skill dropped upstream while Codex is adopted is still pruned, and remov
     assert.ok(!has(repo, '.agents/skills/team'))
   })
 })
+
+// ------------------------------------------------------------------ several layers
+// Two sources in one lock: core first, then a team overlay. The last path wins.
+function writeLayers(dir, sources, profiles = ['rust'], agents = ['claude']) {
+  writeFileSync(join(dir, LOCK), JSON.stringify({ sources, profiles, agents, levels: Object.fromEntries(profiles.map(p => [p, 'rules'])) }, null, 2) + '\n')
+}
+const withSkill = reg => ({ ...reg, profiles: { ...reg.profiles, rust: [...reg.profiles.rust, { from: 'skills/team', to: '.claude/skills/team', kind: 'skill' }] } })
+const SKILL = '---\nname: team\ndescription: core\n---\n'
+
+test('an overlay replaces a core rule file, and a core skill whole', () => {
+  withTmpRepo(root => {
+    const reg = withSkill(JSON.parse(read(REPO, 'registry.json')))
+    const core = makeSource(root, 'core', CORE_PATHS, {
+      'registry.json': JSON.stringify(reg, null, 2) + '\n',
+      'skills/team/SKILL.md': SKILL,
+      'skills/team/reference.md': '# core-only page\n',
+    })
+    const team = makeSource(root, 'team', [], {
+      [STYLE]: '# team code style\n',
+      'skills/team/SKILL.md': '---\nname: team\ndescription: team\n---\n',
+    })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLayers(repo, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    ok(cli(['update'], repo))
+    assert.equal(read(repo, '.claude/rules/rust/code-style.md'), '# team code style\n', 'the overlay file wins')
+    assert.equal(read(repo, '.claude/rules/rust/error-handling.md'), read(REPO, 'rules/rust/error-handling.md'), 'core files the overlay does not name stay')
+    assert.match(read(repo, '.claude/skills/team/SKILL.md'), /description: team/)
+    assert.ok(!has(repo, '.claude/skills/team/reference.md'), 'no half skill: the overlay directory replaces the core one whole')
+    assert.deepEqual(lockOf(repo).sources.map(s => s.name), ['core', 'team'])
+  })
+})

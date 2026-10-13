@@ -338,7 +338,6 @@ async function withSources(fn) {
   let locked = null
   if (existsSync(LOCK)) { safePath(LOCK); locked = lockSources(JSON.parse(readFileSync(LOCK, 'utf8'))) }
   const sources = resolveSources(locked, parseRefs())
-  if (sources.length > 1) throw new Error(`Only the core source is supported; the lock lists ${sourcesLabel(sources)}`)
   const fetched = []
   // A validation deep in `fn` may process.exit, which skips `finally`: the fetched
   // trees (private content, git objects included) must not outlive the run either way.
@@ -369,19 +368,28 @@ function assertInside(root, abs, seen = new Set()) {
   for (const name of readdirSync(real)) assertInside(root, join(real, name), seen)
 }
 // The emitters read ONE tree, never a source: each entry's `from` is copied out of
-// the fetched sources into a temp dir, removed by the caller, so private content
-// never lands in the repo and no emitter knows where a file came from.
-// Returns { tree, origin }: origin maps each `from` to the source it was copied from.
-function stageTree(layers, froms) {
+// the layers into a temp dir, removed by the caller, so private content never lands
+// in the repo and no emitter knows where a file came from. Layers are overlaid in
+// order and the last path wins (ADR-0008): a file for rules, agents and kit, but a
+// whole directory for a skill — a later skill replaces the earlier one entirely, so
+// a skill is never half one layer, half another.
+// Returns { tree, origin }: origin maps each `from` to the first layer that held it.
+function stageTree(layers, entries) {
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   const origin = {}
   try {
-    for (const from of froms) {
-      const layer = layers.find(l => existsSync(join(l.dir, from)))
-      if (!layer) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
-      assertInside(realpathSync(layer.dir), join(layer.dir, from))
-      cpSync(join(layer.dir, from), join(tree, from), { recursive: true, dereference: true })
-      origin[from] = layer.name
+    for (const { from, kind } of entries) {
+      const dest = join(tree, from)
+      for (const layer of layers) {
+        const src = join(layer.dir, from)
+        if (!existsSync(src)) continue
+        assertInside(realpathSync(layer.dir), src)
+        if (existsSync(dest) && (kind === 'skill' || statSync(dest).isDirectory() !== statSync(src).isDirectory()))
+          rmSync(dest, { recursive: true, force: true })
+        cpSync(src, dest, { recursive: true, dereference: true })
+        origin[from] ??= layer.name
+      }
+      if (!origin[from]) throw new Error(`${from}: not found in source ${layers.map(l => l.name).join(', ')}`)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
   return { tree, origin }
@@ -787,7 +795,7 @@ async function install(profiles, fetched, agents, modules, levels) {
       const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
       if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
     }
-    const stagedTree = stageTree(fetched, [...new Set(owned.map(({ e }) => e.from))])
+    const stagedTree = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
     tree = stagedTree.tree
     installed = owned.map(({ e, profile }) => ({ source: stagedTree.origin[e.from], kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
