@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { lstatSync, readlinkSync, realpathSync, readFileSync, existsSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO } from './helpers.mjs'
 
@@ -21,11 +21,11 @@ const LINKS = {
 for (const [link, target] of Object.entries(LINKS)) {
   test(`${link} is a relative symlink to ${target}/`, () => {
     const abs = join(REPO, link)
-    assert.ok(existsSync(abs) && lstatSync(abs).isSymbolicLink(), `${link} must be a symlink`)
+    // lstat, not existsSync: a dangling link must fail on its target below, not here.
+    assert.ok(lstatSync(abs, { throwIfNoEntry: false })?.isSymbolicLink(), `${link} must be a symlink`)
     const rel = readlinkSync(abs)
     assert.ok(!rel.startsWith('/'), `${link} must be relative, got ${rel}`)
     assert.equal(realpathSync(abs), realpathSync(join(REPO, target)))
-    assert.equal(realpathSync(join(dirname(abs), rel)), realpathSync(join(REPO, target)))
   })
 }
 
@@ -43,6 +43,8 @@ test('the root justfile imports the kit library in place', () => {
   assert.match(text, /^set allow-duplicate-variables$/m)
 })
 
+// Local only: the main CI job runs `npm test` without `just`, so there the regexes above
+// are the witness and this case skips.
 test('just resolves kit and base from the root justfile', { skip: spawnSync('just', ['--version']).error && 'just not installed' }, () => {
   for (const [name, want] of [['kit', 'kit/common'], ['base', 'origin/next']]) {
     const r = spawnSync('just', ['--evaluate', name], { cwd: REPO, encoding: 'utf8' })

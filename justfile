@@ -11,9 +11,6 @@ import 'kit/common/gate.just'
 kit  := "kit/common"
 base := "origin/next"
 
-# The reviewer `just code-review` runs; a call may pass `reviewer=codex`.
-reviewer := "claude"
-
 # The local loop. CI runs the same suite (npm test) per job.
 check: test adr-check docs-check
 
