@@ -208,9 +208,17 @@ function assertInside(root, abs, seen = new Set()) {
 // A layer's `exclude` removes what the layers before it put there, a file or a whole
 // skill; a later layer may put it back. Returns { tree, excluded, overrides }: excluded
 // maps each path that stays removed to the source that removed it; overrides lists every
-// path a layer replaced, { path, by, over, baseHash } (ADR-0008), in staging order.
+// path a layer replaced, { path, by, over, baseHash } (ADR-0008), in staging order;
+// layerOf maps each staged file, or skill directory, to the layer it came from.
+// A source path is staged once: one inside another would replay every layer over an
+// already merged path, and record a layer replacing itself. Refused (ADR-0010).
 const under = (path, dir) => path === dir || path.startsWith(dir + '/')
 export function stageTree(layers, entries) {
+  const froms = entries.map(e => e.from)
+  for (const from of froms) {
+    const outer = froms.find(other => other !== from && under(from, other))
+    if (outer) throw new Error(`registry: ${from} is inside ${outer}: a source path is staged once`)
+  }
   const tree = mkdtempSync(join(tmpdir(), 'claude-rules-tree-'))
   const excluded = new Map()
   // Which layer put each staged path there, and what each replacement replaced.
@@ -253,7 +261,7 @@ export function stageTree(layers, entries) {
       for (const [path, by] of gone) if (!existsSync(join(tree, path))) excluded.set(path, by)
     }
   } catch (error) { rmSync(tree, { recursive: true, force: true }); throw error }
-  return { tree, excluded, overrides: [...replaced.values()] }
+  return { tree, excluded, overrides: [...replaced.values()], layerOf: holder }
 }
 // A staged skill directory, hashed as the sorted list of its (path, sha256).
 function dirHash(dir) {
@@ -286,10 +294,17 @@ export function assertOverrides(list, lockName) {
     && typeof o.over === 'string' && o.over && typeof o.baseHash === 'string' && /^[0-9a-f]{64}$/.test(o.baseHash))
   if (!valid) throw new Error(`${lockName}: "overrides" must be a list of { path, by, over, baseHash }`)
 }
-// An override whose replaced file moved since the last install (ADR-0008): the same
-// path, layer and replaced layer, with another base. A replacement new to this run has
-// no earlier base, so nothing to compare.
-export function changedUpstream(previous = [], current) {
-  const base = new Map(previous.map(o => [`${o.path}\0${o.by}\0${o.over}`, o.baseHash]))
-  return current.filter(o => { const was = base.get(`${o.path}\0${o.by}\0${o.over}`); return was !== undefined && was !== o.baseHash })
+// The overrides whose replaced version moved since the last install (ADR-0008), as
+// { path, by, over, change }: the same path and overriding layer with another base, or
+// no base left while that layer still supplies the path — the version it replaced is
+// gone. A replacement new to this run has no earlier base, so nothing to compare.
+export function changedUpstream(previous = [], current, layerOf) {
+  const now = new Map(current.map(o => [`${o.path}\0${o.by}`, o]))
+  const moved = []
+  for (const was of previous) {
+    const o = now.get(`${was.path}\0${was.by}`)
+    if (o) { if (o.baseHash !== was.baseHash) moved.push({ ...o, change: 'changed in' }) }
+    else if (layerOf.get(was.path) === was.by) moved.push({ ...was, change: 'removed from' })
+  }
+  return moved
 }

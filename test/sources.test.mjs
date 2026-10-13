@@ -887,3 +887,39 @@ test('remove drops the overrides of the entries it removes', () => {
     assert.deepEqual(lockOf(repo).overrides, [{ path: 'rules/common/language.md', by: '.dev/overrides', over: 'core', baseHash: sha(read(REPO, 'rules/common/language.md')) }])
   })
 })
+
+// Staging one source path twice would replay every layer over a merged path, and record
+// a layer replacing itself, or core replacing the project layer: refused (ADR-0010).
+test('two entries whose source paths nest are refused before any write', () => {
+  withTmpRepo(root => {
+    const reg = JSON.parse(read(REPO, 'registry.json'))
+    reg.profiles.team = [{ from: 'rules/common/language.md', to: '.claude/rules/extra.md', kind: 'rule' }]
+    const core = makeSource(root, 'core', CORE_PATHS, { 'registry.json': JSON.stringify(reg, null, 2) + '\n' })
+    const repo = consumer(root, [{ name: 'core', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /rules\/common\/language\.md is inside rules\/common: a source path is staged once/)
+    assert.equal(read(repo, LOCK), before)
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+  })
+})
+
+test('an overridden file deleted in the layer under it warns too, and fails under --strict', () => {
+  withTmpRepo(root => {
+    const { core, repo } = layered(root)
+    ok(cli(['update'], repo))
+    // b.md leaves core, the overriding project layer still supplies it.
+    spawnSync('git', ['rm', '-q', 'rules/team/b.md'], { cwd: join(root, 'core-work') })
+    core.commit({})
+    const before = read(repo, LOCK)
+    const strict = cli(['update', '--strict'], repo)
+    assert.equal(strict.status, 1, strict.stdout + strict.stderr)
+    assert.ok(strict.stdout.includes('⚠ rules/team/b.md removed from core (overridden by .dev/overrides)'))
+    assert.equal(read(repo, LOCK), before, 'lock unchanged')
+    assert.equal(read(repo, '.claude/rules/team/b.md'), '# mine b\n')
+    ok(cli(['update'], repo))
+    assert.ok(!lockOf(repo).overrides.some(o => o.path === 'rules/team/b.md'), 'nothing is replaced there any more')
+    ok(cli(['update', '--strict'], repo))
+  })
+})
