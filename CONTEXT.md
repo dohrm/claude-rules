@@ -29,9 +29,32 @@ each profile lives.
 _Avoid_: root (root is the flag/directory; a module is the lock's record of it)
 
 **Lock** (`.claude-rules.lock`):
-The record of what's installed — profiles, agents, modules, levels — that
-`update` replays at a new ref.
+The record of what's installed — sources, profiles, agents, modules, levels, every
+file written with its hash, and the overrides — that `update` replays at new refs.
 _Avoid_: manifest, config
+
+**Source**:
+One git repository the installer reads assets from, pinned in the lock as
+`{ name, url, ref }`. The first is always `core`, this library (ADR-0008).
+_Avoid_: repo (the consuming repo is the repo), remote, upstream
+
+**Overlay**:
+A source after `core`: its files replace earlier ones by path, its registry adds
+profiles and aliases, its `exclude` removes earlier paths. `.dev/overrides/` is the
+repo's own overlay, last and unpinned.
+_Avoid_: plugin, fork, extension
+
+**Override**:
+One path a later layer replaced, recorded as `{ path, by, over, baseHash }` and
+printed on `add`/`update`; `update` warns when the replaced version moved. A file
+for rules, agents and kit; a whole directory for a skill.
+_Avoid_: patch, customisation (an override replaces, it never merges)
+
+**Corruption**:
+A path the installer would write or delete that is neither absent nor recorded and
+unchanged — an edit, an unrecorded copy, a foreign file in a skill. Listed and
+refused, never reconciled; `--force` or the user fixes it (ADR-0010).
+_Avoid_: conflict, drift (drift is what `doctor` reports on a tree no command is changing)
 
 **Forge**:
 The git hosting platform running CI — GitHub or Gitea. The pipeline doctrine is

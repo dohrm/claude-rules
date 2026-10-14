@@ -10,20 +10,26 @@
 // Usage:
 //   npx github:dohrm/claude-rules add rust [ts go] [--agent claude,codex,cursor] [--root apps/api] [--level gates] [--ref v1.2.0]
 //   npx github:dohrm/claude-rules remove rust [ts go]       # uninstall profiles ("remove all" = full uninstall)
-//   npx github:dohrm/claude-rules update [--ref v1.3.0]     # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules update [--ref v1.3.0|<source>=<ref>] [--force] [--strict]  # re-install locked profiles+agents at ref
+//   npx github:dohrm/claude-rules add|remove --source <name>[=<url>#<ref>]  # add or drop a layered source
 //   npx github:dohrm/claude-rules init                      # assemble justfile + lefthook.yml + CLAUDE.md (if absent)
 //   npx github:dohrm/claude-rules doctor [--strict]         # audit the install against the repo (offline)
 //   npx github:dohrm/claude-rules budget [<path>] [--agent cursor]   # what loads for that file, and what it costs
 //   npx github:dohrm/claude-rules list
 //   (dev/test) add … --local <path-to-this-repo>            # read assets from disk instead of GitHub
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync, statSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
-import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { safePath, modulePath, hash, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
-// giget is imported lazily (only add/update without --local need it) so init/list run with no deps.
+import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
+import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
+import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides, changedUpstream } from './sources.mjs'
+// No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
 
-const registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
+// The registry bundled with the CLI. `add` and `update` replace it with the merge of
+// the registries their fetched sources carry (withSources): what a ref installs is
+// that ref's registry, not whatever copy the CLI happened to be run from. Commands
+// that fetch nothing (list, remove, doctor, init, budget) keep the bundled one.
+let registry = JSON.parse(readFileSync(new URL('../registry.json', import.meta.url), 'utf8'))
 const LOCK = '.claude-rules.lock'
 const KNOWN_AGENTS = ['claude', 'codex', 'cursor']
 const DEFAULT_AGENTS = ['claude', 'codex']
@@ -34,7 +40,8 @@ const RETIRED_DIRS = ['.dev/rules', '.opencode']
 const argv = process.argv.slice(2)
 const cmd = argv[0]
 const flag = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null }
-const refFlag = flag('--ref')
+// `--ref` repeats: `--ref <ref>` targets core, `--ref <name>=<ref>` a named source.
+const refFlags = argv.flatMap((a, i) => a === '--ref' && i + 1 < argv.length ? [argv[i + 1]] : [])
 const agentFlag = flag('--agent')
 const localFlag = flag('--local')
 const forceFlag = argv.includes('--force')
@@ -42,12 +49,13 @@ const moduleFlag = flag('--module')
 const rootFlag = flag('--root')
 const levelFlag = flag('--level')
 const strictFlag = argv.includes('--strict')
+const sourceFlag = flag('--source')
 if (rootFlag && moduleFlag) {
   console.error('--root and --module are the same flag; pass one.')
   process.exit(1)
 }
 const scopeFlag = rootFlag || moduleFlag
-const reserved = new Set(['--ref', refFlag, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict'].filter(Boolean))
+const reserved = new Set(['--ref', ...refFlags, '--agent', agentFlag, '--local', localFlag, '--module', moduleFlag, '--root', rootFlag, '--level', levelFlag, '--strict', '--force', '--source', sourceFlag].filter(Boolean))
 const positional = argv.slice(1).filter(a => !reserved.has(a))
 
 const LEVELS = ['rules', 'gates', 'ratchet']
@@ -68,8 +76,7 @@ const ROOT_HINT = new Set(['rust', 'ts', 'ts-web', 'ts-node', 'ts-tauri', 'go', 
 // what else was requested in the same `add` call.
 const ROOT_FORBID = new Set(['agent', 'product'])
 
-function unpackNames(names, quiet = false) {
-  const aliases = registry.aliases || {}
+function unpackNames(names, quiet = false, aliases = registry.aliases || {}) {
   const out = []
   const seen = new Set()
   const active = new Set()
@@ -89,6 +96,20 @@ function unpackNames(names, quiet = false) {
   }
   names.forEach(walk)
   return out
+}
+
+// ------------------------------------------------------------------- sources
+// Fetching, staging and the lock's `sources` live in bin/sources.mjs. Commands that
+// fetch run under the sources' merged registry from here on; `declaredBy` names the
+// source whose registry declared each of its entries.
+const lockSources = raw => readSources(raw, registry, LOCK)
+let declaredBy = new Map()
+function withSources(fn, edit) {
+  return fetchSources({ lockFile: LOCK, refFlags, localDir: localFlag, registry, edit }, (fetched, merged, declared) => {
+    registry = merged
+    declaredBy = declared
+    return fn(fetched)
+  })
 }
 
 function parseLevel() {
@@ -137,16 +158,6 @@ const KIT_DIR = '.dev/kit'
 const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put it
 
 // ------------------------------------------------------------------ fs utils
-const ensureDir = d => mkdirSync(d, { recursive: true })
-function walk(dir) {
-  const out = []
-  for (const name of readdirSync(dir)) {
-    const abs = join(dir, name)
-    if (lstatSync(abs).isDirectory()) out.push(...walk(abs).map(f => ({ abs: f.abs, rel: join(name, f.rel) })))
-    else out.push({ abs, rel: name })
-  }
-  return out
-}
 const logCopy = (from, to) => console.log(`  ✓ ${from}  →  ${to}`)
 
 // ------------------------------------------------------- frontmatter (dep-free)
@@ -230,13 +241,6 @@ function isLanguageDead(globs, profiles) {
   return !exts.some(e => locked.has(e))
 }
 
-// Rules are library-owned and never hand-edited (that is the whole point of the
-// per-agent emitters), so a rule directory is cleared before it is rewritten:
-// otherwise a rule dropped upstream — or skipped by the language filter — survives
-// on disk as an orphan that `update` can never reach. Kit is deliberately NOT
-// cleared: it is the "copy and own" surface, and the repo may have added to it.
-function resetDir(dir) { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) }
-
 // ----------------------------------------------------------------- transforms
 // Claude rule (.md, `paths:`/`title:`) → Cursor rule (.mdc, `globs:`/`alwaysApply`).
 function toMdcText(text, prefixes = []) {
@@ -256,41 +260,30 @@ function toScopedRuleText(text, prefixes) {
   return `---\n${dumpFm({ ...fm, paths: scopeGlobs(fm.paths, prefixes) })}\n---\n${body}`
 }
 // -------------------------------------------------------------------- staging
-// Returns { dir, isFile, name, temp } — a readable source for the entry.
-async function makeStaged(ref, entry) {
+// Returns { dir, isFile, name } — a readable view of the entry inside the staged tree.
+function makeStaged(root, entry) {
   const isFile = /\.[a-z0-9]+$/i.test(entry.from)
-  const name = basename(entry.from)
-  if (localFlag) {
-    const abs = join(localFlag, entry.from)
-    return { dir: isFile ? dirname(abs) : abs, isFile, name, temp: false }
-  }
-  const dir = mkdtempSync(join(tmpdir(), 'claude-rules-'))
-  // giget fetches a DIRECTORY tarball; a file path yields an empty dir and no error.
-  // A file entry (the CHANGELOG) comes from the raw endpoint instead.
-  if (isFile) {
-    try {
-      const url = `https://raw.githubusercontent.com/${registry.repo}/${encodeURIComponent(ref)}/${entry.from}`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
-      writeFileSync(join(dir, name), Buffer.from(await res.arrayBuffer()))
-    } catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
-    return { dir, isFile, name, temp: true }
-  }
-  const { downloadTemplate } = await import('giget')   // cached after first call
-  try { await downloadTemplate(`github:${registry.repo}/${entry.from}#${ref}`, { dir, force: true }) }
-  catch (error) { rmSync(dir, { recursive: true, force: true }); throw error }
-  return { dir, isFile, name, temp: true }
+  const abs = join(root, entry.from)
+  return { dir: isFile ? dirname(abs) : abs, isFile, name: basename(entry.from) }
 }
 const stagedFiles = s => s.isFile ? [{ abs: join(s.dir, s.name), rel: s.name }] : walk(s.dir)
 const mdFiles = s => stagedFiles(s).filter(f => f.rel.endsWith('.md'))
 
 // -------------------------------------------------------------------- emitters
-// Signature: (staged, entry, agent, ctx) => note | null
+// Signature: (staged, entry, agent, ctx) => note | null. An emitter writes nothing:
+// it puts every file it produces into the run's plan, under the entry it came from.
+const entryKey = e => `${e.kind}:${e.from}`
+// `from`: the staged file copied verbatim, whose mode (an executable script) carries over.
+function put(ctx, path, content, from = null) {
+  ctx.out.set(path, content)
+  if (from) ctx.modes.set(path, statSync(from).mode & 0o777)
+  ctx.byEntry.set(ctx.key, [...(ctx.byEntry.get(ctx.key) || []), path])
+}
 function emitSkill(s, entry, agent, ctx) {
   const dest = join(SKILL_DIR[agent], basename(entry.from))
   if (ctx.skills.has(dest)) return null
   ctx.skills.add(dest)
-  for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
+  for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs), f.abs)
   logCopy(entry.from, dest); return null
 }
 function emitKit(s, entry, agent, ctx) {
@@ -300,22 +293,21 @@ function emitKit(s, entry, agent, ctx) {
   ctx.kit.add(entry.from)
   const dest = join(KIT_DIR, basename(entry.from))
   // A file entry (the CHANGELOG) lands AT dest, not inside a directory named after it.
-  if (s.isFile) { ensureDir(KIT_DIR); copyFileSync(join(s.dir, s.name), dest) }
-  else for (const f of stagedFiles(s)) { const t = join(dest, f.rel); ensureDir(dirname(t)); copyFileSync(f.abs, t) }
+  if (s.isFile) put(ctx, dest, readFileSync(join(s.dir, s.name)), join(s.dir, s.name))
+  else for (const f of stagedFiles(s)) put(ctx, join(dest, f.rel), readFileSync(f.abs), f.abs)
   logCopy(entry.from, dest); return entry.wire ? `  • ${dest}: ${entry.wire}` : null
 }
 // Rules & agents for Claude. Verbatim, unless the profile is anchored to modules —
 // then only the `paths:` list is rewritten. Agents carry no `paths:` and are untouched.
 function emitClaudeRaw(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
-  if (entry.kind === 'rule' && !s.isFile) resetDir(entry.to)
   let n = 0
   for (const f of stagedFiles(s)) {
     const text = f.rel.endsWith('.md') ? readFileSync(f.abs, 'utf8') : null
     if (entry.kind === 'rule' && text && isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
-    const t = s.isFile ? entry.to : join(entry.to, f.rel); ensureDir(dirname(t))
+    const t = s.isFile ? entry.to : join(entry.to, f.rel)
     const scoped = entry.kind === 'rule' && text ? toScopedRuleText(text, prefixes) : null
-    if (scoped) writeFileSync(t, scoped); else copyFileSync(f.abs, t)
+    if (scoped) put(ctx, t, Buffer.from(scoped)); else put(ctx, t, readFileSync(f.abs), f.abs)
     n++
   }
   logCopy(entry.from, `${entry.to}${n ? '' : '  (nothing to emit)'}`); return null
@@ -324,12 +316,11 @@ function emitClaudeRaw(s, entry, agent, ctx) {
 function emitCursorRule(s, entry, agent, ctx) {
   const { prefixes, langProfiles } = ctx.scope
   const root = '.cursor/rules'
-  if (!s.isFile) resetDir(join(root, basename(entry.from)))
   for (const f of mdFiles(s)) {
     const text = readFileSync(f.abs, 'utf8')
     if (isLanguageDead(splitFm(text).fm.paths, langProfiles)) continue
     const rel = (s.isFile ? f.rel : join(basename(entry.from), f.rel)).replace(/\.md$/, '.mdc')
-    const t = join(root, rel); ensureDir(dirname(t)); writeFileSync(t, toMdcText(text, prefixes))
+    put(ctx, join(root, rel), Buffer.from(toMdcText(text, prefixes)))
   }
   logCopy(entry.from, join(root, s.isFile ? '' : basename(entry.from)) + '/*.mdc'); return null
 }
@@ -350,6 +341,56 @@ const AGENTS_START = '<!-- claude-rules:start (managed — do not edit inside th
 // agent, and update the lock. Symmetric with the EMITTERS/destination logic.
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const isFileFrom = from => /\.[a-z0-9]+$/i.test(from)
+
+// Every destination is derived from an entry, and both its sources are now content
+// this CLI did not ship: a fetched registry, and the lock's inventory. An entry may
+// only name a path under the root its kind owns, or a forged `to: "src"` would let
+// emit write into a project directory.
+const ENTRY_ROOT = { rule: '.claude/rules/', agent: '.claude/agents' }
+function assertEntry(e, where) {
+  const name = e && typeof e.from === 'string' ? basename(e.from) : ''
+  const ok = e && ['rule', 'agent', 'skill', 'kit'].includes(e.kind) && plainPath(e.from) && name
+    && (!ENTRY_ROOT[e.kind] || (plainPath(e.to) && (e.to === ENTRY_ROOT[e.kind].replace(/\/$/, '') && e.kind === 'agent'
+      || e.to.startsWith(ENTRY_ROOT[e.kind].replace(/\/?$/, '/')))))
+  if (!ok) throw new Error(`${where}: entry ${JSON.stringify(e)} — a ${e?.kind} must come from a relative path and land under ${ENTRY_ROOT[e?.kind] || 'its fixed root'}`)
+}
+
+// Adoption, once (ADR-0010): a lock recorded without file hashes cannot tell a local
+// edit from a stale copy, so its first install overwrites whole every destination
+// already on disk — this run's, the ones the old inventory names and no longer gets,
+// and the trees of retired targets — says so first, and needs --force when no terminal
+// is there to read it. Returns the paths it adopts (none: no adoption).
+function adoption(previous, destinations, agents) {
+  if (!previous || recordsHashes(previous)) return []
+  const before = agentsFromLock(previous).kept
+  const stale = (previous.installed || []).flatMap(e => { assertEntry(e, `${LOCK} installed`); return before.flatMap(a => destsFor(e, a)) })
+  const present = [...new Set([...destinations, ...stale, ...legacyTrees(agents)])].filter(d => existsSync(safePath(d)))
+  if (!present.length) return []
+  console.log(`⚠ ${LOCK} records no file hashes: this run adopts the install. Every installed destination below is overwritten once, local edits included, then recorded:`)
+  for (const d of present) console.log(`  ! ${d}`)
+  console.log()
+  if (!forceFlag && !process.stdin.isTTY)
+    throw new Error('Adoption needs --force without a terminal: save any local edit under the destinations listed above, then re-run with --force. Nothing was changed.')
+  return present
+}
+
+// The inventory's file paths are lock content too: each must sit under a root the
+// installer writes, or a forged record would let a prune delete a project file.
+const OWNED_ROOTS = ['.claude/rules/', '.claude/agents/', '.claude/skills/', '.agents/rules/', '.agents/skills/', '.cursor/rules/', `${KIT_DIR}/`]
+function assertFiles(e) {
+  if (e.files === undefined) return
+  const bad = !e.files || typeof e.files !== 'object' || Array.isArray(e.files) ? ['files'] : Object.entries(e.files)
+    .filter(([path, digest]) => !plainPath(path) || !OWNED_ROOTS.some(r => path.startsWith(r)) || !/^[0-9a-f]{64}$/.test(digest)).map(([path]) => path)
+  if (bad.length) throw new Error(`${LOCK} installed: ${e.kind} ${e.from} records ${bad.join(', ')} — an inventoried file must be a sha256 under ${OWNED_ROOTS.join(', ')}`)
+}
+
+// A skill is one unit, so a skill directory this run empties must hold nothing else
+// either: the recorded skill destinations that hold a file of `deletes`.
+function emptiedSkills(records, deletes) {
+  const gone = [...deletes]
+  return [...new Set(records.filter(e => e.kind === 'skill').flatMap(e => KNOWN_AGENTS.flatMap(a => destsFor(e, a))))]
+    .filter(d => gone.some(f => f.startsWith(d + '/')))
+}
 
 // Filesystem targets that add() created for (entry, agent) — mirror of the emitters.
 function destsFor(entry, agent) {
@@ -379,6 +420,15 @@ const kitNames = () => new Set([...registry.shared, ...Object.values(registry.pr
 // this change exists to kill: a justfile still pointing at it never sees an `update`
 // again. So add/update/remove purge it — BY NAME, one registry-known directory at a
 // time, never `rm -rf` on the root.
+// What the purges below would delete: the retired targets' trees, the registry-known
+// legacy kit directories and the retired skills' directories.
+function legacyTrees(agents) {
+  const known = kitNames()
+  const kit = existsSync(LEGACY_KIT_DIR) ? readdirSync(LEGACY_KIT_DIR).filter(n => known.has(n)).map(n => join(LEGACY_KIT_DIR, n)) : []
+  assertRetiredSkills()
+  const skills = agents.flatMap(a => (registry.retired?.skills || []).map(n => `${SKILL_DIR[a]}/${n}`))
+  return [...RETIRED_DIRS, ...kit, ...skills]
+}
 function purgeLegacyKit() {
   if (!existsSync(LEGACY_KIT_DIR)) return
   const known = kitNames()
@@ -407,14 +457,25 @@ function purgeRetired() {
 }
 
 function remove(profilesArg) {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
+  // remove deletes what was installed, read from the lock — never from a registry:
+  // the one bundled with this CLI is not the one the source installed from, and may
+  // map the same profile elsewhere. A lock without the inventory cannot say, so it
+  // is refused rather than guessed at.
+  if (!Array.isArray(lock.installed))
+    throw new Error(`${LOCK} has no "installed" inventory; run \`update\` once to record it before removing profiles`)
+  if (!recordsHashes(lock))
+    throw new Error(`${LOCK} records no file hashes; run \`update\` once to adopt the install before removing profiles`)
   const { kept, dropped } = agentsFromLock(lock)
   if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}`)
   const agents = kept.length ? kept : ['claude']
   if (agents.includes('codex') && !lock.codex) throw new Error('Codex ownership inventory missing; update to adopt files before removing profiles')
   const full = profilesArg.length === 1 && profilesArg[0] === 'all'
-  const targets = full ? lock.profiles.slice() : profilesArg
+  // A locked profile name is taken as is; anything else unpacks as an alias the
+  // installing sources defined (recorded in the lock), else as a bundled one.
+  const aliases = lock.aliases || registry.aliases || {}
+  const targets = full ? lock.profiles.slice() : [...new Set(profilesArg.flatMap(n => lock.profiles.includes(n) ? [n] : unpackNames([n], false, aliases)))]
   const notInLock = targets.filter(p => !lock.profiles.includes(p))
   if (notInLock.length) console.log(`Not installed, skipping: ${notInLock.join(', ')}`)
   const toRemove = targets.filter(p => lock.profiles.includes(p))
@@ -424,11 +485,11 @@ function remove(profilesArg) {
   const levels = { ...(lock.levels || {}) }
   for (const p of toRemove) delete levels[p]
   const modules = normalizeModules(remaining, Object.fromEntries(Object.entries(lock.modules || {})
-    .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false)
-  const stillNeeded = new Set([
-    ...remaining.flatMap(p => entriesAt(p, levels[p] || 'rules')),
-    ...(fullUninstall ? [] : registry.shared),
-  ].flatMap(e => agents.flatMap(a => destsFor(e, a))))
+    .map(([d, ps]) => [d, ps.filter(p => remaining.includes(p))])), false, false)
+  const isKept = i => i.profile === null ? !fullUninstall : remaining.includes(i.profile)
+  const keptInstalled = lock.installed.filter(isKept).map(i => ({ ...i, files: { ...i.files } }))
+  // Codex rules shared with a remaining profile are rescoped to it, and rewritten.
+  const writes = new Map(), codexDropped = []
   let codex
   if (lock.codex) {
     const files = {}
@@ -437,7 +498,10 @@ function remove(profilesArg) {
       if (fullUninstall || (asset.profiles.length && !owners.length)) continue
       safePath(path)
       if (!existsSync(path)) throw new Error(`Missing Codex asset: ${path}; update before removing profiles`)
+      if (!lstatSync(path).isFile()) throw new Error(`Not a regular file: ${path}; update --force before removing profiles`)
       const content = readFileSync(path)
+      // Refused even under --force: a retained rule is rescoped from its installed text,
+      // and an edited copy has none left to rescope. `update --force` restores it first.
       if (hash(content) !== asset.hash) throw new Error(`Modified owned file: ${path}; reconcile before removing profiles`)
       files[path] = { ...asset, profiles: owners, content }
     }
@@ -450,54 +514,68 @@ function remove(profilesArg) {
       if (JSON.stringify(globs) !== JSON.stringify(r.globs)) {
         const { fm, body } = splitFm(files[r.path].content.toString())
         files[r.path].content = Buffer.from(`---\n${dumpFm({ ...fm, paths: globs })}\n---\n${body}`)
+        writes.set(r.path, files[r.path].content)
       }
       return { ...r, profiles: owners, globs }
     })
+    codexDropped.push(...Object.keys(lock.codex.files).filter(path => !files[path]))
     codex = prepareCodex(files, rules, fullUninstall ? {} : modules, lock.codex)
   }
-  // Preflight every removal before deleting anything.
-  for (const entry of [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])])
-    for (const agent of agents) for (const dest of destsFor(entry, agent)) {
-      safePath(dest)
-      if (existsSync(dest) && statSync(dest).isDirectory()) for (const f of walk(dest)) safePath(f.abs)
-    }
+  // The kept records follow: a rewritten file gets its new hash, a dropped one goes.
+  for (const record of keptInstalled) for (const path of Object.keys(record.files)) {
+    if (codexDropped.includes(path)) delete record.files[path]
+    else if (writes.has(path)) record.files[path] = hash(writes.get(path))
+  }
+  // Delete exactly the files the removed records hold that no kept record still does.
+  const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
+  const plan = { writes, deletes: [...new Set([...lock.installed.filter(i => !isKept(i)).flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
+  plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: emptiedSkills(lock.installed, plan.deletes) }))
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
-  const entries = [...toRemove.flatMap(p => registry.profiles[p] || []), ...(fullUninstall ? registry.shared : [])]
-  let removedKit = false
-  for (const entry of entries) {
-    if (entry.kind === 'kit') removedKit = true
-    for (const agent of agents) {
-      for (const dest of destsFor(entry, agent)) {
-        if (stillNeeded.has(dest) || (codex && (agent === 'codex' && entry.kind !== 'kit' || dest.startsWith('.agents/skills/')))) continue
-        if (existsSync(dest)) { rmSync(dest, { recursive: true, force: true }); console.log(`  ✗ ${dest}`) }
-      }
-    }
-  }
+  applyTree(plan, path => console.log(`  ✗ ${path}`))
   if (codex) applyCodex(codex)
   if (fullUninstall) {
-    purgeRetired()
-    purgeLegacyKit()
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
   } else {
     // A removed profile leaves its module bindings behind too, or the next
     // `update` would anchor globs to a profile that is no longer installed.
-    writeLock(lock.ref, remaining, agents, modules, levels, codex?.inventory)
-    console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${lock.ref}.`)
+    // An override goes with the entries it was staged for.
+    const under = (path, from) => path === from || path.startsWith(from + '/')
+    const overrides = (lock.overrides || []).filter(o => keptInstalled.some(i => under(o.path, i.from)))
+    writeLock(lock.sources, remaining, agents, modules, levels, codex?.inventory, keptInstalled, lock.aliases, overrides)
+    console.log(`\nUpdated ${LOCK} → [${remaining.join(', ')}] @ ${sourcesLabel(lock.sources)}.`)
   }
-  if (removedKit) console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
+  if (lock.installed.some(i => !isKept(i) && i.kind === 'kit'))
+    console.log('\n• Kit removed: also delete the matching `just <tech>-lint/-check` recipes and lefthook triggers you wired — the installer never owned those.')
   console.log('• Review the deletions with `git status` / `git diff` before committing.')
 }
 
 // -------------------------------------------------------------------- install
-function normalizeModules(profiles, modules = {}, validateRoot = true) {
+// ADR-0010: a tree the installer cannot explain is refused, never reconciled. The way
+// out is the user's fix, or --force, which overwrites exactly the listed paths.
+// Returns what applyTree overwrites.
+function settleCorruption(corrupt, force = forceFlag) {
+  if (!corrupt.size) return corrupt
+  if (force) {
+    console.log(`--force: overwriting ${corrupt.size} path(s) claude-rules did not install as they are:`)
+    for (const [path, why] of corrupt) console.log(`  ! ${path} — ${why}`)
+    console.log()
+    return corrupt
+  }
+  const lines = [...corrupt].map(([path, why]) => `  ✗ ${path} — ${why}`)
+  throw new Error(`${corrupt.size} path(s) are not what claude-rules installed; nothing was changed:\n${lines.join('\n')}\n`
+    + 'Move the change out of the installed path, or re-run with --force to overwrite the listed paths.')
+}
+// `known: false` skips the profile-name check, for the commands that fetch nothing:
+// the bundled registry may not know a profile the installing source defined.
+function normalizeModules(profiles, modules = {}, validateRoot = true, known = true) {
   const out = {}
   for (const [raw, names] of Object.entries(modules)) {
     const dir = modulePath(raw)
-    const expanded = unpackNames(names, true)
-    if (expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
+    const expanded = known ? unpackNames(names, true) : names
+    if (known && expanded.some(p => !registry.profiles[p])) throw new Error(`Module ${dir} references an unknown profile`)
     out[dir] = [...new Set([...(out[dir] || []), ...expanded])]
   }
   const bound = new Set(Object.entries(out).filter(([d]) => d !== '.').flatMap(([, ps]) => ps))
@@ -506,16 +584,35 @@ function normalizeModules(profiles, modules = {}, validateRoot = true) {
   out['.'] = profiles.filter(p => !bound.has(p))
   return { '.': out['.'], ...Object.fromEntries(Object.entries(out).filter(([d, ps]) => d !== '.' && ps.length)) }
 }
-function readLock() {
+// Strict by default (add/update, under the fetched registry); `{ known: false }` for
+// the offline commands, which must still read a lock the bundled registry cannot explain.
+// Those keep the lock's profile names as written: retiring or unpacking them through
+// the bundled registry would rename what the installing source installed, and orphan
+// its inventory records. Migration happens on add/update, under the source's registry.
+function readLock({ known = true } = {}) {
   if (!existsSync(LOCK)) return null
   safePath(LOCK)
-  const lock = dropRetiredProfiles(JSON.parse(readFileSync(LOCK, 'utf8')))
-  lock.profiles = unpackNames(lock.profiles, true)
-  lock.modules = normalizeModules(lock.profiles, lock.modules)
+  const raw = JSON.parse(readFileSync(LOCK, 'utf8'))
+  const lock = known ? dropRetiredProfiles(raw) : raw
+  const unpack = names => known ? unpackNames(names, true) : names
+  lock.sources = lockSources(lock)
+  if (lock.aliases !== undefined && !isAliasMap(lock.aliases))
+    throw new Error(`${LOCK}: "aliases" must map names to lists of profiles`)
+  if (lock.installed !== undefined) {
+    if (!Array.isArray(lock.installed)) throw new Error(`${LOCK}: "installed" must be a list`)
+    for (const e of lock.installed) { assertEntry(e, `${LOCK} installed`); assertFiles(e) }
+  }
+  if (lock.overrides !== undefined) assertOverrides(lock.overrides, LOCK)
+  // Codex's inventory feeds the same ownership plan, whichever targets this run selects.
+  if (lock.codex !== undefined) checkCodexInventory(lock.codex, false)
+  delete lock.repo
+  delete lock.ref
+  lock.profiles = unpack(lock.profiles)
+  lock.modules = normalizeModules(lock.profiles, lock.modules, true, known)
   if (lock.levels) {
     const levels = {}
     for (const [name, level] of Object.entries(lock.levels))
-      for (const p of unpackNames([name], true)) levels[p] = maxLevel(levels[p] || 'rules', level)
+      for (const p of unpack([name])) levels[p] = maxLevel(levels[p] || 'rules', level)
     lock.levels = levels
   }
   return lock
@@ -537,6 +634,15 @@ function dropRetiredProfiles(lock) {
 }
 // Skill directories of retired skills: library-owned, so no update would ever reach
 // them again. Codex-owned files under .agents/skills are pruned by its inventory.
+// A retired skill name is a fetched value too: one plain directory name, or a
+// `../../src` would make the purge below delete a project directory.
+function assertRetiredSkills() {
+  const names = registry.retired?.skills || []
+  if (!Array.isArray(names)) throw new Error('registry: retired.skills must be a list of skill names')
+  for (const name of names)
+    if (typeof name !== 'string' || !SOURCE_NAME.test(name) || name === '.' || name === '..')
+      throw new Error(`registry: retired skill ${JSON.stringify(name)} must be a plain skill directory name`)
+}
 function purgeRetiredSkills(agents, codexOwned) {
   for (const agent of agents) {
     if (codexOwned && SKILL_DIR[agent] === SKILL_DIR.codex) continue
@@ -549,9 +655,16 @@ function purgeRetiredSkills(agents, codexOwned) {
     }
   }
 }
-function writeLock(ref, profiles, agents, modules, levels, codex) {
-  const lock = { repo: registry.repo, ref, profiles, agents, modules: normalizeModules(profiles, modules, false) }
+// `installed` is the inventory: one { source, kind, from, to, profile } per entry
+// emitted (profile null for the shared ones). remove deletes from it. `aliases` are
+// the merged registry's, so an offline remove unpacks one an overlay defined.
+// `overrides` are the paths a later layer replaced, with the base each replaced.
+function writeLock(sources, profiles, agents, modules, levels, codex, installed, aliases, overrides) {
+  const lock = { sources, profiles, agents, modules: normalizeModules(profiles, modules, false, false) }
   if (levels && Object.keys(levels).length) lock.levels = levels
+  if (aliases && Object.keys(aliases).length) lock.aliases = aliases
+  lock.installed = installed
+  if (overrides?.length) lock.overrides = overrides
   if (codex) lock.codex = codex
   writeFileSync(LOCK, JSON.stringify(lock, null, 2) + '\n')
 }
@@ -572,7 +685,10 @@ const FINAL_MSG = {
   cursor: 'Cursor: .cursor/rules/*.mdc activate via globs/alwaysApply; skills in .agents/skills/. No file-based subagents.',
 }
 
-async function install(profiles, ref, agents, modules, levels) {
+// `fetched` are the run's layers, already on disk (withSources): the sources, then the
+// project layer, which the lock never records.
+async function install(profiles, fetched, agents, modules, levels) {
+  const sources = fetched.filter(l => !l.project).map(({ name, url, ref }) => ({ name, url, ref }))
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {
@@ -588,7 +704,7 @@ async function install(profiles, ref, agents, modules, levels) {
   }
   // Carry the profile each entry came from: it is what maps an entry to the
   // module(s) that asked for it, and therefore to its glob prefixes.
-  const owned = [
+  let owned = [
     ...registry.shared.map(e => ({ e, profile: null })),
     ...profiles.flatMap(p => entriesAt(p, levels[p] || 'rules').map(e => ({ e, profile: p }))),
   ]
@@ -596,35 +712,66 @@ async function install(profiles, ref, agents, modules, levels) {
   const prefixesOf = owners => owners.some(p => !prefixesFor(p, modules).length) ? [] : [...new Set(owners.flatMap(p => prefixesFor(p, modules)))]
   const scopes = Object.entries(modules || {}).map(([d, ps]) => `${d} → ${ps.join(', ')}`)
   const lv = profiles.map(p => `${p}@${levels[p] || 'rules'}`).join(', ')
-  console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${localFlag || registry.repo}#${ref}`)
+  console.log(`Installing [${lv}] for [${agents.join(', ')}] from ${sourcesLabel(sources)}${localFlag ? ` (core read from ${localFlag})` : ''}`)
   if (scopes.length) console.log(`Roots: ${scopes.join(' · ')}`)
   console.log()
   const langProfiles = profiles.filter(p => LANG_EXT[p])
-  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles } }
+  const ctx = { kit: new Set(), skills: new Set(), scope: { prefixes: [], langProfiles }, out: new Map(), modes: new Map(), byEntry: new Map(), key: null }
   const notes = []
   const staged = []
-  let codex
+  let tree = null
+  let installed = []
+  let codex, codexInput
   try {
-    // Fetch every source before changing any destination.
+    // Stage every entry before changing any destination.
+    for (const { e } of owned) assertEntry(e, 'registry')
+    assertRetiredSkills()
+    // Two entries must not share or nest destinations: each installed path belongs to
+    // one entry, so that entry's record alone says who wrote it.
+    // And one entry's files are recorded under its `kind:from`, so a source path that two
+    // entries install to two places is refused: neither record could say which copy it owns.
+    const destsOf = new Map()
+    for (const { e } of owned) {
+      const key = entryKey(e), dests = agents.flatMap(a => destsFor(e, a)).join(', ')
+      if (destsOf.has(key) && destsOf.get(key) !== dests)
+        throw new Error(`registry: ${key} installs to ${destsOf.get(key)} and to ${dests}: one source path installs once`)
+      destsOf.set(key, dests)
+    }
+    const destOwner = new Map()
+    for (const { e } of owned) for (const a of agents) for (const d of destsFor(e, a)) {
+      const key = entryKey(e)
+      if (destOwner.has(d) && destOwner.get(d) !== key) throw new Error(`registry: ${destOwner.get(d)} and ${key} both install to ${d}`)
+      destOwner.set(d, key)
+    }
+    for (const d of destOwner.keys()) {
+      const inner = [...destOwner.keys()].find(o => o.startsWith(d + '/'))
+      if (inner) throw new Error(`registry: ${destOwner.get(inner)} installs to ${inner}, inside ${d} (${destOwner.get(d)})`)
+    }
+    const staging = stageTree(fetched, [...new Map(owned.map(({ e }) => [e.from, e])).values()])
+    tree = staging.tree
+    // An entry excluded whole is not installed; a file excluded inside one is not
+    // emitted. Their copies are then owned and no longer produced: the apply deletes them.
+    for (const [path, by] of staging.excluded) console.log(`  − ${path}  (excluded by ${by})`)
+    for (const o of staging.overrides) console.log(`  ↻ ${o.path}  (${o.by} over ${o.over})`)
+    owned = owned.filter(({ e }) => existsSync(join(tree, e.from)))
+    installed = owned.map(({ e, profile }) => ({ source: declaredBy.get(e) || CORE, kind: e.kind, from: e.from, to: e.to, profile }))
     const stagedKeys = new Set()
     for (const item of owned) {
       const key = JSON.stringify(item.e)
       if (stagedKeys.has(key)) continue
       stagedKeys.add(key)
-      staged.push({ ...item, s: await makeStaged(ref, item.e) })
+      staged.push({ ...item, s: makeStaged(tree, item.e) })
     }
     for (const { s } of staged) for (const f of stagedFiles(s)) readFileSync(f.abs)
-    for (const { e, s } of staged) for (const agent of agents) {
-      for (const dest of destsFor(e, agent)) {
-        safePath(dest)
-        if (existsSync(dest) && statSync(dest).isFile() !== s.isFile) throw new Error(`Conflicting destination: ${dest}`)
-        if (existsSync(dest) && statSync(dest).isDirectory())
-          for (const f of walk(dest)) safePath(f.abs)
-      }
-      if (!s.isFile) for (const dest of destsFor(e, agent)) for (const f of stagedFiles(s)) {
-        const path = join(dest, agent === 'cursor' && e.kind === 'rule' ? f.rel.replace(/\.md$/, '.mdc') : f.rel)
-        safePath(path)
-        if (existsSync(path) && !statSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
+    // Emit: every file of every entry and target goes into the plan; nothing is written.
+    for (const { e: entry, s } of staged) {
+      ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
+      ctx.key = entryKey(entry)
+      for (const agent of agents) {
+        // Shared skills are emitted once, by the Codex adapter.
+        if (agents.includes('codex') && agent === 'cursor' && entry.kind === 'skill') continue
+        const note = EMITTERS[agent][entry.kind](s, entry, agent, ctx)
+        if (note) notes.push(note)
       }
     }
     if (agents.includes('codex')) {
@@ -641,29 +788,55 @@ async function install(profiles, ref, agents, modules, levels) {
           if (e.kind === 'rule') content = Buffer.from(toScopedRuleText(content.toString(), prefixes) || content)
           const path = join('.agents', e.kind === 'rule' ? 'rules' : 'skills', ...(s.isFile ? [] : [basename(e.from)]), f.rel)
           files[path] = { content, profiles: owners, kind: e.kind }
+          put({ ...ctx, key: entryKey(e) }, path, content, e.kind === 'skill' ? f.abs : null)
           if (e.kind === 'rule') rules.set(path, { path, profiles: owners, title: fm.title || f.rel, rawGlobs: fm.paths || [], globs: scopeGlobs(fm.paths || [], prefixes) })
         }
       }
-      codex = prepareCodex(files, [...rules.values()], modules, readLock()?.codex)
+      codexInput = [files, [...rules.values()]]
     }
-    for (const { e: entry, s } of staged) {
-      ctx.scope = { prefixes: prefixesOf(ownersFor(entry)), langProfiles }
-      for (const agent of agents) {
-        // Shared skills are written once by the ownership-aware Codex adapter.
-        if (codex && agent === 'cursor' && entry.kind === 'skill') continue
-        const note = EMITTERS[agent][entry.kind](s, entry, agent, ctx)
-        if (note) notes.push(note)
-      }
-    }
+    // The check before writing (ADR-0010): every path this run writes or deletes must be
+    // absent, or owned and unchanged. A skill is one unit, so its directory holds nothing
+    // else; a rule directory keeps unknown files alongside ours (docs/agent-sharing.md).
+    // Read as written: its profiles may be ones no source defines any more (remove --source).
+    const previous = readLock({ known: false })
+    // An override no longer receives what changed under it: say so, and under
+    // `update --strict` stop before anything is written.
+    const moved = changedUpstream(previous?.overrides, staging.overrides, staging.supplies)
+    for (const o of moved) console.log(`⚠ ${o.path} ${o.change} ${o.over} (overridden by ${o.by})`)
+    if (moved.length && strictFlag && cmd === 'update')
+      throw new Error(`--strict: ${moved.length} overridden path(s) changed upstream; nothing was changed. Review each change, then run \`update\` without --strict to record the new base.`)
+    const recorded = ownedFiles(previous)
+    const plan = { writes: ctx.out, modes: ctx.modes, deletes: [...recorded.keys()].filter(path => !ctx.out.has(path)) }
+    const adopted = adoption(previous, [...new Set(staged.flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))))], agents)
+    const corrupt = checkTree({
+      ...plan,
+      owned: recorded,
+      // A skill is one unit: its directory holds nothing else. An adopted destination
+      // is overwritten whole, so whatever this run does not write in it goes.
+      dirs: adopted.length ? adopted
+        : [...new Set([...staged.filter(({ e }) => e.kind === 'skill').flatMap(({ e }) => agents.flatMap(a => destsFor(e, a))),
+          ...emptiedSkills(previous?.installed || [], plan.deletes)])],
+    })
+    // The agents root also holds the repo's own agents, and an unhashed lock cannot
+    // tell them from one of ours dropped upstream: adoption never decides that alone,
+    // only an explicit --force does.
+    const ambiguous = [...corrupt.keys()].some(path => path.startsWith(`${ENTRY_ROOT.agent}/`))
+    plan.corrupt = settleCorruption(corrupt, forceFlag || (adopted.length > 0 && !ambiguous))
+    if (codexInput) codex = prepareCodex(...codexInput, modules, previous?.codex)
+    // Apply: what the previous install wrote and this one no longer produces goes first
+    // (an entry dropped upstream, a destination moved), then every write.
+    applyTree(plan, path => console.log(`  ✗ ${path}  (no longer installed)`))
     if (codex) applyCodex(codex)
-    purgeRetired()
-    purgeRetiredSkills(agents, Boolean(codex))
-    purgeLegacyKit()
-    writeLock(ref, profiles, agents, modules, levels, codex?.inventory)
+    // Retired targets and the legacy kit root are cleaned up once, by the adoption that
+    // listed them; a hashed install deletes only what it recorded.
+    if (adopted.length) { purgeRetired(); purgeRetiredSkills(agents, Boolean(codex)); purgeLegacyKit() }
+    for (const record of installed)
+      record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
+    writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases, staging.overrides)
   } finally {
-    for (const { s } of staged) if (s.temp) rmSync(s.dir, { recursive: true, force: true })
+    if (tree) rmSync(tree, { recursive: true, force: true })
   }
-  console.log(`\nPinned in ${LOCK} (ref ${ref}, agents: ${agents.join(', ')}).`)
+  console.log(`\nPinned in ${LOCK} (${sourcesLabel(sources)}, agents: ${agents.join(', ')}).`)
   if (notes.length) {
     console.log(`\nOne-time wiring (the installer never touches your build config):`)
     console.log([...new Set(notes)].join('\n'))
@@ -959,7 +1132,7 @@ function genClaudeMd(lock) {
 }
 
 function initRepo() {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — run "add <profile...>" first.`); process.exit(1) }
   const levels = lock.levels || Object.fromEntries((lock.profiles || []).map(p => [p, 'gates']))
   const techs = lock.profiles.filter(p => GLOB[p] && levelRank(levels[p] || 'rules') >= levelRank('gates'))
@@ -1102,7 +1275,7 @@ const sum = xs => xs.reduce((n, x) => n + x, 0)
 // unscoped rules on `alwaysApply: true`), so a routing change has to be checked
 // on both or it is only half verified.
 function budget(target, agent = null) {
-  if (agent === 'codex' || (!agent && installedRules().agent === 'codex')) return codexBudget(readLock(), target, globToRe)
+  if (agent === 'codex' || (!agent && installedRules().agent === 'codex')) return codexBudget(readLock({ known: false }), target, globToRe)
   const { root, complete, rules, agent: measured } = installedRules(agent)
   if (!root) {
     console.error(agent
@@ -1248,7 +1421,7 @@ function auditGateLayer(agents, bad, warn) {
 }
 
 function doctor() {
-  const lock = readLock()
+  const lock = readLock({ known: false })
   if (!lock) { console.error(`No ${LOCK} — nothing to audit. Run "add <profile...>" first.`); process.exit(1) }
   const { kept, dropped } = agentsFromLock(lock)
   const agents = kept.length ? kept : ['claude']
@@ -1257,10 +1430,13 @@ function doctor() {
 
   // ---- 1. the lock itself
   console.log('Install')
-  const unknownP = lock.profiles.filter(p => !registry.profiles[p])
-  for (const p of unknownP) bad.push(`lock references unknown profile "${p}" — \`update\` cannot emit it`)
+  // A hashed inventory says what was installed, from whichever sources: no registry is
+  // needed to audit it. A lock without one falls back to the bundled registry.
+  const inventory = recordsHashes(lock) ? lock.installed : null
+  const unknownP = inventory ? [] : lock.profiles.filter(p => !registry.profiles[p])
+  for (const p of unknownP) bad.push(`lock references profile "${p}", unknown to the registry bundled with this CLI — its files cannot be audited here (run doctor from the CLI at the locked ref)`)
   for (const a of dropped) bad.push(`lock still lists retired agent "${a}" — run \`update\` to drop it`)
-  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}`)
+  console.log(`  ✓ lock: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}`)
   // A module path that does not exist anchors every one of its globs to nothing —
   // the rules are emitted, look installed, and can never match a file.
   for (const [dir, ps] of Object.entries(lock.modules || {})) {
@@ -1272,16 +1448,28 @@ function doctor() {
 
   // ---- 2. what the lock promises vs what is on disk
   const expected = new Map()
-  const lockedEntries = [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
+  const lockedEntries = inventory
+    ? inventory.map(e => [e.profile ?? '(shared)', [e]])
+    : [['(shared)', registry.shared], ...lock.profiles.map(p => [p, entriesAt(p, (lock.levels || {})[p] || 'gates')])]
+  // From the inventory, a destination is promised only when a recorded file sits in it.
+  const promised = (e, d) => !inventory || Object.keys(e.files).some(f => f === d || f.startsWith(d + '/'))
   for (const [profile, entries] of lockedEntries)
     for (const e of entries) for (const a of agents)
-      for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
+      for (const d of destsFor(e, a).filter(d => promised(e, d))) if (a !== 'codex' || e.kind !== 'rule') expected.set(d, { profile, agent: a })
 
   for (const [dest, meta] of expected)
     if (!existsSync(dest)) bad.push(`${dest} — promised by "${meta.profile}" for ${meta.agent}, missing on disk (run \`update\`)`)
+  // Every inventoried file, as it was written. Codex's own assets are audited below.
+  for (const e of inventory || []) for (const [path, digest] of Object.entries(e.files)) {
+    if (lock.codex?.files?.[path]) continue
+    safePath(path)
+    if (!existsSync(path)) bad.push(`${path} — installed by "${e.profile ?? '(shared)'}", missing on disk (run \`update\`)`)
+    else if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== digest)
+      bad.push(`${path} — edited since it was installed: move the change to .dev/overrides/, or \`update --force\` to restore it`)
+  }
 
   for (const dir of RETIRED_DIRS)
-    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Run \`update\` to purge it.`)
+    if (existsSync(dir)) bad.push(`${dir} — leftover from a retired agent target (OpenCode / Antigravity). Delete it: \`update\` purges it only when it adopts a lock without file hashes.`)
   if (agents.includes('codex')) {
     for (const rule of lock.codex?.rules || []) {
       const owners = rule.profiles.filter(p => lock.profiles.includes(p))
@@ -1297,8 +1485,11 @@ function doctor() {
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
     for (const e of entries) for (const a of KNOWN_AGENTS) for (const d of destsFor(e, a)) if (a !== 'codex' || e.kind === 'kit') known.add(d)
+  // A directory around an inventoried destination (`.claude/agents` around an overlay's
+  // single agent file) is explained by it.
+  const holds = d => [...expected.keys()].some(x => x.startsWith(d + '/'))
   for (const d of known)
-    if (existsSync(d) && !expected.has(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
+    if (existsSync(d) && !expected.has(d) && !holds(d)) bad.push(`${d} — on disk but nothing in the lock explains it; agents load it silently. Delete it, or \`add\` the profile (or \`--agent\`) that owns it.`)
 
   // ---- 3. rules that can never fire here
   const files = repoFiles()
@@ -1363,7 +1554,7 @@ function doctor() {
 // the lock and leaves no way to find them.
 // `agentsRaw`/`levelName`/`rootDirRaw` are null for "use the flag/lock default";
 // the interactive prompt below passes explicit answers instead of CLI flags.
-async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
+async function runAdd(fetched, { requestedRaw, agentsRaw, levelName, rootDirRaw }) {
   const requested = unpackNames(requestedRaw)
   const lock = readLock()
   const migrated = migrateLegacyLock(lock)
@@ -1396,9 +1587,16 @@ async function runAdd({ requestedRaw, agentsRaw, levelName, rootDirRaw, ref }) {
   const unscoped = requested.filter(p => ROOT_HINT.has(p) && !Object.entries(modules).some(([d, ps]) => d !== '.' && ps.includes(p)))
   if (unscoped.length) console.log(`  ! ${unscoped.join(', ')} glob language files repo-wide. Pass --root <dir> to scope them.\n`)
   if (lock) console.log(`Already locked: [${lock.profiles.join(', ')}] for [${locked.join(', ')}] — add extends that, and re-emits all of it.\n`)
-  await install(profiles, ref, agents, modules, levels)
+  await install(profiles, fetched, agents, modules, levels)
 }
 
+// `update`: re-install the lock as it stands, under the run's merged registry.
+async function reinstall(lock, fetched) {
+  const { kept, dropped } = agentsFromLock(lock)
+  if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
+  const migrated = migrateLegacyLock(lock)
+  await install(migrated.profiles, fetched, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+}
 // -------------------------------------------------------------- interactive add
 // A bare `add` in a real terminal, with no flag at all — the "I don't know the
 // flags yet" path. Any flag alongside a missing profile list is a mistake, not
@@ -1454,28 +1652,30 @@ async function promptAdd() {
 async function main() {
   switch (cmd) {
     case 'add': {
-      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlag
+      const bare = !agentFlag && !scopeFlag && !levelFlag && !refFlags.length && !sourceFlag
       if (!positional.length && bare && process.stdin.isTTY) {
-        const answers = await promptAdd()
-        await runAdd({ ...answers, ref: registry.defaultRef })
+        await withSources(async fetched => runAdd(fetched, await promptAdd()))
         break
       }
-      if (!positional.length) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]'); process.exit(1) }
-      await runAdd({ requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag, ref: refFlag || registry.defaultRef })
+      // `add --source` alone re-installs what is locked, with the new layer on top.
+      if (!positional.length && !(sourceFlag && existsSync(LOCK))) { console.error('Usage: add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>] [--source <name>=<url>#<ref>]'); process.exit(1) }
+      const options = { requestedRaw: positional, agentsRaw: null, levelName: parseLevel(), rootDirRaw: scopeFlag }
+      await withSources(fetched => runAdd(fetched, options), sourceFlag ? { add: parseSourceFlag(sourceFlag) } : undefined)
       break
     }
     case 'update': {
-      const lock = readLock()
-      if (!lock) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
-      const { kept, dropped } = agentsFromLock(lock)
-      if (dropped.length) console.log(`Dropped retired agent(s) from the lock: ${dropped.join(', ')}\n`)
-      const migrated = migrateLegacyLock(lock)
-      await install(migrated.profiles, refFlag || registry.defaultRef, [...new Set([...kept, ...parseAgents(kept.join(',') || 'claude')])], lock.modules, migrated.levels)
+      if (!existsSync(LOCK)) { console.error(`No ${LOCK} found — run "add <profile...>" first.`); process.exit(1) }
+      await withSources(fetched => reinstall(readLock(), fetched))
       break
     }
     case 'remove': {
+      if (sourceFlag) {
+        if (!existsSync(LOCK)) { console.error(`No ${LOCK} — nothing to remove.`); process.exit(1) }
+        await withSources(fetched => reinstall(dropUndefined(readLock({ known: false }), registry), fetched), { drop: sourceFlag })
+        break
+      }
       if (!positional.length) { console.error('Usage: remove <profile...>   (or "remove all" to fully uninstall)'); process.exit(1) }
-      remove(positional[0] === 'all' ? positional : unpackNames(positional))
+      remove(positional)
       break
     }
     case 'init': initRepo(); break
@@ -1487,7 +1687,7 @@ async function main() {
       break
     }
     case 'list': {
-      const lock = readLock()
+      const lock = readLock({ known: false })
       console.log('Available profiles:')
       for (const [name, entries] of Object.entries(registry.profiles)) console.log(`  ${name}  (${entries.map(e => e.from).join(', ')})`)
       if (registry.aliases) {
@@ -1496,18 +1696,22 @@ async function main() {
       }
       console.log(`\nAgents: ${KNOWN_AGENTS.join(', ')} (new installs: claude,codex; select with --agent)`)
       console.log(`Levels: ${LEVELS.join(' | ')} (default on add: rules; never ratchet)`)
-      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${lock.ref}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
+      console.log(lock ? `\nInstalled: [${lock.profiles.join(', ')}] for [${(lock.agents || ['claude']).join(', ')}] @ ${sourcesLabel(lock.sources)}${lock.levels ? `\nLevels:    ${Object.entries(lock.levels).map(([p, l]) => `${p}@${l}`).join(', ')}` : ''}` : '\nInstalled: none')
       break
     }
     default:
       console.log('claude-rules — usage:\n'
-        + '  add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>]\n'
+        + '  add <profile...> [--agent claude,codex,cursor] [--root <dir>] [--level rules|gates|ratchet] [--ref <ref>|<source>=<ref>]\n'
         + '                                   install/pin profiles (default: claude,codex, --level rules)\n'
         + '                                   --root (alias --module) anchors those profiles\' globs to a directory\n'
         + '                                   aliases unpack (rust-api, go-api, python-api, ts-web-app, ts-tauri-app, ts-node-api)\n'
         + '                                   bare `add` in a terminal (no args, no flags) prompts instead of erroring\n'
+        + '  add --source <name>=<url>#<ref>  append a source (an overlay) to the lock and re-install with it\n'
         + '  remove <profile...>              uninstall profiles (delete emitted files, update lock); "remove all" fully uninstalls\n'
-        + '  update [--ref <ref>]             re-install locked profiles+agents at ref\n'
+        + '  remove --source <name>           drop a source from the lock and re-install without it\n'
+        + '  update [--ref <ref>|<source>=<ref>] [--force] [--strict]  re-install locked profiles+agents; --ref pins core, <source>=<ref> another source\n'
+        + '                                   a path the installer did not write as it is stops add/update; --force overwrites the listed paths\n'
+        + '                                   --strict fails when a file a later layer overrides changed upstream\n'
         + '  init                             assemble justfile + lefthook.yml (if absent) + lefthook install\n'
         + '  doctor [--strict]                audit the install against this repo (offline); --strict fails on warnings\n'
         + '  budget [<path>] [--agent <a>]    what loads when that file is opened, and what it costs (no path: the session floor)\n'

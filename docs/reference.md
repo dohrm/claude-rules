@@ -168,6 +168,11 @@ npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that fil
 npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (new installs: claude,codex)
 npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
+npx github:dohrm/claude-rules add --source team=git@git.example:team/agent-rules.git#v0.3.0  # a second source, on top of core
+npx github:dohrm/claude-rules update --ref team=v0.4.0 # move one source; core follows defaultRef
+npx github:dohrm/claude-rules update --strict          # fail when an overridden file changed upstream
+npx github:dohrm/claude-rules update --force           # overwrite the paths update refused, listed
+npx github:dohrm/claude-rules remove --source team     # drop a source, its files, the profiles only it defined
 npx github:dohrm/claude-rules remove cqrs              # delete a profile's files, update the lock
 npx github:dohrm/claude-rules remove all               # full uninstall
 ```
@@ -190,7 +195,7 @@ exact command. Install `product` first, or read the table in
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
 | **Practice** | `product` `investigate` `loop-setup` | lifecycle skills, `/rfc` included · debug methodology · repeated-loop framing |
 
-**Aliases** unpack on `add` / `remove` and are not stored in the lock: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
+**Aliases** unpack on `add` / `remove`; the lock keeps the merged sources' alias map, so an offline `remove` unpacks one an overlay defined: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
 Every profile also pulls **`rules/common`** (artifacts in English). The agent OS is `add agent`.
 
@@ -220,8 +225,10 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
   `# claude-rules:start … end` block holding the `*_dir` variables, which it
   derives from the lock's `modules`, and reports what is missing. A `CLAUDE.md`
   that exists is never rewritten — from the moment it is there, it is yours.
-- The ref and the agent set are pinned in `.claude-rules.lock`, so `update` replays
-  your choices. Updates are reviewable: re-run `update` and read the `git diff`.
+- The sources, their refs and the agent set are pinned in `.claude-rules.lock`, so
+  `update` replays your choices. Updates are reviewable: re-run `update` and read the
+  `git diff`. Every file it writes is recorded with its hash, and a path it did not
+  write as it is stops it ([ownership](#ownership--what-update-refuses)).
 - **`add` is additive.** It extends the lock — profiles, agents, **levels**, and
   **roots** — and re-emits everything it now holds, so a second `add` never drops
   the first one. Default `--level` is `rules` (prose). `--level gates` copies the
@@ -235,8 +242,8 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
   into anchoring them anyway). A bare `add` on an existing install keeps its
   agent set rather than widening to the defaults; pass `--agent` to add a target.
   Narrowing is `remove`'s job, never a side effect of `add`.
-- `remove` is the exact inverse: it deletes what each profile emitted and updates
-  the lock. It never touches your `justfile`/`lefthook` wiring — delete those
+- `remove` is the exact inverse: it deletes the files the lock records for each
+  profile, nothing it did not record, and updates the lock. It never touches your `justfile`/`lefthook` wiring — delete those
   recipes yourself. Review with `git status` before committing.
 
 ### `--root` — the globs a monorepo actually needs
@@ -287,10 +294,90 @@ repo with no Go. The filter works at the *rule* level, never at the glob level: 
 that also covers a locked language keeps its dead globs, because they cost nothing and
 start working the day that language arrives.
 
-Claude/Cursor rule directories are cleared before rewriting. Codex instead tracks
-individual owned files and hashes in the lock, preserving unknown adjacent files
-and refusing conflicting edits. Keep local conventions outside generated rules.
-The kit remains the copy-and-own surface.
+Every target tracks individual owned files and hashes in the lock, preserving
+unknown files next to its rules and refusing conflicting edits. Keep local
+conventions in `.dev/overrides/` (below), not in generated rules. The kit remains
+the copy-and-own surface.
+
+### Sources, layers and overrides
+
+The installer reads an ordered list of **sources** ([ADR-0008](adr/0008-layered-sources.md)).
+The first is this library, `core`; a team adds its private rules, skills and kit as a
+second source, pinned like the first. Each source is a git repository fetched
+shallow at its ref (tag, branch or SHA) with your own git credentials — the
+installer never asks for or stores a token. `github:owner/repo` means
+`https://github.com/owner/repo.git`; any other URL goes to git as written.
+
+```json
+"sources": [
+  { "name": "core", "url": "github:dohrm/claude-rules",                  "ref": "v1.4.0" },
+  { "name": "team", "url": "git@git.example:team/agent-rules.git",       "ref": "v0.3.0" }
+]
+```
+
+- `add --source <name>=<url>#<ref>` appends a source and re-installs; `remove
+  --source <name>` drops it, its files and the profiles only it defined. Never edit
+  the list by hand.
+- `--ref <ref>` moves `core`, `--ref <name>=<ref>` another source (repeatable).
+  Without it, `core` follows `defaultRef` and every other source replays its locked
+  ref. `--local <dir>` reads `core` from disk, with no git.
+- **Last path wins.** The sources are overlaid by repo-relative path in order, then
+  emitted for every target. The unit is a file for `rules/`, `agents/` and `kit/`,
+  and a whole directory for a skill: a later `skills/<name>/` replaces the earlier
+  one entirely. A path that is a file in one layer and a directory in another is
+  refused.
+- **Each source may carry a `registry.json`** (`core` must). Registries merge in
+  order: a profile seen again appends its entries, aliases and `retired` merge with
+  the later source winning on the same key, and a source may define profiles only it
+  has. Its `exclude` lists paths (files, or whole skill directories) removed from the
+  layers before it; their installed copies are deleted. Two entries that install
+  the same source path to two destinations, or whose source paths nest, are refused.
+- **`.dev/overrides/`** is the repo's own last layer. It mirrors the source layout
+  (`.dev/overrides/rules/common/language.md`), has no ref and no lock entry, and the
+  installer never writes it. That is where a local edit to an installed file lives
+  and survives `update`.
+- **Overrides are visible.** For every path a later layer replaces, the lock records
+  `{ path, by, over, baseHash }`, where `baseHash` is the replaced version's sha256
+  (for a skill, of its sorted `(path, sha256)` list). `add` and `update` print each
+  one (`↻ rules/common/language.md  (team over core)`). When the replaced version
+  changed since the last install, `update` warns
+  `⚠ rules/common/language.md changed in core (overridden by team)` — or `removed
+  from core` when it is gone there — and records the new base; `update --strict` fails instead, before writing anything, so CI can hold
+  the change until someone reads it.
+
+An override is a fork of one file: it no longer receives upstream fixes, and the
+warning says only that the file moved, not whether the change matters. Overriding a
+kit script can break the recipes that call it; the installer does not check that.
+
+### Ownership — what `update` refuses
+
+The installer writes only over what it owns ([ADR-0010](adr/0010-installer-refuses-unexplained-tree.md)).
+The lock's `installed` list records every file it wrote, per entry and target, with
+its sha256. Before writing anything, `add`, `update` and `remove` check every path
+they would write or delete: it must be absent, or recorded and unchanged.
+
+Anything else is a **corruption** — a hand edit in an installed rule, a file the lock
+does not record (even byte-identical), a foreign file inside an installed or emptied
+skill directory, a file where a directory goes. The command lists every such path,
+exits 1 and changes nothing. Two ways out:
+
+- **Fix the tree**: move the edit to `.dev/overrides/` (or out of the installed
+  path) and re-run.
+- **`--force`**: overwrite exactly the listed paths and record them again; on
+  `remove`, delete the listed files it was removing. It is all or nothing; read the
+  list first. One case it does not cover: `remove` keeps and rescopes a Codex rule
+  a remaining profile shares, and an edited copy has nothing left to rescope — it
+  stops `remove` even under `--force`. Restore it with `update --force` first.
+
+`update` deletes what it recorded and no longer produces (an entry dropped upstream,
+an excluded path), then writes; it never reconciles a state it cannot explain.
+
+**Adoption, once.** A lock written before hashes existed cannot tell an edit from a
+stale copy. Its first `update` lists every installed destination it will overwrite
+whole, local edits included, then records them; without a terminal it needs
+`--force`. Leftover trees of retired targets, the old `.claude/kit/` and retired
+skills are purged by this adoption only; after it, `doctor` reports a leftover
+retired-target tree for you to delete.
 
 ### `doctor` — is the install still true?
 
@@ -312,6 +399,7 @@ judgments**:
 |---|---|---|
 | An asset the lock promises is missing on disk | **fail** | the install contradicts its own lock |
 | An asset on disk that no locked profile explains | **fail** | agents load it every session and nothing records why |
+| An inventoried file edited or deleted since it was installed | **fail** | `update` would refuse it — move the edit to `.dev/overrides/`, or `update --force` |
 | The lock names an unknown profile or agent | **fail** | `update` cannot replay it |
 | A path-scoped rule whose globs match **no file** here | warn | it can never fire — dead weight, or the repo lost that code |
 | Claude locked, but the repo has no `CLAUDE.md` | warn | Claude reads `CLAUDE.md`, **never** `AGENTS.md` ([why, and why not to bridge it](../guidelines/claude-md-hierarchy.md#agentsmd)) — the project map is missing |
@@ -482,7 +570,7 @@ merge. `kit/common/hooks/README.md` says so at length; do not sell more.
 claude-rules/
 ├── registry.json    # drives the installer: profile → source dirs → destinations
 ├── justfile         # self-host: imports kit/common/gate.just in place (.claude/ and .agents/ are symlinks)
-├── bin/cli.mjs      # the npx installer (giget-based; dumb by design, data-driven)
+├── bin/cli.mjs      # the npx installer (git-fetched sources; dumb by design, data-driven)
 ├── rules/           # language (rust ts go python godot-csharp) · architecture (hexagonal cqrs
 │                    #   portal-flat portal-http tauri api backend react) · delivery & run (testing
 │                    #   cicd ops k8s) · product · agent

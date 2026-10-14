@@ -46,8 +46,55 @@ test('add rust --agent claude: rules only by default; common language and the CH
     assert.deepEqual(lock.profiles, ['rust'])
     assert.equal(lock.levels.rust, 'rules')
     assert.deepEqual(lock.agents, ['claude'])
-    assert.equal(lock.ref, registry.defaultRef)
-    assert.equal(lock.repo, registry.repo)
+    assert.deepEqual(lock.sources, [{ name: 'core', url: `github:${registry.repo}`, ref: registry.defaultRef }])
+    assert.ok(!('repo' in lock) && !('ref' in lock), 'sources replace repo + ref')
+  })
+})
+
+// ADR-0008: the lock pins an ordered list of sources. A lock written before that
+// (`repo` + `ref`) must still read, as core alone, and leave in the new shape.
+test('a legacy { repo, ref } lock reads as core and is rewritten as sources', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    delete lock.sources
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'someone/fork', ref: 'v0.9.0', ...lock }, null, 2) + '\n')
+    const r = ok(runCli(['update', '--ref', 'v1.0.0'], dir))
+    assert.match(r.stdout, /core@v1\.0\.0/)
+    const next = lockOf(dir)
+    assert.deepEqual(next.sources, [{ name: 'core', url: 'github:someone/fork', ref: 'v1.0.0' }])
+    assert.ok(!('repo' in next) && !('ref' in next), 'repo/ref are not written again')
+  })
+})
+
+test('--ref targets core; --ref <name>=<ref> must name a locked source', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude', '--ref', 'v2.0.0'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, 'v2.0.0')
+    ok(runCli(['update', '--ref', 'core=v2.1.0'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, 'v2.1.0', 'core=<ref> is the long form of --ref <ref>')
+    ok(runCli(['update'], dir))
+    assert.equal(lockOf(dir).sources[0].ref, registry.defaultRef, 'without --ref, core follows defaultRef')
+    const before = read(dir, '.claude-rules.lock')
+    const r = runCli(['update', '--ref', 'team=v1'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /--ref names unknown source\(s\): team\. Locked: core/)
+    assert.equal(read(dir, '.claude-rules.lock'), before, 'a refused update leaves the lock alone')
+    const twice = runCli(['update', '--ref', 'v1', '--ref', 'core=v2'], dir)
+    assert.equal(twice.status, 1)
+    assert.match(twice.stderr, /--ref given twice for source "core"/)
+  })
+})
+
+test('a lock whose sources do not start with core is refused', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'claude'], dir))
+    const lock = lockOf(dir)
+    lock.sources = [{ name: 'team', url: 'file:///nowhere', ref: 'main' }, ...lock.sources]
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+    const r = runCli(['update'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /the first source must be "core", found "team"/)
   })
 })
 
@@ -186,14 +233,18 @@ test('the kit has one home whatever the agents, and is copied once', () => {
 // An install that predates the move leaves .claude/kit/ behind, and a justfile still
 // importing from it never sees an `update` again — the exact drift the move fixes. So
 // add/update purge it, BY NAME: a directory the repo put there itself survives.
-test('add purges the legacy .claude/kit, keeping what is not ours', () => {
+// Legacy trees go once, with the adoption that lists them (ADR-0010): a pre-RFC lock.
+test('adoption purges the legacy .claude/kit, keeping what is not ours', () => {
   withTmpRepo(dir => {
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
+
     mkdirSync(join(dir, '.claude/kit/rust'), { recursive: true })
     writeFileSync(join(dir, '.claude/kit/rust/deny.toml'), 'stale\n')
     mkdirSync(join(dir, '.claude/kit/mine'), { recursive: true })
     writeFileSync(join(dir, '.claude/kit/mine/notes.md'), 'mine\n')
 
-    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
+    assert.match(r.stdout, /^  ! \.claude\/kit\/rust$/m, 'listed before it goes')
     assert.ok(!has(dir, '.claude/kit/rust'), 'the legacy kit copy must go')
     assert.ok(has(dir, '.claude/kit/mine/notes.md'), 'only registry-known kit dirs may be deleted')
     assert.match(r.stdout, /\.claude\/kit/, 'a silent move leaves the reader with two trees')
@@ -214,8 +265,10 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   })
 })
 
-test('add/update purge leftover trees from retired agent targets', () => {
+test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
+
     mkdirSync(join(dir, '.dev/rules/rust'), { recursive: true })
     writeFileSync(join(dir, '.dev/rules/rust/code-style.md'), 'stale\n')
     mkdirSync(join(dir, '.opencode/agent'), { recursive: true })
@@ -231,7 +284,8 @@ test('add/update purge leftover trees from retired agent targets', () => {
       '',
     ].join('\n'))
 
-    const r = ok(runCli(['add', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
+    assert.match(r.stdout, /^  ! \.opencode$/m, 'listed before it goes')
     assert.ok(!has(dir, '.dev/rules'), 'Codex/opencode rule copies must go')
     assert.ok(!has(dir, '.opencode'), 'the opencode tree must go')
     assert.ok(has(dir, '.agents/rules'), 'unowned Codex bridge must survive')
@@ -240,18 +294,19 @@ test('add/update purge leftover trees from retired agent targets', () => {
   })
 })
 
-test('update drops a retired profile from an old lock and purges retired skills', () => {
+test('update drops a retired profile from an old lock; its adoption purges retired skills', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'product', '--agent', 'claude'], dir))
     const lock = lockOf(dir)
     lock.profiles = [...lock.profiles, 'goal-setup']
     lock.modules['.'] = [...lock.modules['.'], 'goal-setup']
     lock.levels = { ...lock.levels, 'goal-setup': 'rules' }
+    for (const record of lock.installed) delete record.files   // an old lock: no hashes
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
     mkdirSync(join(dir, '.claude/skills/plan'), { recursive: true })
     writeFileSync(join(dir, '.claude/skills/plan/SKILL.md'), '---\nname: plan\n---\n')
 
-    const r = ok(runCli(['update'], dir))
+    const r = ok(runCli(['update', '--force'], dir))
     const after = lockOf(dir)
     assert.ok(!after.profiles.includes('goal-setup'))
     assert.ok(!after.modules['.'].includes('goal-setup'))
@@ -697,13 +752,16 @@ test('remove drops the module bindings of the profiles it removes', () => {
   })
 })
 
-test('update clears a rule directory instead of leaving orphans in it', () => {
+// The installer deletes only what it wrote (ADR-0010): a file it never recorded is the
+// repo's, kept alongside the installed rules; one it wrote and upstream dropped is
+// pruned (test/ownership.test.mjs).
+test('update keeps a file it did not write in a rule directory', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))
-    writeFileSync(join(dir, '.claude/rules/rust/dropped-upstream.md'), '---\ntitle: x\n---\nstale\n')
+    writeFileSync(join(dir, '.claude/rules/rust/mine.md'), '---\ntitle: x\n---\nmine\n')
 
     ok(runCli(['update'], dir))
-    assert.ok(!has(dir, '.claude/rules/rust/dropped-upstream.md'), 'a rule dir is library-owned; update must not leave orphans')
+    assert.ok(has(dir, '.claude/rules/rust/mine.md'), 'never recorded, so never deleted')
     assert.ok(has(dir, '.claude/rules/rust/code-style.md'))
     // kit is the "copy and own" surface — update must NOT wipe what the repo added.
     writeFileSync(join(dir, '.dev/kit/rust/mine.toml'), 'x = 1\n')

@@ -41,6 +41,25 @@ without it, `update` falls back to `main`:
 npx github:dohrm/claude-rules#<ref> update --ref <ref>
 ```
 
+The lock may list several sources: `--ref <ref>` moves `core` only, and every other
+source replays its locked ref unless the human names one (`--ref <name>=<ref>`).
+
+Two refusals stop `update` before it changes anything. Both are the human's to
+settle — never pass `--force` on your own:
+
+- **Adoption** — the lock records no file hashes (an install from before hashes).
+  `update` lists every installed destination it would overwrite once, local edits
+  included, and needs `--force` without a terminal. Show the list; the human saves
+  any edit worth keeping (into `.dev/overrides/`, same layout as the source) and
+  then says whether to re-run with `--force`.
+- **Corruption** — a listed path is edited, unrecorded, or foreign inside a skill.
+  Report each one with `git log -- <path>`. The fix is the human's: move the edit to
+  `.dev/overrides/`, delete the stray file, or re-run with `--force`.
+
+An `⚠ <path> changed in <source> (overridden by <layer>)` line means an upstream
+fix no longer reaches this repo. Add a row for it in step 3 — the human reads the
+upstream diff and decides whether the override still holds.
+
 ### 2. Read what changed
 
 - `git diff -- .dev/kit/CHANGELOG.md` — the added lines are every entry since

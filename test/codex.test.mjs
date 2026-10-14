@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, symlinkSync, rmSync, cpSync } from 'node:fs'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
 import { REPO, runCli, runCliBare, withTmpRepo, read, has } from './helpers.mjs'
 const ok = r => { assert.equal(r.status, 0, r.stderr + r.stdout); return r }
 const lock = dir => JSON.parse(read(dir, '.claude-rules.lock'))
@@ -142,7 +141,7 @@ for (const malformed of [start, end + start, start + end + start + end]) {
 test('unowned conflicting asset rejects adoption without mutating other targets', () => withTmpRepo(dir => {
   put(dir, '.agents/rules/rust/code-style.md', 'custom')
   const r = runCli(['add', 'rust'], dir)
-  assert.equal(r.status, 1); assert.match(r.stderr, /Conflicting local content/)
+  assert.equal(r.status, 1); assert.match(r.stderr, /✗ \.agents\/rules\/rust\/code-style\.md — not written by claude-rules/)
   assert.ok(!has(dir, '.claude'))
   assert.equal(read(dir, '.agents/rules/rust/code-style.md'), 'custom')
 }))
@@ -228,6 +227,7 @@ test('canonical ownership paths cannot escape their asset tree', () => withTmpRe
 test('source failure preserves installed files; source deletion removes only owned files', () => withTmpRepo(dir => withTmpRepo(source => {
   cpSync(join(REPO, 'rules'), join(source, 'rules'), { recursive: true })
   cpSync(join(REPO, 'CHANGELOG.md'), join(source, 'CHANGELOG.md'))   // a shared entry
+  cpSync(join(REPO, 'registry.json'), join(source, 'registry.json'))  // the source's registry decides what it installs
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
   put(dir, '.agents/rules/rust/custom.md', 'mine')
   const before = read(dir, '.claude-rules.lock')
@@ -289,9 +289,11 @@ test('profiles sharing registry assets union their scopes and retain remaining o
   assert.ok(!has(dir, 'apps/web/AGENTS.md'))
 }))
 
-test('identical manual assets are adopted and stale lock scoping is diagnosed', () => withTmpRepo(dir => {
+// ADR-0010: identical content is not ownership; --force records it.
+test('identical manual assets are refused, adopted under --force, and stale lock scoping is diagnosed', () => withTmpRepo(dir => {
   put(dir, '.agents/rules/rust/code-style.md', read(REPO, 'rules/rust/code-style.md'))
-  ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+  assert.match(runCli(['add', 'rust', '--agent', 'codex'], dir).stderr, /✗ \.agents\/rules\/rust\/code-style\.md — not written by claude-rules/)
+  ok(runCli(['add', 'rust', '--agent', 'codex', '--force'], dir))
   assert.ok(lock(dir).codex.files['.agents/rules/rust/code-style.md'])
   const state = lock(dir)
   state.modules = { '.': [], 'apps/api': ['rust'] }
@@ -322,11 +324,11 @@ test('legacy Codex locks cannot authorize recursive removal of unowned trees', (
 }))
 
 test('alias cycles and unknown module aliases fail before writing an installation', () => withTmpRepo(dir => withTmpRepo(source => {
-  cpSync(join(REPO, 'bin'), join(source, 'bin'), { recursive: true })
+  // The registry that counts is the source's (the --local tree), not the CLI's own copy.
   const registry = JSON.parse(read(REPO, 'registry.json'))
   registry.aliases.loopA = ['loopB']; registry.aliases.loopB = ['loopA']
   put(source, 'registry.json', JSON.stringify(registry))
-  const result = spawnSync(process.execPath, [join(source, 'bin/cli.mjs'), 'add', 'loopA', '--local', REPO], { cwd: dir, encoding: 'utf8' })
+  const result = runCliBare(['add', 'loopA', '--local', source], dir)
   assert.equal(result.status, 1); assert.match(result.stderr, /Alias cycle/)
   assert.ok(!has(dir, '.claude-rules.lock'))
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))

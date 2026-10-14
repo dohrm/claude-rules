@@ -97,9 +97,9 @@ bytes outside the block, including other tools' managed sections. Do not follow
 symlinked instruction files or overwrite a conflicting unmanaged destination.
 
 Record the Codex-owned emitted file paths in the lock. Refresh and remove only
-owned files; retain unknown files alongside them. On first adoption of existing
-untracked destinations, adopt byte-identical files only; conflicting contents
-must be reconciled explicitly. Do not restore destructive legacy cleanup for
+owned files; retain unknown files alongside them. An existing destination the
+lock does not record is never adopted silently, not even byte-identical: it is
+listed and refused, and `--force` overwrites and records it (ADR-0010). Do not restore destructive legacy cleanup for
 installations that have not selected Codex.
 
 Regenerate the root/module references after partial profile removal. Full removal deletes the

@@ -23,9 +23,12 @@ checks too. `init` creates missing scaffolding; follow the reported wiring steps
 for existing files and install the tools your kit needs. Run `just check` once
 wired. See the [kit setup](kit/README.md).
 
-**Keep local changes outside generated rules.** Codex updates track owned files
-and refuse conflicting local edits; Claude/Cursor rule directories are replaced. The kit is copied for adaptation. Review the diff after each
-installation or update. Use `--ref <tag-or-commit>` to pin an asset revision.
+**Keep local changes in `.dev/overrides/`, not in installed files.** The lock records
+every file the installer writes, with its hash, for every agent. An `update` that finds
+one edited, or a file it did not write in an installed skill, lists the paths and
+changes nothing; `--force` overwrites them. The kit is copied for adaptation. Review
+the diff after each installation or update. Use `--ref <tag-or-commit>` to pin an
+asset revision.
 
 ## Pick your stack
 
@@ -133,6 +136,33 @@ To add Codex to an existing installation, repeat an installed profile explicitly
 
 Removal leaves your justfile and hook wiring for you to adjust.
 [Installer reference](docs/reference.md#install) covers levels, roots and updates.
+
+## Layer your own assets
+
+A team's private rules, skills and kit go in their own git repository, added as a
+second source on top of this library and pinned like it. Your git credentials fetch
+it; nothing else is stored.
+
+```bash
+npx github:dohrm/claude-rules add --source team=git@git.example:team/agent-rules.git#v0.3.0
+npx github:dohrm/claude-rules update --ref team=v0.4.0   # move that source only
+npx github:dohrm/claude-rules remove --source team       # drop it, its files, its own profiles
+```
+
+- **The last path wins**: a file for rules, agents and kit; a whole directory for a
+  skill. A source's `registry.json` can add profiles and aliases, and its `exclude`
+  list removes files or skills of the sources before it.
+- **`.dev/overrides/`** is the repo's own last layer, in the same layout
+  (`.dev/overrides/rules/common/language.md`). The installer never writes it.
+- **Every override is listed** in the lock (`overrides`) and printed. `update` warns
+  when the file you override changed upstream; `update --strict` fails on it.
+- The lock also keeps the merged `aliases`, so an offline `remove` understands an
+  alias only your source defines.
+- Refused, never guessed: two entries that install the same source path to two
+  places, two entries whose source paths nest, and a skill directory that is emptied while it holds a file the installer
+  did not write.
+
+See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrides).
 
 ## Find the details
 
