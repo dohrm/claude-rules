@@ -103,7 +103,9 @@ L4 as L3.
 **The domain is checked at launch, never assumed.** Before the first phase, prove each
 prerequisite and log one `ODD:` line per check:
 
-- the stopping condition runs and fails for the reason the RFC gives. A change whose
+- the stopping condition runs and fails for the reason the RFC gives. When the RFC
+  writes its own witness, the condition already names it and fails on its absence: a
+  runner that skips a missing file passes, which is not failing first. A change whose
   condition cannot fail first, pure prose for instance, cannot run at L4;
 - every delegated hold has a check command;
 - every executor on the board is installed and answers;
