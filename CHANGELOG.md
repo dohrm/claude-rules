@@ -212,6 +212,16 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Changed
 
+- **`/rfc` asks for a model when a step rewrites existing state.** A new optional
+  `## Model` section lists the invariants the change keeps and the states it refuses
+  instead of handling; a review finding asking to handle a refused state is answered by
+  the refusal. The OCR brief (`review-context.mjs --brief`) now carries it with Goal and
+  Local decisions. Learned on #33: without a model, each review round found one more
+  combination of old and new state.
+- **L4 launch check: a missing witness is not failing first.** `agent/autonomy.md` § L4
+  now says that when the RFC writes its own witness, the stopping condition names it and
+  fails on its absence: `node --test a b` drops a missing `a` when `b` exists.
+
 - **RFC store: `Act as` becomes `Agent accounts`.** The identity is whoever the
   tracker access is authenticated as (whoami at run time); the adapter now lists only
   the accounts reserved to agents, or `none`. Any other whoami is a human's, so the

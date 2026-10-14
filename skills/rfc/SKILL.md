@@ -106,6 +106,12 @@ has a number: the phase's diff must fit one `just code-review` (`review_max_byte
 the phases run in order inside the same RFC. A tracker may mirror them as sub-tickets
 (`ticket.md`); the RFC stays the only state.
 
+**State the model when a step rewrites state that already exists** — files on disk, a
+lock, stored data, a schema. Under `## Model`, before the steps: the invariants the change
+keeps, and the states it **refuses** rather than handles. A review finding that asks to
+handle a refused state is answered by the refusal, not by new code. Without the model,
+each review round discovers one more combination of old and new state.
+
 **Holds** are pauses the change itself needs — a migration that must finish, a
 deploy, a date, an external sign-off — before the next phase may start (a dismantling
 cleans the code only after the migration). Write each as a `⏸ hold` step with the
@@ -216,6 +222,13 @@ closes the RFC.
 ## Local decisions
 
 - <decision> — <reason>
+
+## Model
+
+<!-- Only when a step rewrites existing state (files, a lock, data, a schema). Absent otherwise. -->
+
+- Keeps: <invariant, e.g. "only what the inventory records is ever deleted">
+- Refuses: <state the change rejects with an error instead of handling>
 
 ## Delegation board
 

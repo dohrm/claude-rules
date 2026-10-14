@@ -819,10 +819,11 @@ test('review-context --brief: the frame OCR can take — title, Goal, decisions,
     write(dir, '.work/x/rfc.md', POINTER)
     write(dir, '.work/x/review-context.md', '# RFC — Deliver it\n\n- **Status**: implementing\n\n'
       + '## Request\n\nREQUEST_TEXT\n\n## Goal\n\nGOAL_TEXT\n\n## Scope\n\n- In: SCOPE_TEXT\n\n'
-      + '## Local decisions\n\n- DECISION_TEXT\n\n## Steps\n\nSTEPS_TEXT\n\n' + 'comment '.repeat(5000))
+      + '## Local decisions\n\n- DECISION_TEXT\n\n## Model\n\n- Refuses: MODEL_TEXT\n\n'
+      + '## Steps\n\nSTEPS_TEXT\n\n' + 'comment '.repeat(5000))
     const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
     assert.ok(Array.from(out.trim()).length <= 2000, `${Array.from(out).length} characters`)
-    for (const want of ['# RFC — X', 'GOAL_TEXT', 'DECISION_TEXT']) assert.ok(out.includes(want), want)
+    for (const want of ['# RFC — X', 'GOAL_TEXT', 'DECISION_TEXT', 'MODEL_TEXT']) assert.ok(out.includes(want), want)
     for (const not of ['REQUEST_TEXT', 'SCOPE_TEXT', 'STEPS_TEXT', 'comment comment']) assert.ok(!out.includes(not), not)
     // Over the cap: cut, never rejected.
     const cut = run(REVIEW_CONTEXT, ['--brief', '30'], dir).out
