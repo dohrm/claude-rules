@@ -22,7 +22,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, 'rfc/**']   # rfc/**: L4 phase PRs (rules/agent/autonomy.md § L4)
+    branches: [main, next, 'rfc/**']   # next: the integration trunk; rfc/**: L4 phase PRs (rules/agent/autonomy.md § L4)
   workflow_dispatch:
     inputs:
       run_eval:
