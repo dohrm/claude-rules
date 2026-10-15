@@ -24,7 +24,8 @@ Each kind of test has one place, and no test lives anywhere else.
   `#[cfg(any(test, feature = "test-support"))] pub mod testkit;`.
 - **One integration crate, not one file per test.** Every `tests/*.rs` file is a separate crate, linked
   separately. Many files multiply link time.
-- **A test that needs private items is a unit test.** Never widen an item's visibility for a test.
+- **A test that needs private items is a unit test.** Never widen a production item's visibility for a test;
+  a `testkit` behind `test-support` is the one `pub` surface made for tests.
 - **A test that only uses the crate's `pub` API belongs in `tests/`.** It documents the contract and
   survives any internal refactor. A `pub` item of a private module is not public API: its test is a
   unit test.
