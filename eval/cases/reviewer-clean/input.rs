@@ -3,7 +3,11 @@
 
 /// Sum the even numbers in a slice.
 pub fn sum_even(xs: &[i64]) -> i64 {
-    xs.iter().copied().filter(|n| n % 2 == 0).sum()
+    xs.iter().copied().filter(|&n| is_even(n)).sum()
+}
+
+fn is_even(n: i64) -> bool {
+    n % 2 == 0
 }
 
 #[cfg(test)]
