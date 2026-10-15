@@ -25,7 +25,8 @@ Each kind of test has one place, and no test lives anywhere else.
 - **One integration crate, not one file per test.** Every `tests/*.rs` file is a separate crate, linked
   separately. Many files multiply link time.
 - **A test that needs private items is a unit test.** Never widen a production item's visibility for a test;
-  a `testkit` behind `test-support` is the one `pub` surface made for tests.
+  a `testkit` behind `test-support` is the one `pub` surface made for tests: fixtures and builders over
+  the public API, never a wrapper that exposes a private item.
 - **A test that only uses the crate's `pub` API belongs in `tests/`.** It documents the contract and
   survives any internal refactor. A `pub` item of a private module is not public API: its test is a
   unit test.
