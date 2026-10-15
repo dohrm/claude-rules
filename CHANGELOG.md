@@ -12,6 +12,34 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — `/investigate` is now `/bug`
+
+`/investigate` was a debug method that stopped after every phase. `/bug` keeps the same
+method and adds a lifecycle around it ([#44](https://github.com/dohrm/claude-rules/issues/44)):
+
+- **Two commands.** `/bug <symptom or ticket>` diagnoses: it reproduces the bug, ranks
+  3 hypotheses and confirms the root cause, then stops. `/bug fix` lands the minimal fix
+  as a PR. It refuses to start without a recorded diagnosis, and its reproduction must
+  still fail on the base before any fix.
+- **Autonomy levels.** L1 stops after each phase, as `/investigate` did. L2 stops after
+  the diagnosis. L3 runs through to the PR. The human gate is the merge.
+- **A state file.** The state lives in `.work/<slug>/bug.md`. `just status` surfaces
+  its `## Blocked on the human`, and `just code-review` reads it as the frame. Its
+  `**Branch**` header names the fix branch, which places the gate markers.
+- **Restore, never change.** `/bug` only restores established behavior. A change request,
+  a contested expected behavior, three refuted hypotheses, a touched ADR, public API or
+  schema, or a fix larger than one PR all go to `/rfc`.
+
+Migration:
+
+- `update` replaces `investigate` with `bug` in the lock, installs `skills/bug` and
+  deletes the old `investigate` skill directories for Claude and Codex.
+- `add investigate` and `remove investigate` still work: `investigate` is a profile alias.
+- The typed `/investigate` command is gone. The `bug` description keeps "investigate" and
+  "debug" as triggers, so asking in plain words still finds it.
+- Wired the kit by hand? Update `kit/common` whole: `work-slug.mjs`, `review-context.mjs`
+  and `worktree-status.mjs` changed.
+
 ### Breaking — the installer writes only over what it owns
 
 The lock now records every file the installer writes, for every target, with its

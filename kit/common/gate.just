@@ -83,7 +83,7 @@ review_paths   := review_exclude + " " + review_secrets
 # branch as a whole: `just incremental=0 code-review` is that pass, worth one run
 # before the PR.
 #
-# `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` whose
+# `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` (or `bug.md`) whose
 # `**Branch**` header is the current branch (`/rfc` writes it per phase), else the branch
 # name (`work-slug.mjs`). Set it to a `/loop-setup` slug to park the marker next to its
 # state file.

@@ -43,7 +43,7 @@ Every loop carries all four:
 - **Iteration cap** — max turns before forced stop.
 - **Token budget** — an upper bound; mandatory for open loops, recommended for closed.
 - **Escalation point** — on cap/budget exhaustion → STOP and surface state to the human, **never** silent failure or fake-green.
-- **Divergence guard** — "if N consecutive turns pass with no measurable progress (done-command no closer), STOP and escalate." This is the loop analog of the *three-strikes rule* in `skills/investigate` (if present).
+- **Divergence guard** — "if N consecutive turns pass with no measurable progress (done-command no closer), STOP and escalate." This is the loop analog of the *three-strikes rule* in `skills/bug` (if present).
 
 The level sets how much one turn covers, and so the unit the cap is counted in — never whether the four exist:
 
@@ -90,7 +90,7 @@ And state the one thing the human must not improvise — **editing the code whil
 3. **Declare it**: one `human: <what and why>` line in `## Log`. Undeclared, the edit competes with the agent's next turn and the agent wins.
 4. Relaunch.
 
-If this happens often, that is a signal about the **cut**, not about the agent: an item needing exploration failed precondition 3 (*end-to-end doable*) and belonged in an `/investigate`, not in the loop.
+If this happens often, that is a signal about the **cut**, not about the agent: an item needing exploration failed precondition 3 (*end-to-end doable*) and belonged in a `/bug`, not in the loop.
 
 <loop-file-template>
 <!-- `.work/<slug>/loop.md`, rewritten every turn. -->

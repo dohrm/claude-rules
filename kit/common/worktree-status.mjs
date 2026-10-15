@@ -93,8 +93,8 @@ function blockedIn(file) {
 }
 
 /** Every state file an agent escalates in, under `.work/<slug>/`: `rfc.md` from
- *  `/rfc` and `loop.md` from `/loop-setup`. Sorted, so within one slug the RFC
- *  sorts last and is the one shown. */
+ *  `/rfc`, `loop.md` from `/loop-setup` and `bug.md` from `/bug`. Sorted, so within
+ *  one slug the RFC sorts last and is the one shown. */
 function worklists(root) {
   const found = []
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -102,7 +102,7 @@ function worklists(root) {
     const slug = entry.name
     const add = (rel) =>
       found.push({ label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
-    for (const name of ['loop.md', 'rfc.md']) if (existsSync(join(root, slug, name))) add(name)
+    for (const name of ['bug.md', 'loop.md', 'rfc.md']) if (existsSync(join(root, slug, name))) add(name)
   }
   return found.sort((a, b) => a.label.localeCompare(b.label))
 }

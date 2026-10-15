@@ -10,7 +10,8 @@
 //
 // Order, first answer wins:
 //   1. an explicit slug (the justfile's `work_slug`);
-//   2. the `.work/*/rfc.md` whose `**Branch**` header names the current branch;
+//   2. the `.work/*/rfc.md` (or `/bug`'s `bug.md`) whose `**Branch**` header names the
+//      current branch;
 //   3. an L4 phase branch `phase/<slug>/<n>` whose `.work/<slug>/rfc.md` exists — the
 //      header names the integration branch `rfc/<slug>`, and git cannot nest a phase
 //      under it (rules/agent/autonomy.md § L4);
@@ -43,7 +44,10 @@ export function currentBranch(cwd = '.') {
   }
 }
 
-/** The RFC directories under `.work/` whose `**Branch**` header is `branch`. */
+// The state files that carry a `**Branch**` header: `/rfc`'s and `/bug`'s.
+const BRANCHED = ['rfc.md', 'bug.md']
+
+/** The work directories under `.work/` whose state file's `**Branch**` header is `branch`. */
 function rfcsOn(branch, cwd) {
   const root = join(cwd, '.work')
   let entries = []
@@ -55,15 +59,15 @@ function rfcsOn(branch, cwd) {
   return entries
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
-    .filter((name) => {
-      // An unreadable rfc.md (a directory, no permission) belongs to some other work:
+    .filter((name) => BRANCHED.some((file) => {
+      // An unreadable state file (a directory, no permission) belongs to some other work:
       // it must not crash the gate of this one.
       try {
-        return headerOf(readFileSync(join(root, name, 'rfc.md'), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
+        return headerOf(readFileSync(join(root, name, file), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
       } catch {
         return false
       }
-    })
+    }))
     .sort()
 }
 

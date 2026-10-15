@@ -12,8 +12,10 @@
 //
 // | on disk                                  | section                                     |
 // |------------------------------------------|---------------------------------------------|
-// | no `.work/<slug>/rfc.md`                 | "No RFC for this branch." — not a defect:   |
+// | no `.work/<slug>/rfc.md` nor `bug.md`    | "No RFC for this branch." — not a defect:   |
 // |                                          | loops and ad hoc work have none             |
+// | `bug.md` (from `/bug`), no `rfc.md`      | the diagnosis, minus `## Log` — always      |
+// |                                          | local, its `**Ticket**` is only a link      |
 // | local `rfc.md`                           | its body, minus `## Revisions` and `## Log` |
 // |                                          | (history), keeping Log's `changed:` entries |
 // | ticket pointer + `review-context.md`     | the pointer header, then the cache, with    |
@@ -98,6 +100,10 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
       + 'all claim this branch in their **Branch** header — the tree contradicts its state files.\n'
   }
   if (!existsSync(join(cwd, rfcPath))) {
+    const bugPath = join(dir, 'bug.md')
+    if (existsSync(join(cwd, bugPath))) {
+      return `${head}Source: ${bugPath} (bug diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, bugPath), 'utf8'))}`
+    }
     return `${head}No RFC for this branch (slug \`${resolved.slug}\`, from the ${resolved.from}).\n`
   }
 
