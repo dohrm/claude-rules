@@ -129,8 +129,8 @@ these cases are run against a model. Adding them is not a claim that they passed
 eval/cases/<name>/
   expect.json     # the target + the assertions
   input.rs        # a single fixture, left UNCOMMITTED — the working change (agent cases)
-  files/          # a whole fixture repo, committed as the baseline (skill cases):
-                  #   a justfile, docs/, manifests… whatever the skill must read
+  files/          # a fixture repo, committed as the baseline (skill cases, or files an input.* needs):
+                  #   a justfile, docs/, manifests, sibling sources… whatever the target must read
 ```
 
 The workspace is a real git repo: a baseline commit, then `input.*` on top as the
