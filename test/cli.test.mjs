@@ -339,6 +339,8 @@ for (const [old, stale] of [['investigate', ['investigate', 'bug']], ['bug', ['b
       const after = lockOf(dir)
       assert.deepEqual(after.profiles, ['defect'])
       assert.deepEqual(after.modules['.'], ['defect'])
+      assert.deepEqual([after.aliases.investigate, after.aliases.bug], [['defect'], ['defect']],
+        'the old lock\'s aliases are rewritten, not kept')
       for (const root of ['.claude/skills', '.agents/skills']) {
         assert.ok(has(dir, `${root}/defect/SKILL.md`), `${root}/defect installed`)
         assert.ok(!has(dir, `${root}/${old}`), `${root}/${old} removed`)
