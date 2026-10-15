@@ -6,3 +6,7 @@
 - **Base branch**: next
 - **Branch**: feat/bug-skill
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/44
+
+## Blocked on the human
+
+- Review and merge PR #46.
