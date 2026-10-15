@@ -3,16 +3,12 @@
 
 /// Sum the even numbers in a slice.
 pub fn sum_even(xs: &[i64]) -> i64 {
-    xs.iter().copied().filter(|n| n % 2 == 0).sum()
+    xs.iter().copied().filter(|&n| is_even(n)).sum()
+}
+
+fn is_even(n: i64) -> bool {
+    n % 2 == 0
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sums_even_numbers() {
-        assert_eq!(sum_even(&[1, 2, 3, 4]), 6);
-        assert_eq!(sum_even(&[]), 0);
-    }
-}
+mod tests;
