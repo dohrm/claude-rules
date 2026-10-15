@@ -92,19 +92,23 @@ function blockedIn(file) {
     .filter((l) => l && !/^[-*]?\s*<[^>]*>$/.test(l))
 }
 
-/** Every state file an agent escalates in, under `.work/<slug>/`: `rfc.md` from
- *  `/rfc`, `loop.md` from `/loop-setup` and `bug.md` from `/bug`. Sorted, so within
- *  one slug the RFC sorts last and is the one shown. */
+const RANK = ['bug.md', 'loop.md', 'rfc.md']
+
+/** Every state file an agent escalates in, under `.work/<slug>/`, ranked: `bug.md`
+ *  from `/bug`, then `loop.md` from `/loop-setup`, then `rfc.md` from `/rfc`. Within one
+ *  slug the highest rank comes last and is the one shown: an RFC takes over the bug or
+ *  loop it came from. */
 function worklists(root) {
   const found = []
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
     const slug = entry.name
     const add = (rel) =>
-      found.push({ label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
-    for (const name of ['bug.md', 'loop.md', 'rfc.md']) if (existsSync(join(root, slug, name))) add(name)
+      found.push({ slug, file: rel, label: `${slug}/${rel.replace(/\.md$/, '')}`, path: join(root, slug, ...rel.split('/')) })
+    for (const name of RANK) if (existsSync(join(root, slug, name))) add(name)
   }
-  return found.sort((a, b) => a.label.localeCompare(b.label))
+  // By slug, then by rank — never by the spelling of the file name.
+  return found.sort((a, b) => a.slug.localeCompare(b.slug) || RANK.indexOf(a.file) - RANK.indexOf(b.file))
 }
 
 /** The newest worklist in a tree, plus what every slug's winning worklist says is
@@ -119,7 +123,7 @@ function worklistState(tree) {
   if (!found.length) return { label: '—', blocked: [] }
   const newest = found[found.length - 1]
   const label = newest.label + (found.length > 1 ? ` (+${found.length - 1})` : '')
-  const winners = new Map(found.map((w) => [w.label.split('/')[0], w]))
+  const winners = new Map(found.map((w) => [w.slug, w]))
   const blocked = [...winners.values()].flatMap((w) =>
     blockedIn(w.path).map((line) => (w === newest ? line : `${w.label}: ${line.replace(/^[-*]\s*/, '')}`)))
   return { label, blocked }

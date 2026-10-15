@@ -1374,6 +1374,18 @@ test('worktree-status: every work in a tree keeps its escalation, not only the n
   })
 })
 
+test('worktree-status: within one slug the RFC takes over the escalation of its bug.md', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/x/bug.md', worklist(['BUG_BLOCKER']))
+    write(dir, '.work/x/rfc.md', worklist(['RFC_BLOCKER']))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /x\/rfc \(\+1\)/)
+    assert.match(r.out, /BLOCKED: RFC_BLOCKER/)
+    assert.doesNotMatch(r.out, /BUG_BLOCKER/)
+  })
+})
+
 test('review-context: a slug holding a bug.md and an rfc.md reads the one naming the branch', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)
@@ -1390,7 +1402,7 @@ test('review-context: a slug holding a bug.md and an rfc.md reads the one naming
     write(dir, '.work/x/bug.md', '- **Branch**: rfc/x\n\n## Root cause\n\nBUG_FRAME\n')
     const both = run(REVIEW_CONTEXT, [], dir).out
     assert.match(both, /RFC_FRAME/)
-    assert.ok(!both.includes('not available'))
+    assert.ok(!both.includes('BUG_FRAME') && !both.includes('not available'))
   })
 })
 

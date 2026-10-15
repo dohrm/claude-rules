@@ -14,8 +14,8 @@
 // |------------------------------------------|---------------------------------------------|
 // | no `.work/<slug>/rfc.md` nor `bug.md`    | "No RFC for this branch." — not a defect:   |
 // |                                          | loops and ad hoc work have none             |
-// | `bug.md` whose `**Branch**` names the    | the diagnosis, minus `## Log` — always      |
-// | branch, or `bug.md` and no `rfc.md`      | local, its `**Ticket**` is only a link      |
+// | `bug.md` naming the branch while its     | the diagnosis, minus `## Log` — always      |
+// | `rfc.md` does not, or no `rfc.md` at all | local, its `**Ticket**` is only a link      |
 // | local `rfc.md`                           | its body, minus `## Revisions` and `## Log` |
 // |                                          | (history), keeping Log's `changed:` entries |
 // | ticket pointer + `review-context.md`     | the pointer header, then the cache, with    |

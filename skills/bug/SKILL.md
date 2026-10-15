@@ -47,10 +47,10 @@ The only state, in every mode. Anything not written in it is lost for the next r
 
 **One bug, one tree, one branch** (`agent/autonomy.md` § One tree, one writer): before
 phase 1, cut the bug's branch from a checkout of the base — `just tree <slug> fix/<slug>`,
-else `git switch -c fix/<slug> <base>` — and write it into `**Branch**`. With a ticket the
-slug is `bug-<ticket number>`, so any run finds the branch from the ticket alone. Commit `bug.md` at the end of each phase. When a
-run stops before the fix, push the branch: `/bug fix`, maybe another run in another
-checkout, resumes from it. The fix lands on the same branch, and the file is deleted once
+else `git switch -c fix/<slug> <base>` — and write it into `**Branch**`. With a ticket
+the slug is `bug-<ticket number>`, so any run finds the branch from the ticket alone.
+Commit `bug.md` at the end of each phase. When a run stops before the fix, push the
+branch: `/bug fix`, maybe another run in another checkout, resumes from it. The fix lands on the same branch, and the file is deleted once
 its PR merges (`product/documents.md`).
 
 <bug-body>
