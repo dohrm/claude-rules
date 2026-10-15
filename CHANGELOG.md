@@ -212,6 +212,12 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Changed
 
+- **Rust tests have one layout: `rules/rust/test-layout.md`.** Unit tests in
+  `foo/tests.rs` declared by `#[cfg(test)] mod tests;` (no inline `mod tests { … }`, no
+  `#[path]`), integration tests in one `tests/it/` crate, fixtures shared across crates
+  behind a `test-support` feature. `rules/testing/strategy.md` now points to it instead
+  of suggesting an inline module. It is a convention, not a gate: existing inline test
+  modules still pass `just rust-lint`. Move them when you next touch the file.
 - **`/rfc` asks for a model when a step rewrites existing state.** A new optional
   `## Model` section lists the invariants the change keeps and the states it refuses
   instead of handling; a review finding asking to handle a refused state is answered by

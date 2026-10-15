@@ -76,8 +76,8 @@ and the retry must be logged and counted — never silent.
 
 ## Per-language note
 
-- **Rust** — unit tests in a `#[cfg(test)] mod tests` next to the code, integration
-  tests in `tests/`. `#[should_panic]` only with `expected =`. Prefer
+- **Rust** — unit tests in `foo/tests.rs`, integration tests in one `tests/it/` crate
+  (layout: `rust/test-layout.md`). `#[should_panic]` only with `expected =`. Prefer
   `assert_eq!(expected, actual)` over hand-rolled comparisons; `insta` for snapshots.
 - **Go** — table-driven subtests (`t.Run`) with a named case per row, `t.Parallel()`
   where there is no shared state, `t.TempDir()`/`t.Cleanup()` over manual teardown.
