@@ -39,6 +39,8 @@ Migration:
 - `update` replaces `investigate` with `defect` in the lock, installs `skills/defect` and
   deletes the old `investigate` skill directories for Claude and Codex.
 - `add investigate` and `remove investigate` still work: `investigate` is a profile alias.
+  So is `bug`, for installs taken from `next` while the skill carried that name: their
+  `update` installs `defect` and removes the `bug` skill directories.
 - Why not `/bug`: Claude Code has a built-in `/bug` (report a bug), and a project skill
   of the same name replaces it in a terminal session, here and in every repo that
   installs the profile.

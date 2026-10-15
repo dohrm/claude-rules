@@ -12,9 +12,9 @@
 //
 // | on disk                                  | section                                     |
 // |------------------------------------------|---------------------------------------------|
-// | no `.work/<slug>/rfc.md` nor `defect.md`    | "No RFC for this branch." — not a defect:   |
+// | no `rfc.md` nor `defect.md` for the slug | "No RFC for this branch." — not a finding:  |
 // |                                          | loops and ad hoc work have none             |
-// | `defect.md` naming the branch while its     | the diagnosis, minus `## Log` — always      |
+// | `defect.md` naming the branch while its  | the diagnosis, minus `## Log` — always      |
 // | `rfc.md` does not, or no `rfc.md` at all | local, its `**Ticket**` is only a link      |
 // | local `rfc.md`                           | its body, minus `## Revisions` and `## Log` |
 // |                                          | (history), keeping Log's `changed:` entries |
