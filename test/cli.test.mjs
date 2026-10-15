@@ -317,17 +317,17 @@ test('update drops a retired profile from an old lock; its adoption purges retir
   })
 })
 
-// `investigate` was released; `bug` only lived on `next`, whose lock already carried
-// `investigate` as an alias of it.
-for (const [old, aliases] of [['investigate', null], ['bug', { investigate: ['bug'] }]]) {
+// `investigate` was released; `bug` only lived on `next`. The rewrite below turns every
+// "defect" into the old name, aliases included, so `stale` lists the aliases that lock
+// could not have had: the next-era lock keeps `investigate: ['bug']`, as it did.
+for (const [old, stale] of [['investigate', ['investigate', 'bug']], ['bug', ['bug']]]) {
   test(`a lock that installed \`${old}\` updates to \`defect\`; \`${old}\` stays an alias`, () => {
     withTmpRepo(dir => {
       // Rewrite a fresh `defect` install into what the release that called it `old` wrote.
       ok(runCli(['add', 'defect', '--agent', 'claude,codex'], dir))
       const lock = JSON.parse(read(dir, '.claude-rules.lock')
         .replace(/skills\/defect\b/g, `skills/${old}`).replace(/"defect"/g, `"${old}"`))
-      lock.aliases = { ...lock.aliases, ...aliases }
-      delete lock.aliases[old]
+      for (const name of stale) delete lock.aliases[name]
       writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
       for (const root of ['.claude/skills', '.agents/skills']) {
         mkdirSync(join(dir, root, old), { recursive: true })

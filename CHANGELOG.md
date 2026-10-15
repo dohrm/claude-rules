@@ -41,7 +41,8 @@ Migration:
 - `add investigate` and `remove investigate` still work: `investigate` is a profile alias.
   So is `bug`, transitionally, for installs taken from `next` while the skill carried that
   name: their `update` installs `defect` and removes the `bug` skill directories. Unlike
-  `investigate`, the `bug` alias goes in the first tagged release.
+  `investigate`, the `bug` alias is removed before the first tagged release: update
+  from `next` before pinning a tag.
 - Why not `/bug`: Claude Code has a built-in `/bug` (report a bug), and a project skill
   of the same name replaces it in a terminal session, here and in every repo that
   installs the profile.
