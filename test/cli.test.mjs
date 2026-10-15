@@ -317,33 +317,40 @@ test('update drops a retired profile from an old lock; its adoption purges retir
   })
 })
 
-test('a lock that installed `investigate` updates to `bug`; `investigate` stays an alias', () => {
-  withTmpRepo(dir => {
-    // Rewrite a fresh `bug` install into what the release before the rename wrote.
-    ok(runCli(['add', 'bug', '--agent', 'claude,codex'], dir))
-    const old = JSON.parse(read(dir, '.claude-rules.lock')
-      .replace(/skills\/bug\b/g, 'skills/investigate').replace(/"bug"/g, '"investigate"'))
-    delete old.aliases.investigate
-    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(old, null, 2) + '\n')
-    for (const root of ['.claude/skills', '.agents/skills']) {
-      mkdirSync(join(dir, root, 'investigate'), { recursive: true })
-      writeFileSync(join(dir, root, 'investigate/SKILL.md'), read(dir, root, 'bug/SKILL.md'))
-      rmSync(join(dir, root, 'bug'), { recursive: true })
-    }
+// `investigate` was released; `bug` only lived on `next`. The rewrite below turns every
+// "defect" into the old name, aliases included, so `stale` lists the aliases that lock
+// could not have had: the next-era lock keeps `investigate: ['bug']`, as it did.
+for (const [old, stale] of [['investigate', ['investigate', 'bug']], ['bug', ['bug']]]) {
+  test(`a lock that installed \`${old}\` updates to \`defect\`; \`${old}\` stays an alias`, () => {
+    withTmpRepo(dir => {
+      // Rewrite a fresh `defect` install into what the release that called it `old` wrote.
+      ok(runCli(['add', 'defect', '--agent', 'claude,codex'], dir))
+      const lock = JSON.parse(read(dir, '.claude-rules.lock')
+        .replace(/skills\/defect\b/g, `skills/${old}`).replace(/"defect"/g, `"${old}"`))
+      for (const name of stale) delete lock.aliases[name]
+      writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+      for (const root of ['.claude/skills', '.agents/skills']) {
+        mkdirSync(join(dir, root, old), { recursive: true })
+        writeFileSync(join(dir, root, old, 'SKILL.md'), read(dir, root, 'defect/SKILL.md'))
+        rmSync(join(dir, root, 'defect'), { recursive: true })
+      }
 
-    ok(runCli(['update'], dir))
-    const after = lockOf(dir)
-    assert.deepEqual(after.profiles, ['bug'])
-    assert.deepEqual(after.modules['.'], ['bug'])
-    for (const root of ['.claude/skills', '.agents/skills']) {
-      assert.ok(has(dir, `${root}/bug/SKILL.md`), `${root}/bug installed`)
-      assert.ok(!has(dir, `${root}/investigate`), `${root}/investigate removed`)
-    }
+      ok(runCli(['update'], dir))
+      const after = lockOf(dir)
+      assert.deepEqual(after.profiles, ['defect'])
+      assert.deepEqual(after.modules['.'], ['defect'])
+      assert.deepEqual([after.aliases.investigate, after.aliases.bug], [['defect'], ['defect']],
+        'the old lock\'s aliases are rewritten, not kept')
+      for (const root of ['.claude/skills', '.agents/skills']) {
+        assert.ok(has(dir, `${root}/defect/SKILL.md`), `${root}/defect installed`)
+        assert.ok(!has(dir, `${root}/${old}`), `${root}/${old} removed`)
+      }
 
-    ok(runCli(['remove', 'investigate'], dir))
-    assert.ok(!has(dir, '.claude/skills/bug') && !has(dir, '.agents/skills/bug'), 'the old name removes the new skill')
+      ok(runCli(['remove', old], dir))
+      assert.ok(!has(dir, '.claude/skills/defect') && !has(dir, '.agents/skills/defect'), 'the old name removes the new skill')
+    })
   })
-})
+}
 
 test('update drops retired agents from an old lock', () => {
   withTmpRepo(dir => {

@@ -12,7 +12,8 @@
     "skills": ["plan", "tasks", "goal-setup", "investigate"]
   },
   "aliases": {
-    "investigate": ["bug"],
+    "investigate": ["defect"],
+    "bug": ["defect"],
     "rust-api": ["rust", "hexagonal", "api", "backend"],
     "go-api": ["go", "hexagonal", "api", "backend"],
     "python-api": ["python", "hexagonal", "api", "backend"],
@@ -104,8 +105,8 @@
     "backend": [
       { "from": "rules/backend", "to": ".claude/rules/backend", "kind": "rule", "_note": "Cross-language backend conventions — gate: backend/fullstack. Error contract (problem+json), config & secrets, health & lifecycle, pagination. Language-agnostic; add explicitly: `add backend`." }
     ],
-    "bug": [
-      { "from": "skills/bug", "to": ".claude/skills/bug", "kind": "skill", "_note": "Opt-in, language-agnostic skill — diagnose a bug (locate → hypothesize → instrument), then `/bug fix` lands the minimal fix as a PR; state in `.work/<slug>/bug.md`, autonomy-aware. Restores established behavior only — a change is /rfc. Add explicitly: `add bug` (`add investigate` still works: alias)." }
+    "defect": [
+      { "from": "skills/defect", "to": ".claude/skills/defect", "kind": "skill", "_note": "Opt-in, language-agnostic skill — diagnose a bug (locate → hypothesize → instrument), then `/defect fix` lands the minimal fix as a PR; state in `.work/<slug>/defect.md`, autonomy-aware. Restores established behavior only — a change is /rfc. Add explicitly: `add defect` (`add investigate` still works: alias). Not `bug`: a project skill of that name would shadow Claude Code's built-in `/bug`." }
     ],
     "devstack": [
       {"from":"rules/devstack","to":".claude/rules/devstack","kind":"rule","_note":"The contract between an agent and a running app — gate: any repo whose app you actually run locally, so most. Never a foreground server (it blocks the turn), never an orphan (it holds a port and outlives the session), the log file is the truth and not the memory of the last turn, and a running process does NOT pick up your edit unless it reloads — asserting green against a stale process is a false green (agent/autonomy.md). Always-on and deliberately short: it must load BEFORE the agent decides to start something, so it cannot be path-scoped to process-compose.yaml. True with or without the kit."},
