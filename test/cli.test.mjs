@@ -317,6 +317,34 @@ test('update drops a retired profile from an old lock; its adoption purges retir
   })
 })
 
+test('a lock that installed `investigate` updates to `bug`; `investigate` stays an alias', () => {
+  withTmpRepo(dir => {
+    // Rewrite a fresh `bug` install into what the release before the rename wrote.
+    ok(runCli(['add', 'bug', '--agent', 'claude,codex'], dir))
+    const old = JSON.parse(read(dir, '.claude-rules.lock')
+      .replace(/skills\/bug\b/g, 'skills/investigate').replace(/"bug"/g, '"investigate"'))
+    delete old.aliases.investigate
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(old, null, 2) + '\n')
+    for (const root of ['.claude/skills', '.agents/skills']) {
+      mkdirSync(join(dir, root, 'investigate'), { recursive: true })
+      writeFileSync(join(dir, root, 'investigate/SKILL.md'), read(dir, root, 'bug/SKILL.md'))
+      rmSync(join(dir, root, 'bug'), { recursive: true })
+    }
+
+    ok(runCli(['update'], dir))
+    const after = lockOf(dir)
+    assert.deepEqual(after.profiles, ['bug'])
+    assert.deepEqual(after.modules['.'], ['bug'])
+    for (const root of ['.claude/skills', '.agents/skills']) {
+      assert.ok(has(dir, `${root}/bug/SKILL.md`), `${root}/bug installed`)
+      assert.ok(!has(dir, `${root}/investigate`), `${root}/investigate removed`)
+    }
+
+    ok(runCli(['remove', 'investigate'], dir))
+    assert.ok(!has(dir, '.claude/skills/bug') && !has(dir, '.agents/skills/bug'), 'the old name removes the new skill')
+  })
+})
+
 test('update drops retired agents from an old lock', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'agent', 'rust', '--level', 'gates', '--agent', 'claude'], dir))

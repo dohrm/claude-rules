@@ -61,7 +61,7 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `tauri` | the desktop transport instead: IPC (invoke/listen), Zustand stores, no OpenAPI | the frontend ships as a **desktop app** — on top of `ts react portal-flat`, and never with `portal-http` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; principles, no prescribed library |
 | `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/update`, `/migrate`, `/prd`, `/architect`, `/rfc`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
-| `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
+| `bug` | diagnose a bug, then fix it on request (`/bug`); alias `investigate` | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 | `devstack` | the contract between an agent and a running app (no foreground server, no orphan, the log is the truth) + `process-compose` lifecycle at `--level gates` | the rule: any repo you run locally. The kit: only once it runs **more than one process** — one service wants a `just dev`, not an orchestrator |
 

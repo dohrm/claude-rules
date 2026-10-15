@@ -841,6 +841,20 @@ test('review-context: work_slug overrides the Branch header', () => {
   })
 })
 
+test('review-context: a /bug diagnosis on the branch is the frame, its Log cut', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'fix/x')
+    write(dir, '.work/x/bug.md', '# Bug — X\n\n- **Branch**: fix/x\n- **Ticket**: https://example.test/issues/43\n\n'
+      + '## Root cause\n\nROOT_CAUSE\n\n## Log\n\n- phase 1: LOG_LINE\n')
+    const r = run(REVIEW_CONTEXT, [], dir)
+    assert.equal(r.status, 0)
+    assert.match(r.out, /Source: \.work\/x\/bug\.md \(bug diagnosis\)[\s\S]*ROOT_CAUSE/)
+    assert.ok(!r.out.includes('LOG_LINE'), 'the log is history')
+    assert.ok(!r.out.includes('not available'), 'a bug.md is local: its Ticket is a link, not a pointer')
+  })
+})
+
 test('review-guard: --require-report turns "not run" into a failure, for the recipe only', () => {
   withTmpRepo((dir) => {
     commits(dir)
@@ -1336,6 +1350,59 @@ test('worktree-status: loop.md escalates the same way an rfc.md does', () => {
     const r = run(WT_STATUS, ['HEAD'], dir)
     assert.match(r.out, /onboarding\/loop/)
     assert.match(r.out, /BLOCKED: waiting on the API key/)
+  })
+})
+
+test('worktree-status: a /bug escalation surfaces like an rfc.md one', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/crash/bug.md', worklist(['expected behavior has no source']))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /crash\/bug/)
+    assert.match(r.out, /BLOCKED: expected behavior has no source/)
+  })
+})
+
+test('worktree-status: every work in a tree keeps its escalation, not only the newest', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/crash/bug.md', worklist(['expected behavior has no source']))
+    write(dir, '.work/zz-later/rfc.md', worklist([]))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /zz-later\/rfc \(\+1\)/)
+    assert.match(r.out, /BLOCKED: crash\/bug: expected behavior has no source/)
+  })
+})
+
+test('worktree-status: within one slug the RFC takes over the escalation of its bug.md', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/x/bug.md', worklist(['BUG_BLOCKER']))
+    write(dir, '.work/x/rfc.md', worklist(['RFC_BLOCKER']))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /x\/rfc \(\+1\)/)
+    assert.match(r.out, /BLOCKED: RFC_BLOCKER/)
+    assert.doesNotMatch(r.out, /BUG_BLOCKER/)
+  })
+})
+
+test('review-context: a slug holding a bug.md and an rfc.md reads the one naming the branch', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'fix/x')
+    write(dir, '.work/x/bug.md', '- **Branch**: fix/x\n\n## Root cause\n\nBUG_FRAME\n')
+    write(dir, '.work/x/rfc.md', '- **Branch**: rfc/x\n\nRFC_FRAME\n')
+    const out = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(out, /BUG_FRAME/)
+    assert.ok(!out.includes('RFC_FRAME'), 'the escalated RFC is another branch\'s frame')
+    git(dir, 'checkout', '-q', '-b', 'rfc/x')
+    assert.match(run(REVIEW_CONTEXT, [], dir).out, /RFC_FRAME/)
+
+    // Both naming the branch: the escalated RFC is the frame, not an ambiguity.
+    write(dir, '.work/x/bug.md', '- **Branch**: rfc/x\n\n## Root cause\n\nBUG_FRAME\n')
+    const both = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(both, /RFC_FRAME/)
+    assert.ok(!both.includes('BUG_FRAME') && !both.includes('not available'))
   })
 })
 

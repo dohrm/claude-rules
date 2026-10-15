@@ -10,7 +10,8 @@
 //
 // Order, first answer wins:
 //   1. an explicit slug (the justfile's `work_slug`);
-//   2. the `.work/*/rfc.md` whose `**Branch**` header names the current branch;
+//   2. the `.work/*/rfc.md` (or `/bug`'s `bug.md`) whose `**Branch**` header names the
+//      current branch;
 //   3. an L4 phase branch `phase/<slug>/<n>` whose `.work/<slug>/rfc.md` exists — the
 //      header names the integration branch `rfc/<slug>`, and git cannot nest a phase
 //      under it (rules/agent/autonomy.md § L4);
@@ -43,7 +44,11 @@ export function currentBranch(cwd = '.') {
   }
 }
 
-/** The RFC directories under `.work/` whose `**Branch**` header is `branch`. */
+// The state files that carry a `**Branch**` header: `/rfc`'s and `/bug`'s.
+const BRANCHED = ['rfc.md', 'bug.md']
+
+/** The state files under `.work/` (`<dir>/rfc.md`, `<dir>/bug.md`) whose `**Branch**`
+ *  header is `branch`. */
 function rfcsOn(branch, cwd) {
   const root = join(cwd, '.work')
   let entries = []
@@ -54,27 +59,34 @@ function rfcsOn(branch, cwd) {
   }
   return entries
     .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .filter((name) => {
-      // An unreadable rfc.md (a directory, no permission) belongs to some other work:
+    // Within one directory the RFC wins: a bug escalated to `/rfc` keeps its `bug.md` as
+    // the RFC's input, and the RFC is the frame. Two directories claiming one branch stay
+    // ambiguous.
+    .map((e) => BRANCHED.map((file) => `${e.name}/${file}`).find((rel) => {
+      // An unreadable state file (a directory, no permission) belongs to some other work:
       // it must not crash the gate of this one.
       try {
-        return headerOf(readFileSync(join(root, name, 'rfc.md'), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
+        return headerOf(readFileSync(join(root, rel), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
       } catch {
         return false
       }
-    })
+    }))
+    .filter(Boolean)
     .sort()
 }
 
-/** `{ slug, from, ambiguous }` — `from` says which rule answered, for the diagnostics;
- *  `ambiguous` lists the RFCs that all claim this branch, when more than one does. */
+/** `{ slug, from, file, ambiguous }` — `from` says which rule answered, for the
+ *  diagnostics; `file` is the state file whose header answered (`rfc.md` or `bug.md`);
+ *  `ambiguous` lists the state files that all claim this branch, when more than one does. */
 export function resolveSlug({ slug = '', cwd = '.' } = {}) {
   if (slug.trim()) return { slug: sanitize(slug.trim()), from: 'work_slug' }
   const branch = currentBranch(cwd)
   if (!branch) return { slug: 'detached', from: 'detached HEAD' }
   const matches = rfcsOn(branch, cwd)
-  if (matches.length === 1) return { slug: sanitize(matches[0]), from: `.work/${matches[0]}/rfc.md **Branch**` }
+  if (matches.length === 1) {
+    const [dir, file] = matches[0].split('/')
+    return { slug: sanitize(dir), from: `.work/${matches[0]} **Branch**`, file }
+  }
   if (matches.length > 1) {
     // Two RFCs claiming one branch is a tree that contradicts its state files — not ours
     // to arbitrate. The branch name is the answer that hides nothing.
