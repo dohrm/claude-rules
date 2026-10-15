@@ -26,9 +26,10 @@ method and adds a lifecycle around it ([#44](https://github.com/dohrm/claude-rul
 - **A state file on its own branch.** The state lives in `.work/<slug>/bug.md`, committed
   on the bug's branch, which is cut before the diagnosis. The file's `**Branch**` header
   places the gate markers, and `just code-review` reads the file as the frame.
-- **`just status` shows every escalation in a tree.** Before, it only showed the one
-  from the newest state file. Now each slug's state file reports its own `## Blocked on
-  the human`, prefixed with its label.
+- **`just status` shows one escalation per slug.** Before, a tree showed only its newest
+  state file's escalation. Now each slug reports its own `## Blocked on the human`,
+  prefixed with its label. Within one slug the RFC still wins, so an `rfc.md` replaces
+  the escalation of the `bug.md` it came from.
 - **Restore, never change.** `/bug` only restores established behavior. A change request,
   a contested expected behavior, three refuted hypotheses, a touched ADR, public API or
   schema, or a fix larger than one PR all go to `/rfc`.

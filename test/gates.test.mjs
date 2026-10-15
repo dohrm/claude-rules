@@ -1385,6 +1385,12 @@ test('review-context: a slug holding a bug.md and an rfc.md reads the one naming
     assert.ok(!out.includes('RFC_FRAME'), 'the escalated RFC is another branch\'s frame')
     git(dir, 'checkout', '-q', '-b', 'rfc/x')
     assert.match(run(REVIEW_CONTEXT, [], dir).out, /RFC_FRAME/)
+
+    // Both naming the branch: the escalated RFC is the frame, not an ambiguity.
+    write(dir, '.work/x/bug.md', '- **Branch**: rfc/x\n\n## Root cause\n\nBUG_FRAME\n')
+    const both = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(both, /RFC_FRAME/)
+    assert.ok(!both.includes('not available'))
   })
 })
 

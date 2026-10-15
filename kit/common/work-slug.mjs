@@ -59,8 +59,10 @@ function rfcsOn(branch, cwd) {
   }
   return entries
     .filter((e) => e.isDirectory())
-    .flatMap((e) => BRANCHED.map((file) => `${e.name}/${file}`))
-    .filter((rel) => {
+    // Within one directory the RFC wins: a bug escalated to `/rfc` keeps its `bug.md` as
+    // the RFC's input, and the RFC is the frame. Two directories claiming one branch stay
+    // ambiguous.
+    .map((e) => BRANCHED.map((file) => `${e.name}/${file}`).find((rel) => {
       // An unreadable state file (a directory, no permission) belongs to some other work:
       // it must not crash the gate of this one.
       try {
@@ -68,7 +70,8 @@ function rfcsOn(branch, cwd) {
       } catch {
         return false
       }
-    })
+    }))
+    .filter(Boolean)
     .sort()
 }
 
