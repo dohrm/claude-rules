@@ -1363,6 +1363,31 @@ test('worktree-status: a /bug escalation surfaces like an rfc.md one', () => {
   })
 })
 
+test('worktree-status: every work in a tree keeps its escalation, not only the newest', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/crash/bug.md', worklist(['expected behavior has no source']))
+    write(dir, '.work/zz-later/rfc.md', worklist([]))
+    const r = run(WT_STATUS, ['HEAD'], dir)
+    assert.match(r.out, /zz-later\/rfc \(\+1\)/)
+    assert.match(r.out, /BLOCKED: crash\/bug: expected behavior has no source/)
+  })
+})
+
+test('review-context: a slug holding a bug.md and an rfc.md reads the one naming the branch', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'fix/x')
+    write(dir, '.work/x/bug.md', '- **Branch**: fix/x\n\n## Root cause\n\nBUG_FRAME\n')
+    write(dir, '.work/x/rfc.md', '- **Branch**: rfc/x\n\nRFC_FRAME\n')
+    const out = run(REVIEW_CONTEXT, [], dir).out
+    assert.match(out, /BUG_FRAME/)
+    assert.ok(!out.includes('RFC_FRAME'), 'the escalated RFC is another branch\'s frame')
+    git(dir, 'checkout', '-q', '-b', 'rfc/x')
+    assert.match(run(REVIEW_CONTEXT, [], dir).out, /RFC_FRAME/)
+  })
+})
+
 test('worktree-status: an rfc.md outranks a loop.md under the same slug', () => {
   withTmpRepo((dir) => {
     commits(dir)

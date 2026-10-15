@@ -96,14 +96,18 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
   const head = `=== RFC ===\n\n`
 
   if (resolved.ambiguous) {
-    return `${head}RFC context not available: ${resolved.ambiguous.map((d) => `.work/${d}/rfc.md`).join(', ')} `
+    return `${head}RFC context not available: ${resolved.ambiguous.map((f) => `.work/${f}`).join(', ')} `
       + 'all claim this branch in their **Branch** header — the tree contradicts its state files.\n'
   }
+  // The file whose header named the branch; with a slug given or found by name, the RFC
+  // first, else the diagnosis.
+  const bugPath = join(dir, 'bug.md')
+  const isBug = resolved.file === 'bug.md'
+    || (!resolved.file && !existsSync(join(cwd, rfcPath)) && existsSync(join(cwd, bugPath)))
+  if (isBug) {
+    return `${head}Source: ${bugPath} (bug diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, bugPath), 'utf8'))}`
+  }
   if (!existsSync(join(cwd, rfcPath))) {
-    const bugPath = join(dir, 'bug.md')
-    if (existsSync(join(cwd, bugPath))) {
-      return `${head}Source: ${bugPath} (bug diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, bugPath), 'utf8'))}`
-    }
     return `${head}No RFC for this branch (slug \`${resolved.slug}\`, from the ${resolved.from}).\n`
   }
 

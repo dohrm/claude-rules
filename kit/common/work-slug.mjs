@@ -47,7 +47,8 @@ export function currentBranch(cwd = '.') {
 // The state files that carry a `**Branch**` header: `/rfc`'s and `/bug`'s.
 const BRANCHED = ['rfc.md', 'bug.md']
 
-/** The work directories under `.work/` whose state file's `**Branch**` header is `branch`. */
+/** The state files under `.work/` (`<dir>/rfc.md`, `<dir>/bug.md`) whose `**Branch**`
+ *  header is `branch`. */
 function rfcsOn(branch, cwd) {
   const root = join(cwd, '.work')
   let entries = []
@@ -58,27 +59,31 @@ function rfcsOn(branch, cwd) {
   }
   return entries
     .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .filter((name) => BRANCHED.some((file) => {
+    .flatMap((e) => BRANCHED.map((file) => `${e.name}/${file}`))
+    .filter((rel) => {
       // An unreadable state file (a directory, no permission) belongs to some other work:
       // it must not crash the gate of this one.
       try {
-        return headerOf(readFileSync(join(root, name, file), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
+        return headerOf(readFileSync(join(root, rel), 'utf8')).match(BRANCH_HEADER)?.[1] === branch
       } catch {
         return false
       }
-    }))
+    })
     .sort()
 }
 
-/** `{ slug, from, ambiguous }` — `from` says which rule answered, for the diagnostics;
- *  `ambiguous` lists the RFCs that all claim this branch, when more than one does. */
+/** `{ slug, from, file, ambiguous }` — `from` says which rule answered, for the
+ *  diagnostics; `file` is the state file whose header answered (`rfc.md` or `bug.md`);
+ *  `ambiguous` lists the state files that all claim this branch, when more than one does. */
 export function resolveSlug({ slug = '', cwd = '.' } = {}) {
   if (slug.trim()) return { slug: sanitize(slug.trim()), from: 'work_slug' }
   const branch = currentBranch(cwd)
   if (!branch) return { slug: 'detached', from: 'detached HEAD' }
   const matches = rfcsOn(branch, cwd)
-  if (matches.length === 1) return { slug: sanitize(matches[0]), from: `.work/${matches[0]}/rfc.md **Branch**` }
+  if (matches.length === 1) {
+    const [dir, file] = matches[0].split('/')
+    return { slug: sanitize(dir), from: `.work/${matches[0]} **Branch**`, file }
+  }
   if (matches.length > 1) {
     // Two RFCs claiming one branch is a tree that contradicts its state files — not ours
     // to arbitrate. The branch name is the answer that hides nothing.

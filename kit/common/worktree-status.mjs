@@ -107,7 +107,8 @@ function worklists(root) {
   return found.sort((a, b) => a.label.localeCompare(b.label))
 }
 
-/** The newest worklist in a tree, plus what it says is blocked. */
+/** The newest worklist in a tree, plus what every slug's winning worklist says is
+ *  blocked: two works in one tree each keep their escalation visible. */
 function worklistState(tree) {
   let found = []
   try {
@@ -118,7 +119,10 @@ function worklistState(tree) {
   if (!found.length) return { label: '—', blocked: [] }
   const newest = found[found.length - 1]
   const label = newest.label + (found.length > 1 ? ` (+${found.length - 1})` : '')
-  return { label, blocked: blockedIn(newest.path) }
+  const winners = new Map(found.map((w) => [w.label.split('/')[0], w]))
+  const blocked = [...winners.values()].flatMap((w) =>
+    blockedIn(w.path).map((line) => (w === newest ? line : `${w.label}: ${line.replace(/^[-*]\s*/, '')}`)))
+  return { label, blocked }
 }
 
 const listed = git(process.cwd(), 'worktree', 'list', '--porcelain')

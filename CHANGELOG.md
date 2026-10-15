@@ -23,9 +23,12 @@ method and adds a lifecycle around it ([#44](https://github.com/dohrm/claude-rul
   still fail on the base before any fix.
 - **Autonomy levels.** L1 stops after each phase, as `/investigate` did. L2 stops after
   the diagnosis. L3 runs through to the PR. The human gate is the merge.
-- **A state file.** The state lives in `.work/<slug>/bug.md`. `just status` surfaces
-  its `## Blocked on the human`, and `just code-review` reads it as the frame. Its
-  `**Branch**` header names the fix branch, which places the gate markers.
+- **A state file on its own branch.** The state lives in `.work/<slug>/bug.md`, committed
+  on the bug's branch, which is cut before the diagnosis. The file's `**Branch**` header
+  places the gate markers, and `just code-review` reads the file as the frame.
+- **`just status` shows every escalation in a tree.** Before, it only showed the one
+  from the newest state file. Now each slug's state file reports its own `## Blocked on
+  the human`, prefixed with its label.
 - **Restore, never change.** `/bug` only restores established behavior. A change request,
   a contested expected behavior, three refuted hypotheses, a touched ADR, public API or
   schema, or a fix larger than one PR all go to `/rfc`.
