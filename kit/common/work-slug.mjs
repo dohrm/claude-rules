@@ -10,7 +10,7 @@
 //
 // Order, first answer wins:
 //   1. an explicit slug (the justfile's `work_slug`);
-//   2. the `.work/*/rfc.md` (or `/bug`'s `bug.md`) whose `**Branch**` header names the
+//   2. the `.work/*/rfc.md` (or `/defect`'s `defect.md`) whose `**Branch**` header names the
 //      current branch;
 //   3. an L4 phase branch `phase/<slug>/<n>` whose `.work/<slug>/rfc.md` exists — the
 //      header names the integration branch `rfc/<slug>`, and git cannot nest a phase
@@ -44,10 +44,10 @@ export function currentBranch(cwd = '.') {
   }
 }
 
-// The state files that carry a `**Branch**` header: `/rfc`'s and `/bug`'s.
-const BRANCHED = ['rfc.md', 'bug.md']
+// The state files that carry a `**Branch**` header: `/rfc`'s and `/defect`'s.
+const BRANCHED = ['rfc.md', 'defect.md']
 
-/** The state files under `.work/` (`<dir>/rfc.md`, `<dir>/bug.md`) whose `**Branch**`
+/** The state files under `.work/` (`<dir>/rfc.md`, `<dir>/defect.md`) whose `**Branch**`
  *  header is `branch`. */
 function rfcsOn(branch, cwd) {
   const root = join(cwd, '.work')
@@ -59,7 +59,7 @@ function rfcsOn(branch, cwd) {
   }
   return entries
     .filter((e) => e.isDirectory())
-    // Within one directory the RFC wins: a bug escalated to `/rfc` keeps its `bug.md` as
+    // Within one directory the RFC wins: a bug escalated to `/rfc` keeps its `defect.md` as
     // the RFC's input, and the RFC is the frame. Two directories claiming one branch stay
     // ambiguous.
     .map((e) => BRANCHED.map((file) => `${e.name}/${file}`).find((rel) => {
@@ -76,7 +76,7 @@ function rfcsOn(branch, cwd) {
 }
 
 /** `{ slug, from, file, ambiguous }` — `from` says which rule answered, for the
- *  diagnostics; `file` is the state file whose header answered (`rfc.md` or `bug.md`);
+ *  diagnostics; `file` is the state file whose header answered (`rfc.md` or `defect.md`);
  *  `ambiguous` lists the state files that all claim this branch, when more than one does. */
 export function resolveSlug({ slug = '', cwd = '.' } = {}) {
   if (slug.trim()) return { slug: sanitize(slug.trim()), from: 'work_slug' }

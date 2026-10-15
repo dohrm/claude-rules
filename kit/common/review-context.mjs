@@ -12,9 +12,9 @@
 //
 // | on disk                                  | section                                     |
 // |------------------------------------------|---------------------------------------------|
-// | no `.work/<slug>/rfc.md` nor `bug.md`    | "No RFC for this branch." — not a defect:   |
+// | no `.work/<slug>/rfc.md` nor `defect.md`    | "No RFC for this branch." — not a defect:   |
 // |                                          | loops and ad hoc work have none             |
-// | `bug.md` naming the branch while its     | the diagnosis, minus `## Log` — always      |
+// | `defect.md` naming the branch while its     | the diagnosis, minus `## Log` — always      |
 // | `rfc.md` does not, or no `rfc.md` at all | local, its `**Ticket**` is only a link      |
 // | local `rfc.md`                           | its body, minus `## Revisions` and `## Log` |
 // |                                          | (history), keeping Log's `changed:` entries |
@@ -101,11 +101,11 @@ function reviewContext({ slug = '', cwd = '.' } = {}) {
   }
   // The file whose header named the branch; with a slug given or found by name, the RFC
   // first, else the diagnosis.
-  const bugPath = join(dir, 'bug.md')
-  const isBug = resolved.file === 'bug.md'
-    || (!resolved.file && !existsSync(join(cwd, rfcPath)) && existsSync(join(cwd, bugPath)))
-  if (isBug) {
-    return `${head}Source: ${bugPath} (bug diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, bugPath), 'utf8'))}`
+  const defectPath = join(dir, 'defect.md')
+  const isDefect = resolved.file === 'defect.md'
+    || (!resolved.file && !existsSync(join(cwd, rfcPath)) && existsSync(join(cwd, defectPath)))
+  if (isDefect) {
+    return `${head}Source: ${defectPath} (defect diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, defectPath), 'utf8'))}`
   }
   if (!existsSync(join(cwd, rfcPath))) {
     return `${head}No RFC for this branch (slug \`${resolved.slug}\`, from the ${resolved.from}).\n`

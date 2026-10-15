@@ -92,10 +92,10 @@ function blockedIn(file) {
     .filter((l) => l && !/^[-*]?\s*<[^>]*>$/.test(l))
 }
 
-const RANK = ['bug.md', 'loop.md', 'rfc.md']
+const RANK = ['defect.md', 'loop.md', 'rfc.md']
 
-/** Every state file an agent escalates in, under `.work/<slug>/`, ranked: `bug.md`
- *  from `/bug`, then `loop.md` from `/loop-setup`, then `rfc.md` from `/rfc`. Within one
+/** Every state file an agent escalates in, under `.work/<slug>/`, ranked:
+ *  `defect.md` from `/defect`, then `loop.md` from `/loop-setup`, then `rfc.md` from `/rfc`. Within one
  *  slug the highest rank comes last and is the one shown: an RFC takes over the bug or
  *  loop it came from. */
 function worklists(root) {
