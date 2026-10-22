@@ -1,0 +1,6 @@
+# Inspirations cloned by `just audit-prep`, pinned to their HEAD in the run's manifest.
+# One per line: <name> <git url>
+mattpocock-skills https://github.com/mattpocock/skills
+superpowers https://github.com/obra/superpowers
+agent-skills https://github.com/addyosmani/agent-skills
+ecc https://github.com/affaan-m/ecc
