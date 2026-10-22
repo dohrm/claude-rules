@@ -1,6 +1,6 @@
 # ADR-0001: Emission targets are Claude Code and Cursor, and nothing else
 
-- **Status**: Proposed
+- **Status**: Superseded by ADR-0003
 - **Date**: 2026-09-08
 
 ## Context
