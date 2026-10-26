@@ -56,8 +56,8 @@ Spend your budget in that order. The lists are prompts, not a checklist to fill.
   keys, slash notation, subagents) and how each degrades in Codex or other
   `AGENTS.md` agents. No mode has web access: list each claim we make about a
   vendor's behavior (skills format, `AGENTS.md`, rule loading) that a human should
-  verify against the vendor's docs, in one `{"note": "vendor: <claim> — <path>:<line>; ..."}` line written in
-  every `explore` output, findings or not.
+  verify against the vendor's docs: one `{"note": "vendor: <claim> — <path>:<line>[,
+  <path>:<line>]"}` line per claim, in every `explore` output, findings or not.
 - Eval coverage: `eval/cases/` against `skills/` and `agents/` — which behavior that
   matters most has no regression case.
 - Ambiguous instructions a model can comply with to the letter and still fail.
@@ -137,9 +137,9 @@ Read every `*.explore.jsonl` and `*.harvest.jsonl` in the RUN DIR. Output Markdo
    say which evidence is stronger, or that it is undecided.
 3. `## Dropped` — what you left out and why (no evidence, ledger, ticket, budget).
 4. `## Challenges to accepted decisions` — the `touches_adr` findings, separate.
-5. `## Vendor claims to verify` — every auditor's `vendor:` note, deduplicated, one
-   line per claim with the repository file that makes it and the auditors that raised
-   it. The human checks them.
+5. `## Vendor claims to verify` — every auditor's `vendor:` note, deduplicated (same
+   claim, same file: one line), each with all its `path:line` locators and the
+   auditors that raised it. The human checks them.
 
 ### `challenge`
 Read the RUN DIR's `*.synthesize.md` and the auditors' files next to it. You are the
