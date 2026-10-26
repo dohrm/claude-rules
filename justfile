@@ -18,16 +18,13 @@ test:
     npm test
 
 # ── Repo audit (maintainer/audit/README.md) ────────────────────────────────
-# Manual, one call per agent per round. Read-only like the reviewer: the claude deny
-# list IS the kit's (minus the web in `explore`), so a re-enumeration of review_deny
-# reaches this recipe too.
+# Manual, one call per agent per round. Read-only like the reviewer, with the same deny
+# list (web included): every mode reads third-party text — cloned skills, ticket bodies
+# — and `Read` is not path-scoped, so an injection must have no way out.
+# Re-enumerating review_deny reaches this recipe too.
 # A run spans days: `audit-prep` names it after today, `audit` resumes the latest one.
 # Override either with audit_run=<name>.
 export audit_run := ""
-# Only `explore` gets the web (vendor conventions): it reads this repo alone. Modes that
-# read the cloned sources, or reports quoting them, keep the reviewer's deny list, so an
-# injection in a third-party SKILL.md has no way out.
-audit_deny_web := replace(review_deny, "WebFetch,WebSearch,", "")
 
 audit-prep:
     #!/usr/bin/env bash
@@ -72,12 +69,10 @@ audit mode agent model:
     [ -f "$run/manifest.md" ] || { echo "no run with a manifest${run:+ at $run} — run: just audit-prep" >&2; exit 1; }
     out=$run/{{agent}}-{{model}}.{{mode}}.$ext
     [ ! -e "$out" ] || { echo "$out exists — move it to $run/v<n>/ to keep it as an archive, then re-run" >&2; exit 1; }
-    deny='{{review_deny}}'; tools='Read,Glob,Grep'
-    [ "{{mode}}" != explore ] || { deny='{{audit_deny_web}}'; tools="$tools,WebFetch,WebSearch"; }
     prompt=$(printf 'MODE: %s\nRUN DIR: %s\nYOU ARE: %s, model %s (your own files start with %s)\n\n' \
         "{{mode}}" "$run" "{{agent}}" "{{model}}" "{{agent}}-{{model}}."; cat maintainer/audit/PROCEDURE.md)
     case "{{agent}}" in
-        claude) agent_cli() { claude -p --model '{{model}}' --disallowedTools "$deny" --allowedTools "$tools"; } ;;
+        claude) agent_cli() { claude -p --model '{{model}}' --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep'; } ;;
         codex)  agent_cli() { codex exec --sandbox read-only -m '{{model}}' -; } ;;
         *) echo "agent: claude | codex" >&2; exit 2 ;;
     esac

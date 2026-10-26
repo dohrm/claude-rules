@@ -49,10 +49,11 @@ Commit the run dir and the ledger together: the report is the audit trail.
 
 ## Limits
 
-- Only `explore` gets the web, for vendor conventions, because it reads this repository
-  alone; `harvest`, `synthesize` and `challenge` read third-party content, directly or
-  quoted, and run with the reviewer's deny list. `codex exec --sandbox read-only` has
-  no network in any mode.
+- No mode has the web. Every mode reads third-party text (cloned skills, ticket
+  bodies) and `Read` is not path-scoped, so web access would let an injection send
+  out what it can read. Claude runs with the reviewer's deny list; `codex exec
+  --sandbox read-only` has no network. Vendor claims flagged by `explore` are checked
+  by a human against the vendor's docs.
 - Run dirs live in `.work/` like every other work document, so `just code-review`
   skips them: they are reports, not code. The ledger, which binds, lives here.
 - An output is never overwritten: move it to `<run>/v<n>/` to re-run a mode. Files in

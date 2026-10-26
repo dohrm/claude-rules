@@ -16,6 +16,9 @@ longer the maintainer's daily tool. The measured need now exists. The proposed
 [ADR-0003](0003-claude-codex-sharing.md) revisits the target and routing contract.
 This record remains Proposed; this note does not accept either proposal.
 
+Amendment 2026-10-26: ADR-0003 was accepted and superseded this record (status set
+by the maintainer in 734781e); the sentence above describes the state before that.
+
 The distinction is not cosmetic. Every routing decision in this library optimises
 one specific capability: **path-scoped rule loading**. Claude reads `paths:` from
 `.claude/rules/`; the Cursor emitter renames it to `globs:` and falls back to

@@ -54,9 +54,9 @@ Spend your budget in that order. The lists are prompts, not a checklist to fill.
   `rules/agent/autonomy.md`, two rules that disagree, a skill restating a rule.
 - Portability: constructs that only work in Claude Code (tool names, frontmatter
   keys, slash notation, subagents) and how each degrades in Codex or other
-  `AGENTS.md` agents. Check the vendors' current conventions (skills format,
-  `AGENTS.md`, rule loading) on the web against what we claim: `explore` is the only
-  mode with web access. Without it, say so in the `autonomy` note.
+  `AGENTS.md` agents. No mode has web access: list each claim we make about a
+  vendor's behavior (skills format, `AGENTS.md`, rule loading) that a human should
+  verify against the vendor's docs, in the `autonomy` note.
 - Eval coverage: `eval/cases/` against `skills/` and `agents/` — which behavior that
   matters most has no regression case.
 - Ambiguous instructions a model can comply with to the letter and still fail.
@@ -121,8 +121,6 @@ defect to cite, so the evidence is their file and the gap is ours.
    before a new one), and what it costs to maintain.
 4. Then one `{"note": "<source>: ..."}` line per source: how many in each class, which
    you read in full, and why the rest did not make the cut.
-
-This mode has no web access on purpose: it reads third-party content.
 
 ### `synthesize`
 Read every `*.explore.jsonl` and `*.harvest.jsonl` in the RUN DIR. Output Markdown:
