@@ -65,7 +65,7 @@ audit mode agent model:
         *) echo "mode: explore | harvest | synthesize | challenge" >&2; exit 2 ;;
     esac
     run=${audit_run:+.work/audit-$audit_run}
-    run=${run:-$(ls -d .work/audit-20* 2>/dev/null | sort | tail -1)}
+    run=${run:-$(ls -d .work/audit-20*/manifest.md 2>/dev/null | sort | tail -1 | xargs dirname 2>/dev/null || true)}
     [ -f "$run/manifest.md" ] || { echo "no run with a manifest${run:+ at $run} — run: just audit-prep" >&2; exit 1; }
     out=$run/{{agent}}-{{model}}.{{mode}}.$ext
     [ ! -e "$out" ] || { echo "$out exists — move it to $run/v<n>/ to keep it as an archive, then re-run" >&2; exit 1; }

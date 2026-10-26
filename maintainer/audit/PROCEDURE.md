@@ -56,7 +56,8 @@ Spend your budget in that order. The lists are prompts, not a checklist to fill.
   keys, slash notation, subagents) and how each degrades in Codex or other
   `AGENTS.md` agents. No mode has web access: list each claim we make about a
   vendor's behavior (skills format, `AGENTS.md`, rule loading) that a human should
-  verify against the vendor's docs, in the `autonomy` note.
+  verify against the vendor's docs, in one `{"note": "vendor: ..."}` line written in
+  every `explore` output, findings or not.
 - Eval coverage: `eval/cases/` against `skills/` and `agents/` — which behavior that
   matters most has no regression case.
 - Ambiguous instructions a model can comply with to the letter and still fail.
