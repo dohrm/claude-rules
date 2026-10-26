@@ -137,8 +137,8 @@ Read every `*.explore.jsonl` and `*.harvest.jsonl` in the RUN DIR. Output Markdo
    say which evidence is stronger, or that it is undecided.
 3. `## Dropped` — what you left out and why (no evidence, ledger, ticket, budget).
 4. `## Challenges to accepted decisions` — the `touches_adr` findings, separate.
-5. `## Vendor claims to verify` — every auditor's `vendor:` note, deduplicated (same
-   claim, same file: one line), each with all its `path:line` locators and the
+5. `## Vendor claims to verify` — every auditor's `vendor:` note, deduplicated by
+   claim (one line per claim), with the union of its `path:line` locators and the
    auditors that raised it. The human checks them.
 
 ### `challenge`
