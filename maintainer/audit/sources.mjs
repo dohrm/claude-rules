@@ -20,7 +20,7 @@ const field = (text, key) => {
 const cell = s => s.replace(/\|/g, '\\|').slice(0, 240)
 
 const out = ['# Inspiration skills', '', 'One row per skill name and source. Read a description first; open the file only for a candidate.', '']
-for (const source of readdirSync(root).sort()) {
+for (const source of readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort()) {
   const dir = join(root, source)
   const byName = new Map()
   for (const file of skillFiles(dir).sort((a, b) => a.length - b.length)) {

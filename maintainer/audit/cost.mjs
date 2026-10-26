@@ -10,7 +10,7 @@ const files = dir => readdirSync(dir, { recursive: true }).map(f => join(dir, f)
 const frontmatter = text => text.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? ''
 const description = fm => fm.match(/^description:\s*(.*)$/m)?.[1] ?? ''
 
-const skills = readdirSync('skills').map(name => {
+const skills = readdirSync('skills', { withFileTypes: true }).filter(d => d.isDirectory()).map(({ name }) => {
   const dir = join('skills', name)
   const text = readFileSync(join(dir, 'SKILL.md'), 'utf8')
   const extra = files(dir).filter(f => !f.endsWith('SKILL.md'))

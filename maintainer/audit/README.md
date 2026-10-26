@@ -38,7 +38,7 @@ Read the synthesis and the challenge, then append one line per finding to
 [ledger.jsonl](ledger.jsonl):
 
 ```json
-{"id": "...", "status": "accepted", "reason": "...", "audit": "2026-10-21", "ref": "rfc/<slug> | test/<file> | #<ticket> | null"}
+{"id": "...", "status": "accepted", "reason": "...", "audit": "2026-10-21", "ref": "rfc/<slug> | test/<file> | #<ticket> | <commit> | null"}
 ```
 
 `status`: `accepted` (becomes an RFC, or a test when `mechanizable`) | `rejected` |
@@ -49,7 +49,13 @@ Commit the run dir and the ledger together: the report is the audit trail.
 
 ## Limits
 
-- Claude may use the web (vendor conventions); `codex exec --sandbox read-only` has no
-  network, so its upgrade findings stop at the pinned sources.
+- Only `explore` gets the web, for vendor conventions, because it reads this repository
+  alone; `harvest`, `synthesize` and `challenge` read third-party content, directly or
+  quoted, and run with the reviewer's deny list. `codex exec --sandbox read-only` has
+  no network in any mode.
+- Run dirs live in `.work/` like every other work document, so `just code-review`
+  skips them: they are reports, not code. The ledger, which binds, lives here.
+- An output is never overwritten: move it to `<run>/v<n>/` to re-run a mode. Files in
+  a subdirectory are archives and are not read as input.
 - No orchestration and no mechanical merge yet: the synthesizer deduplicates. Add them
   once a manual run has calibrated the procedure.
