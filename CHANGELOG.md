@@ -22,11 +22,14 @@ can fix.
 
 - **`go-audit`, `python-audit`, `rust-audit`.** New recipes that run `govulncheck`,
   `pip-audit` and `cargo deny check advisories` every time they are called.
-- **`<tech>-check` calls the audit only when its lock changed** against `base`
-  (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree included) or
-  when `base` does not resolve. It prints which before running or skipping it: `audit: skipped — …`,
-  `audit: … changed`, `audit: … unresolvable`, `audit: base is empty …`. A PR that adds or bumps a dependency
-  still fails on a known advisory.
+- **`<tech>-check` calls the audit only when its lock changed** since its merge base
+  with `base` (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree
+  included), or when that cannot be known: `base` empty or unresolvable, or no merge
+  base (a shallow clone). It prints which before running or skipping it:
+  `audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+  `audit: base is empty …`, `audit: no merge base with …`. A branch merely behind a
+  lock bump on `base` skips the audit. A PR that adds or bumps a dependency still
+  fails on a known advisory.
 - **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
 - **`go.just` and `python.just` define `base`** (`origin/main`), as `rust.just`
   already did, so each parses without `kit/common`.
@@ -35,12 +38,21 @@ can fix.
   is empty (a push: the audit is skipped). The rust, go and python jobs of
   `kit/cicd/ci.snippet.yaml` take `BASE: ${{ github.base_ref }}` through `env:` and run
   `just base="$(just ci-base)" <tech>-check`.
+- **The default branch is audited daily.** New `kit/cicd/audit.snippet.yaml` runs each
+  `<tech>-audit` on a schedule. New `kit/cicd/advisory-issue.mjs` opens one issue per
+  red audit, titled `security-advisory: <tech>-audit`, updates it while the audit stays
+  red, and closes it when the audit is green. It works on GitHub and Gitea. A red audit
+  leaves the run green. A Go standard-library finding is named in the issue as a
+  toolchain fix.
 
 Migration:
 
 - Merge the new gate step into each rust, go and python job of your CI workflow by
   hand. Without it, `base` does not resolve on the runner, so every PR still runs
   the audit: it fails closed.
+- Copy `audit.snippet.yaml` next to your CI workflow and delete the matrix entries for
+  the technologies you don't have. The job token needs `issues: write`. Without the
+  workflow, an advisory published after your lock was committed is reported nowhere.
 - An override that already moved `advisories` out of `rust-check` can be deleted.
 - A repo whose trunk is not `main` sets `base` in its root justfile (e.g.
   `base := "origin/next"`). Otherwise `origin/main` does not resolve and every local

@@ -1,0 +1,62 @@
+name: Security advisories
+
+# The audits the PR gate leaves out. An advisory database moves with the date, not
+# with the diff, so `<tech>-check` audits only a changed lock (rules/cicd/pipeline.md)
+# and this workflow audits the default branch every day. A red audit opens, or
+# updates, ONE issue per audit, titled `security-advisory: <tech>-audit`; a green one
+# closes it. A red audit does not fail the job, so the default branch never turns red
+# with no commit: the issue is the report.
+#
+# COPY next to ci.yaml (.github/workflows/ or .gitea/workflows/) — one file for both
+# forges. ADAPT: `runs-on`, the cron hour, and DELETE the matrix entries (and their
+# `if:` steps) for technologies this repo does not have.
+#
+# The reporter, .dev/kit/cicd/advisory-issue.mjs, is the one step that is not a
+# recipe: it writes issues with the job's token, which `just` has no business holding.
+# It needs `node` on the runner (ubuntu-latest and the usual Gitea images have it).
+
+on:
+  schedule:
+    - cron: '23 5 * * *'         # daily, on the default branch — ADAPT the hour
+  workflow_dispatch:             # by hand, e.g. to close the issue right after a fix
+
+permissions:
+  contents: read
+  issues: write                  # the reporter opens, updates and closes its issues
+
+env:
+  JUST_VERSION: '1.42.4'         # ADAPT / bump deliberately
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest       # ADAPT to your runner label
+    strategy:
+      fail-fast: false
+      matrix:
+        audit: [rust-audit, go-audit, python-audit]   # DELETE the technologies you don't have
+    steps:
+      - uses: actions/checkout@v4
+      - if: matrix.audit == 'rust-audit'
+        uses: dtolnay/rust-toolchain@stable
+      - if: matrix.audit == 'rust-audit'
+        run: command -v cargo-deny >/dev/null 2>&1 || cargo install cargo-deny --locked
+      - if: matrix.audit == 'go-audit'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable     # ADAPT — the gate's version: a stdlib finding is fixed here
+      - if: matrix.audit == 'go-audit'
+        run: command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+      - if: matrix.audit == 'python-audit'
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version-file: .python-version   # ADAPT to your python_dir
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: just ${{ matrix.audit }}, reported as an issue
+        env:
+          AUDIT: ${{ matrix.audit }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .dev/kit/cicd/advisory-issue.mjs "$AUDIT"

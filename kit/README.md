@@ -78,7 +78,9 @@ truth — no path duplicated across the kit.
 
 **CI is the third caller of the same recipes**, never a second definition of them:
 `cicd/ci.snippet.yaml` runs `just base="$(just ci-base)" <tech>-check`, so a gate the pipeline enforces is
-always one an agent can close its own loop on locally. Doctrine:
+always one an agent can close its own loop on locally. The audits it leaves out run
+daily from `cicd/audit.snippet.yaml`, which keeps one issue open per red
+`<tech>-audit` (`cicd/advisory-issue.mjs`, GitHub or Gitea). Doctrine:
 `../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
 
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the
