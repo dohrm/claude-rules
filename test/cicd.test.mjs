@@ -233,7 +233,7 @@ const REPORTER = join(REPO, 'kit/cicd/advisory-issue.mjs')
 const BIN = mkdtempSync(join(tmpdir(), 'claude-rules-advisory-'))
 after(() => rmSync(BIN, { recursive: true, force: true }))
 writeFileSync(join(BIN, 'just'), '#!/bin/sh\n[ "$1" = --show ] && exit "${STUB_SHOW:-0}"\n'
-  + 'echo "ran: just $*"\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_STATUS"\n')
+  + 'echo "ran: just $* (token: ${GITHUB_TOKEN:-withheld})"\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_STATUS"\n')
 chmodSync(join(BIN, 'just'), 0o755)
 
 const FORGES = {
@@ -315,7 +315,7 @@ for (const forge of Object.keys(FORGES)) {
     const [{ body, auth }] = stub.writes()
     assert.equal(body.title, TITLE)
     assert.match(body.body, /Found 2 known vulnerabilities in certifi/)
-    assert.match(body.body, /ran: just python-audit/)
+    assert.match(body.body, /ran: just python-audit \(token: withheld\)/, 'the audit never holds the forge token')
     assert.match(body.body, /failed \(exit 1\)/)
     assert.equal(auth, 'token tkn')
   }))

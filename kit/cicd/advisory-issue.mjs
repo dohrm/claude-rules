@@ -59,11 +59,13 @@ const title = `security-advisory: ${recipe}`
  *  What says the audit never ran — no such recipe (a matrix entry left for a technology
  *  the repo lacks), the tool not found (127), a signal — stops here, as a red job. */
 function audit() {
-  const show = spawnSync('just', ['--show', recipe], { encoding: 'utf8' })
+  // The audit never holds the forge token: `uv run` may build an sdist from the lock.
+  const { GITHUB_TOKEN: _withheld, ...auditEnv } = env
+  const show = spawnSync('just', ['--show', recipe], { encoding: 'utf8', env: auditEnv })
   if (show.error) bail(`cannot run just: ${show.error.message}`)
   if (show.status !== 0) bail(`no \`${recipe}\` recipe in this justfile — delete its matrix entry, or install its kit\n${show.stderr}`)
   return new Promise((resolve) => {
-    const child = spawn('just', [recipe], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('just', [recipe], { stdio: ['ignore', 'pipe', 'pipe'], env: auditEnv })
     let out = ''
     // Decoded per stream, so a character split across two chunks survives (cargo deny draws boxes).
     const keep = (stream, sink) => stream.setEncoding('utf8').on('data', (chunk) => { out += chunk; sink.write(chunk) })
@@ -97,7 +99,7 @@ async function call(method, path, body) {
  *  is no proof of the end, since Gitea caps the page size per instance. Pull requests
  *  come back from the same endpoint on both forges and are skipped. */
 async function findOpen() {
-  const size = gitea ? 'limit=50' : 'per_page=100'
+  const size = gitea ? 'type=issues&limit=50' : 'per_page=100'
   for (let page = 1; page <= MAX_PAGES; page++) {
     const items = await call('GET', `/issues?state=open&${size}&page=${page}`)
     if (items.length === 0) return null

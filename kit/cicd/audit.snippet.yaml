@@ -5,7 +5,8 @@ name: Security advisories
 # and this workflow audits the default branch every day. A red audit opens, or
 # updates, ONE issue per audit, titled `security-advisory: <tech>-audit`; a green one
 # closes it. A red audit does not fail the job, so the default branch never turns red
-# with no commit: the issue is the report.
+# with no commit: the issue is the report. Closed by hand while the audit is still red,
+# it comes back as a new issue the next day.
 #
 # COPY next to ci.yaml (.github/workflows/ or .gitea/workflows/) — one file for both
 # forges. ADAPT: `runs-on`, the cron hour, and DELETE the matrix entries (and their
