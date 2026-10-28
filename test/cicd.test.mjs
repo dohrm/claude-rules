@@ -16,7 +16,10 @@ const WORKFLOWS = ['kit/cicd/ci.snippet.yaml', '.github/workflows/ci.yml']
 // The ci-ok job: its `needs:` list, its step's `env:` map and `run:` body.
 function ciOk(file) {
   const text = readFileSync(join(REPO, file), 'utf8')
-  const job = text.slice(text.indexOf('\n  ci-ok:'))
+  // Up to the next job, so a later job's `run: |` can never stand in for ci-ok's.
+  const rest = text.slice(text.indexOf('\n  ci-ok:') + 1)
+  const next = rest.search(/\n  [\w-]+:\n/)
+  const job = next === -1 ? rest : rest.slice(0, next)
   const needs = job.match(/needs: \[([^\]]*)\]/)[1].split(',').map(s => s.trim())
   const lines = job.split('\n')
   const env = {}
