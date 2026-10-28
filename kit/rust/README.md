@@ -16,13 +16,24 @@ runs `just rust-check`.
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
 | `just rust-lint` | 1 | pre-commit | `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` + `dbg_macro` `todo` `unimplemented` `undocumented_unsafe_blocks` · `cargo clippy --workspace --lib --bins` + `unwrap_used` `expect_used` `panic` `string_slice` |
-| `just rust-check` | 2 | pre-push, `just check` | rust-lint · `cargo test --workspace` · `cargo deny check licenses advisories sources` · `cargo machete --skip-target-dir` |
+| `just rust-check` | 2 | pre-push, `just check` | rust-lint · `cargo test --workspace` · `cargo deny check licenses sources` · `cargo machete --skip-target-dir` · `rust-audit` if `Cargo.lock` changed |
+| `just rust-audit` | 2 | `rust-check` when `Cargo.lock` changed; a schedule | `cargo deny check advisories` |
 | `just rust-mutate` | 3 | coherent block, never a hook | `cargo mutants --in-diff -j {{mutate_jobs}} {{mutate_args}}` against `{{base}}...HEAD` |
 
 `cargo build` is not a separate line: clippy and `cargo test` already
 compile. `unwrap` / `expect` are denied on lib and bins only — tests stay
 free. That is why the second clippy pass is `--lib --bins`, not
 `--all-targets`.
+
+`rust-check` runs `rust-audit` only when `Cargo.lock` changed against
+`base`, or when `base` does not resolve, and prints which before running or
+skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`).
+An advisory database moves with the date, not with the diff, so an audit inside
+every check turns unrelated PRs red. To ignore an advisory or add a flag, override
+the `rust_audit` variable, not the recipe: both recipes run it. A `Cargo.lock` you do
+not commit never reads as changed, so the gate never audits it.
+`licenses` and `sources` stay in `rust-check`: they are a function of the lock.
 
 ## Requirements
 

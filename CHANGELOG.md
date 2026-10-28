@@ -12,6 +12,42 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — `<tech>-check` audits only a changed lock
+
+A vulnerability audit reads an advisory database that moves on its own schedule, not
+with the diff ([#50](https://github.com/dohrm/claude-rules/issues/50)). Inside the
+gate, it turned docs-only PRs and an untouched default branch red the day a CVE was
+published, including Go standard-library findings that no change to the repository
+can fix.
+
+- **`go-audit`, `python-audit`, `rust-audit`.** New recipes that run `govulncheck`,
+  `pip-audit` and `cargo deny check advisories` every time they are called.
+- **`<tech>-check` calls the audit only when its lock changed** against `base`
+  (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree included) or
+  when `base` does not resolve. It prints which before running or skipping it: `audit: skipped — …`,
+  `audit: … changed`, `audit: … unresolvable`, `audit: base is empty …`. A PR that adds or bumps a dependency
+  still fails on a known advisory.
+- **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
+- **`go.just` and `python.just` define `base`** (`origin/main`), as `rust.just`
+  already did, so each parses without `kit/common`.
+- **CI gate jobs pass the PR base.** New `just ci-base` (`kit/common`) fetches the
+  branch named by `$BASE` in full and prints `origin/<branch>`, or `HEAD` when `BASE`
+  is empty (a push: the audit is skipped). The rust, go and python jobs of
+  `kit/cicd/ci.snippet.yaml` take `BASE: ${{ github.base_ref }}` through `env:` and run
+  `just base="$(just ci-base)" <tech>-check`.
+
+Migration:
+
+- Merge the new gate step into each rust, go and python job of your CI workflow by
+  hand. Without it, `base` does not resolve on the runner, so every PR still runs
+  the audit: it fails closed.
+- An override that already moved `advisories` out of `rust-check` can be deleted.
+- A repo whose trunk is not `main` sets `base` in its root justfile (e.g.
+  `base := "origin/next"`). Otherwise `origin/main` does not resolve and every local
+  `<tech>-check` runs the audit.
+- Customise an audit through the `<tech>_audit` variable (e.g. `pip-audit
+  --ignore-vuln <id>`), not by overriding the recipe: `<tech>-check` runs the variable.
+
 ### Breaking — the lock pins the commit it installed, and the CLI must match it
 
 An `update` could move a repo silently, and nothing showed it

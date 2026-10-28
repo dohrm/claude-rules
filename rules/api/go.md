@@ -8,7 +8,7 @@ title: "HTTP API — Go (chi + Huma)"
 Go structs and tags. Passthrough, the DTO reasons, leak, problem+json and
 versioning: `api/principle.md`.
 
-`just go-check` owns golangci / test / govulncheck. It does not see a handler
+`just go-check` owns golangci / test, `just go-audit` govulncheck. Neither sees a handler
 outside `huma.Register`, nor a leaked field on a json-tagged struct.
 
 ## Stack

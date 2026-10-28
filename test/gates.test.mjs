@@ -1955,3 +1955,18 @@ test('rules-check hands npx the locked spec, and stops when there is none',
     assert.equal(readFileSync(join(dir, 'npx-args.txt'), 'utf8').trim(), `npx --yes github:o/r#${REV} doctor`)
   })
 })
+
+// `_audit-gate` ships in go.just, python.just and rust.just, and allow-duplicate-recipes
+// keeps the LAST import's copy for every language. One copy drifting would silently
+// change the audit decision of the other two, so the three must stay byte-identical.
+test('the _audit-gate recipe is identical in every language library', () => {
+  const recipe = (tech) => {
+    const text = readFileSync(join(REPO, 'kit', tech, `${tech}.just`), 'utf8')
+    const m = text.match(/\n(_audit-gate [^\n]*\n(?: {4}[^\n]*\n)+)/)
+    assert.ok(m, `kit/${tech}/${tech}.just has no _audit-gate recipe`)
+    return m[1]
+  }
+  const go = recipe('go')
+  assert.equal(recipe('python'), go)
+  assert.equal(recipe('rust'), go)
+})

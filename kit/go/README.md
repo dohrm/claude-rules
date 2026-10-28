@@ -18,12 +18,23 @@ runs `just go-check`.
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
 | `just go-lint` | 1 | pre-commit | `golangci-lint run ./...` (gofmt + errcheck + staticcheck + govet + unused + gosec + lifecycle/context: bodyclose, sqlclosecheck, rowserrcheck, noctx, contextcheck, containedctx, errorlint, nilerr, exhaustive) |
-| `just go-check` | 2 | pre-push, `just check` | go-lint · `go test -race ./...` · `go build ./...` · `govulncheck ./...` |
+| `just go-check` | 2 | pre-push, `just check` | go-lint · `go test -race ./...` · `go build ./...` · `go-audit` if `go.sum` changed |
+| `just go-audit` | 2 | `go-check` when `go.sum` changed; a schedule | `govulncheck ./...` |
 | `just go-cover` | 3 | coherent block, never a hook | `go test -coverprofile` + `go tool cover -func` — the map, not the verdict |
 
 `go build` is a separate line from `go test`: a package with no test
 files still has to compile. `errcheck` is why unhandled errors do not
 need a second lint pass.
+
+`go-check` runs `go-audit` only when `go.sum` changed against
+`base`, or when `base` does not resolve, and prints which before running or
+skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`).
+An advisory database moves with the date, not with the diff, so an audit inside
+every check turns unrelated PRs red. To ignore an advisory or add a flag, override
+the `go_audit` variable, not the recipe: both recipes run it.
+A standard-library finding is fixed by the Go toolchain version (runner image,
+setup action), not by `go.mod`.
 
 Needs on the machine and the runner: `go`, `golangci-lint` **v2**,
 `govulncheck`.
