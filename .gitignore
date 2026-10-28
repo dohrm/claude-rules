@@ -11,6 +11,8 @@ package-lock.json
 # Doctrine: rules/product/documents.md.
 .work/*
 !.work/*/
+# A ticket-mode RFC's review cache holds the ticket's raw comments (skills/rfc/ticket.md).
+.work/*/review-context.md
 .memory/
 /target/
 test/fixtures/rust-gate/target/

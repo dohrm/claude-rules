@@ -1910,3 +1910,48 @@ test('experience eval inputs have valid contracts before an agent touches them',
     assert.equal(r.status, 0, `${name}: ${r.out}`)
   }
 })
+
+// ------------------------------------------------- rules-check runs the locked CLI
+// #54: `rules-check` ran `npx github:dohrm/claude-rules doctor` — the default branch,
+// whatever the lock said. It now resolves the spec from the lock.
+const CLI_SPEC = join(REPO, 'kit', 'common', 'cli-spec.mjs')
+const REV = 'a'.repeat(40)
+test('cli-spec: core at its locked rev, else its ref; a non-GitHub url goes through git+', () => {
+  withTmpRepo(dir => {
+    const spec = lock => { writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock)); return run(CLI_SPEC, [], dir) }
+    let r = spec({ sources: [{ name: 'core', url: 'github:o/r', ref: 'next', rev: REV }] })
+    assert.equal(r.status, 0, r.out); assert.equal(r.out.trim(), `github:o/r#${REV}`)
+    r = spec({ sources: [{ name: 'core', url: 'github:o/r', ref: 'next' }] })
+    assert.equal(r.out.trim(), 'github:o/r#next')
+    r = spec({ repo: 'o/r', ref: 'v1' })
+    assert.equal(r.out.trim(), 'github:o/r#v1', 'a lock from before sources')
+    r = spec({ sources: [{ name: 'core', url: 'ssh://git@host/o/r.git', ref: 'main', rev: REV }] })
+    assert.equal(r.out.trim(), `git+ssh://git@host/o/r.git#${REV}`)
+    r = spec({ sources: [{ name: 'core', url: 'github:o/r', ref: '--upload-pack=x' }] })
+    assert.equal(r.status, 1)
+    rmSync(join(dir, '.claude-rules.lock'))
+    assert.equal(run(CLI_SPEC, [], dir).status, 1, 'no lock, no spec')
+  })
+})
+
+test('rules-check hands npx the locked spec, and stops when there is none',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withTmpRepo(dir => {
+    mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
+    for (const f of ['gate.just', 'cli-spec.mjs'])
+      writeFileSync(join(dir, '.dev/kit/common', f), readFileSync(join(REPO, 'kit/common', f), 'utf8'))
+    writeFileSync(join(dir, 'justfile'), "import '.dev/kit/common/gate.just'\n")
+    write(dir, '.bin/npx', '#!/bin/sh\necho "npx $*" > npx-args.txt\n')
+    chmodSync(join(dir, '.bin/npx'), 0o755)
+    const env = { ...process.env, PATH: `${join(dir, '.bin')}:${process.env.PATH}` }
+    const just = () => spawnSync('just', ['rules-check'], { cwd: dir, encoding: 'utf8', env })
+
+    assert.notEqual(just().status, 0, 'no lock: rules-check fails')
+    assert.ok(!existsSync(join(dir, 'npx-args.txt')), 'and never calls npx with an empty spec')
+
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ sources: [{ name: 'core', url: 'github:o/r', ref: 'next', rev: REV }] }))
+    const r = just()
+    assert.equal(r.status, 0, r.stderr)
+    assert.equal(readFileSync(join(dir, 'npx-args.txt'), 'utf8').trim(), `npx --yes github:o/r#${REV} doctor`)
+  })
+})

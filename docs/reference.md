@@ -150,6 +150,11 @@ docs/
 ```bash
 # in your repo, from its root — bare `add`, no args, prompts interactively
 # (pick profiles, agents, root, level); anything scriptable below skips the prompt.
+# Every command that fetches (add, update, remove --source) checks that the running
+# CLI is the one core ships at the ref this run fetches (the locked ref, or the --ref
+# you pass): run `npx github:dohrm/claude-rules#<that ref>`.
+# A mismatch — another ref, a stale npx cache — is refused, and the refusal prints the
+# command to re-run.
 npx github:dohrm/claude-rules add
 
 # aliases unpack; --root is the glob lever:
@@ -165,11 +170,11 @@ npx github:dohrm/claude-rules list                     # available, installed, a
 npx github:dohrm/claude-rules init                     # assemble justfile + lefthook.yml + CLAUDE.md
 npx github:dohrm/claude-rules doctor                   # audit the install against this repo (offline)
 npx github:dohrm/claude-rules budget src/api/client.ts # what loads for that file, and what it costs
-npx github:dohrm/claude-rules add rust --ref v0.1.0    # pin a ref (default: main)
+npx github:dohrm/claude-rules#v0.1.0 add rust --ref v0.1.0  # pin a ref (default: main); the CLI must be core's own
 npx github:dohrm/claude-rules add rust --agent claude  # narrow the target agents (new installs: claude,codex)
-npx github:dohrm/claude-rules update --ref v0.2.0      # replay the locked profiles+agents at a new ref
+npx github:dohrm/claude-rules#v0.2.0 update --ref v0.2.0  # replay the locked profiles+agents at a new ref
 npx github:dohrm/claude-rules add --source team=git@git.example:team/agent-rules.git#v0.3.0  # a second source, on top of core
-npx github:dohrm/claude-rules update --ref team=v0.4.0 # move one source; core follows defaultRef
+npx github:dohrm/claude-rules update --ref team=v0.4.0 # move one source; core replays its locked ref
 npx github:dohrm/claude-rules update --strict          # fail when an overridden file changed upstream
 npx github:dohrm/claude-rules update --force           # overwrite the paths update refused, listed
 npx github:dohrm/claude-rules remove --source team     # drop a source, its files, the profiles only it defined
@@ -319,8 +324,17 @@ installer never asks for or stores a token. `github:owner/repo` means
   --source <name>` drops it, its files and the profiles only it defined. Never edit
   the list by hand.
 - `--ref <ref>` moves `core`, `--ref <name>=<ref>` another source (repeatable).
-  Without it, `core` follows `defaultRef` and every other source replays its locked
-  ref. `--local <dir>` reads `core` from disk, with no git.
+  Without it, every source replays its locked ref, `core` included; `defaultRef`
+  only seeds a first `add`. `--local <dir>` reads `core` from disk, with no git.
+- Each source records `rev`, the commit it was fetched at, and `update` prints one
+  line per source: `core  next  5728086 → 319310a`, or `unchanged (319310a)`. An
+  `update` you expected to move that says `unchanged` did not move.
+- **The CLI must be the one `core` ships.** After the fetch, `add`, `update` and
+  `remove --source` compare the running CLI's `bin/*.mjs` with the fetched core's and
+  refuse on a difference, before writing anything, naming the command to re-run
+  (`npx github:<repo>#<rev> <same args>`). An `npx github:dohrm/claude-rules` without
+  `#<ref>` runs `main`'s CLI, which is what this stops. `--local` is exempt, and
+  records no `rev`: a tree on disk is not a commit.
 - **Last path wins.** The sources are overlaid by repo-relative path in order, then
   emitted for every target. The unit is a file for `rules/`, `agents/` and `kit/`,
   and a whole directory for a skill: a later `skills/<name>/` replaces the earlier
