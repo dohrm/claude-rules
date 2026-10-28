@@ -277,7 +277,7 @@ test('no kit file sets or advises a CARGO_TARGET_DIR outside the workspace', () 
   for (const f of files) {
     const text = readFileSync(join(REPO, f), 'utf8')
     assert.doesNotMatch(text, /CARGO_TARGET_DIR\s*[:=]/, `${f} sets CARGO_TARGET_DIR`)
-    assert.doesNotMatch(text, /CARGO_TARGET_DIR[^\n]*outside the workspace/i, `${f} advises a target dir outside the workspace`)
+    assert.doesNotMatch(text, /outside the workspace/i, `${f} advises a path outside the workspace`)
   }
 })
 
