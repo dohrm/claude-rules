@@ -27,8 +27,8 @@ files still has to compile. `errcheck` is why unhandled errors do not
 need a second lint pass.
 
 `go-check` runs `go-audit` only when `go.sum` changed against `base`, or when
-`base` does not resolve, and its last line says which (`audit: skipped — …`,
-`audit: … changed`, `audit: … unresolvable`). An advisory database moves with the
+`base` does not resolve, and prints which before running or skipping it
+(`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`). An advisory database moves with the
 date, not with the diff, so an audit inside every check turns unrelated PRs red. To
 ignore an advisory or add a flag, override the `go_audit` variable, not the recipe:
 both recipes run it.

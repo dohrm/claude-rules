@@ -110,10 +110,18 @@ function jobs(file) {
     .map(([, name, block]) => ({ name, block }))
 }
 
-for (const file of WORKFLOWS) {
+// This repo's own ci.yml runs the gates through `npm test` (the *-gates.test.mjs files
+// build a fixture repo with its own base), never `just <tech>-check` directly. Stated,
+// so a direct call added later lands in the snippet's checks below instead of nowhere.
+test('.github/workflows/ci.yml calls no audited gate directly', () => {
+  assert.deepEqual(jobs('.github/workflows/ci.yml').filter(j => AUDITED.test(j.block)).map(j => j.name), [])
+})
+
+{
+  const file = 'kit/cicd/ci.snippet.yaml'
   test(`${file}: every audited gate job passes base= and never fetches shallow`, () => {
     const gated = jobs(file).filter(j => AUDITED.test(j.block))
-    if (file.startsWith('kit/')) assert.equal(gated.length, 3, 'the snippet ships the rust, go and python gate jobs')
+    assert.deepEqual(gated.map(j => j.name), ['rust', 'go', 'python'], 'the snippet ships the rust, go and python gate jobs')
     for (const { name, block } of gated) {
       for (const line of block.split('\n').filter(l => AUDITED.test(l)))
         assert.match(line, /just base="?\$base"? (rust|go|python)-check/, `${name}: ${line.trim()}`)
@@ -126,12 +134,12 @@ for (const file of WORKFLOWS) {
 
 // The step's shell, run for real: a shallow clone (what actions/checkout leaves), a
 // `just` on PATH that prints its arguments, a PR base on the remote.
-test('kit/cicd/ci.snippet.yaml: the gate step fetches the PR base and passes it, HEAD on a push', () => {
-  const block = jobs('kit/cicd/ci.snippet.yaml').find(j => j.name === 'rust').block
+for (const tech of ['rust', 'go', 'python']) test(`kit/cicd/ci.snippet.yaml: the ${tech} gate step fetches the PR base and passes it, HEAD on a push`, () => {
+  const block = jobs('kit/cicd/ci.snippet.yaml').find(j => j.name === tech).block
   const lines = block.split('\n')
-  const named = lines.findIndex(l => l.trim() === '- name: just rust-check')
+  const named = lines.findIndex(l => l.trim() === `- name: just ${tech}-check`)
   const at = lines.findIndex((l, i) => i > named && /^ {8}run: \|$/.test(l))
-  assert.ok(named !== -1 && at !== -1, 'no run block under the rust-check step')
+  assert.ok(named !== -1 && at !== -1, `no run block under the ${tech}-check step`)
   const run = []
   for (let i = at + 1; i < lines.length && (lines[i] === '' || lines[i].startsWith(' '.repeat(10))); i++) run.push(lines[i].slice(10))
 
@@ -153,8 +161,8 @@ test('kit/cicd/ci.snippet.yaml: the gate step fetches the PR base and passes it,
       assert.equal(r.status, 0, r.stdout + r.stderr)
       return r.stdout
     }
-    assert.match(step('next'), /^just base=origin\/next rust-check$/m)
+    assert.match(step('next'), new RegExp(`^just base=origin/next ${tech}-check$`, 'm'))
     sh('git rev-parse --verify --quiet origin/next', join(dir, 'work'))
-    assert.match(step(''), /^just base=HEAD rust-check$/m)
+    assert.match(step(''), new RegExp(`^just base=HEAD ${tech}-check$`, 'm'))
   })
 })

@@ -24,7 +24,7 @@ can fix.
   `pip-audit` and `cargo deny check advisories` every time they are called.
 - **`<tech>-check` calls the audit only when its lock changed** against `base`
   (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree included) or
-  when `base` does not resolve. Its last line says which: `audit: skipped — …`,
+  when `base` does not resolve. It prints which before running or skipping it: `audit: skipped — …`,
   `audit: … changed`, `audit: … unresolvable`. A PR that adds or bumps a dependency
   still fails on a known advisory.
 - **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
@@ -40,6 +40,9 @@ Migration:
   hand. Without it, `base` does not resolve on the runner, so every PR still runs
   the audit: it fails closed.
 - An override that already moved `advisories` out of `rust-check` can be deleted.
+- A repo whose trunk is not `main` sets `base` in its root justfile (e.g.
+  `base := "origin/next"`). Otherwise `origin/main` does not resolve and every local
+  `<tech>-check` runs the audit.
 - Customise an audit through the `<tech>_audit` variable (e.g. `pip-audit
   --ignore-vuln <id>`), not by overriding the recipe: `<tech>-check` runs the variable.
 
