@@ -243,7 +243,7 @@ function assertUploadsPerForge(file) {
   ], file)
 }
 
-test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, bounded, skips the rfc/* PR, uploads per forge', () => {
+test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, uploads per forge', () => {
   const file = 'kit/rust/mutation-ci.yaml'
   const text = snippet(file)
   const runs = text.split('\n').filter(l => /^\s+run: .*\b(cargo mutants|rust-mutate)\b/.test(l)).map(l => l.trim())
@@ -251,10 +251,17 @@ test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, bounded, sk
   assert.match(text, BASE_ENV, 'the base through env:, never interpolated into the shell')
   assert.doesNotMatch(text, SHALLOW, 'a shallow base has no merge base (#43)')
   assert.match(text, FULL_CHECKOUT)
-  assert.match(text, /\n {4}timeout-minutes: \d+\n/, 'the job is bounded')
-  assert.match(text, /\n {4}if: \$\{\{ !\(startsWith\(github\.head_ref, 'rfc\/'\) && github\.base_ref == github\.event\.repository\.default_branch\) \}\}\n/,
-    'the rfc/* → default-branch PR is skipped: its phases are the proof')
   assertUploadsPerForge(file)
+})
+
+const MUTATION_SNIPPETS = ['kit/rust/mutation-ci.yaml', 'kit/ts/mutation-ci.yaml', 'kit/python/mutation-ci.yaml']
+test('every mutation snippet is bounded and skips the rfc/* → default-branch PR', () => {
+  for (const file of MUTATION_SNIPPETS) {
+    const text = snippet(file)
+    assert.match(text, /\n {4}timeout-minutes: \d+\b/, `${file}: the job is bounded`)
+    assert.match(text, /\n {4}if: \$\{\{ !\(startsWith\(github\.head_ref, 'rfc\/'\) && github\.base_ref == github\.event\.repository\.default_branch\) \}\}\n/,
+      `${file}: the rfc/* → default-branch PR is skipped, its phases are the proof`)
+  }
 })
 
 test('the Python, TS mutation and Go coverage snippets take the full base from ci-base', () => {
