@@ -1,6 +1,6 @@
 # Bug — the Tier 3 review report comes back translated, and review-guard rejects it
 
-- **Status**: diagnosed
+- **Status**: fixing
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
@@ -66,3 +66,11 @@ artifact of Tier 3 follows a per-user preference.
 - phase 1: zones — `gate.just` `review-claude`, `review-prompt.md`, `review-guard.mjs`.
   Repro fails on 319310a for the reported reason.
 - phase 2–3: hypotheses 1 and 2 confirmed by a two-call probe, 3 refuted.
+- phase 4: fix — `review-claude` passes `--settings '{"language":"English"}'`; the shared
+  report contract (`review-prompt.md` + `agents/code-reviewer.md`, held byte-identical)
+  asks for English. Repro green. CHANGELOG `Fixed`, hand-merge for overriding repos.
+- Tier 3: `just code-review` in this tree — the first promoted report on this machine
+  since the bug (English, WARNINGS, cb48d7f). Design note 1 applied: the contract test
+  asserts the English sentence. Note 2 (inline-JSON `--settings` on old CLIs) left: it
+  fails loudly, and the current CLI takes it (probe above).
+- `npm test`: 485 pass, 2 fail — the `python-gates` pair, as on the base (#50).
