@@ -1,9 +1,11 @@
 // Shared test helpers — dependency-free (node:test + node:assert only).
-import { readFileSync, readdirSync, statSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 
 export const REPO = dirname(dirname(fileURLToPath(import.meta.url)))
 export const CLI = join(REPO, 'bin', 'cli.mjs')
@@ -69,3 +71,125 @@ export function withTmpRepo(fn) {
 
 export const read = (...p) => readFileSync(join(...p), 'utf8')
 export const has = (...p) => existsSync(join(...p))
+
+// ------------------------------------------------------------ audit gate
+// git in a fixture repo, with an identity and no hook or signing from this machine.
+function git(dir, args, input) {
+  const r = spawnSync('git', [
+    '-c', 'init.defaultBranch=main', '-c', 'user.name=gate-test', '-c', 'user.email=gate-test@example.invalid',
+    '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args,
+  ], { cwd: dir, encoding: 'utf8', input })
+  if (r.error) throw r.error
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
+  return r.stdout.trim()
+}
+
+// Commits the tree, so a gate run with `base=HEAD` has a real base to compare the lock
+// against. `blank` (a repo-relative path) is committed EMPTY, then restored, so the tree
+// shows that file changed against the base while staying valid for the toolchain.
+export function commitBase(dir, blank) {
+  const saved = blank && readFileSync(join(dir, blank))
+  if (blank) writeFileSync(join(dir, blank), '')
+  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'base']]) git(dir, args)
+  if (blank) writeFileSync(join(dir, blank), saved)
+}
+
+// The `<tech>-check` audit decision, the same cases for every language. The audit
+// command is replaced by a sentinel: an audit's verdict depends on the date, so these
+// tests assert the DECISION (the marker the recipe prints, the sentinel's presence),
+// never that an audit is green. `<tech>-audit`'s wiring to the real tool is asserted
+// on a dry run, which spends no network.
+//   lock       — repo-relative path of the lock in the assembled fixture
+//   tool       — what the dry run of `<tech>-audit` must name
+//   changeLock — commits a base and leaves `lock` changed against it
+export function auditGateCases({ tech, lock, tool, assemble, runJust, changeLock, skip, timeout }) {
+  const SENTINEL = 'audit-sentinel-ran'
+  const stub = `${tech}_audit=echo ${SENTINEL}`
+
+  test(`just ${tech}-audit runs ${tool}`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      const r = runJust(dir, `${tech}-audit`, ['--dry-run'])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes(tool), `${tech}-audit must run ${tool}:\n${r.out}`)
+    })
+  })
+
+  test(`just ${tech}-check skips the audit when ${lock} is unchanged against base`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      const r = runJust(dir, `${tech}-check`, ['base=HEAD', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes(`audit: skipped — ${lock} unchanged since its merge base with HEAD`), `no skip line:\n${r.out}`)
+      assert.ok(!r.out.includes(SENTINEL), `the audit must not run:\n${r.out}`)
+    })
+  })
+
+  test(`just ${tech}-check runs the audit when ${lock} changed against base`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      changeLock(dir)
+      const r = runJust(dir, `${tech}-check`, ['base=HEAD', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes(`audit: ${lock} changed`), `no changed line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+
+  // A PR checked out at its head (Gitea may not build a merge ref) whose base bumped the
+  // lock since the branch forked: the branch changed nothing, so the audit is skipped.
+  test(`just ${tech}-check skips the audit when only base moved ${lock} since the fork`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      git(dir, ['checkout', '-q', '-b', 'pr'])
+      git(dir, ['checkout', '-q', 'main'])
+      writeFileSync(join(dir, lock), '')
+      git(dir, ['add', lock])
+      git(dir, ['commit', '-q', '-m', 'bump the lock on base'])
+      git(dir, ['checkout', '-q', 'pr'])
+      const r = runJust(dir, `${tech}-check`, ['base=main', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes(`audit: skipped — ${lock} unchanged since its merge base with main`), `no skip line:\n${r.out}`)
+      assert.ok(!r.out.includes(SENTINEL), `the audit must not run:\n${r.out}`)
+    })
+  })
+
+  // A shallow clone whose history stops before the fork: base resolves, but no merge
+  // base can be found. An unrelated root commit gives git the same answer.
+  test(`just ${tech}-check runs the audit when base shares no merge base with HEAD`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      git(dir, ['branch', 'unrelated', git(dir, ['commit-tree', git(dir, ['mktree'], ''), '-m', 'unrelated'])])
+      const r = runJust(dir, `${tech}-check`, ['base=unrelated', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes('audit: no merge base with unrelated'), `no merge-base line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+
+  // What a CI job gets when `just ci-base` is missing or its fetch failed.
+  test(`just ${tech}-check runs the audit and says so when base is empty`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      const r = runJust(dir, `${tech}-check`, ['base=', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes('audit: base is empty'), `no empty-base line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+
+  test(`just ${tech}-check runs the audit when base does not resolve`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      const r = runJust(dir, `${tech}-check`, ['base=origin/no-such-base', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes('audit: origin/no-such-base unresolvable'), `no unresolvable line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+}

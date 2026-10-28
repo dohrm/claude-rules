@@ -10,7 +10,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node
 import { dirname, join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, auditGateCases } from './helpers.mjs'
 
 const FIXTURE = join(REPO, 'test', 'fixtures', 'rust-gate')
 const KIT_RUST = join(REPO, 'kit', 'rust')
@@ -94,8 +94,8 @@ const assemble = (dir) => {
   )
 }
 
-const runJust = (dir, recipe) => {
-  const r = spawnSync('just', [recipe], {
+const runJust = (dir, recipe, overrides = []) => {
+  const r = spawnSync('just', [...overrides, recipe], {
     cwd: dir,
     encoding: 'utf8',
     env: { ...process.env, CARGO_TARGET_DIR },
@@ -124,9 +124,22 @@ describe('rust quality gates', { concurrency: 1 }, () => {
   }, () => {
     withTmpRepo((dir) => {
       assemble(dir)
-      const r = runJust(dir, 'rust-check')
+      commitBase(dir)
+      const r = runJust(dir, 'rust-check', ['base=HEAD'])
       assert.equal(r.status, 0, `rust-check must be green:\n${r.out}`)
+      assert.ok(r.out.includes('audit: skipped — api/Cargo.lock unchanged since its merge base with HEAD'), r.out)
     })
+  })
+
+  auditGateCases({
+    tech: 'rust',
+    lock: 'api/Cargo.lock',
+    tool: 'cargo deny check advisories',
+    assemble,
+    runJust,
+    changeLock: (dir) => commitBase(dir, 'api/Cargo.lock'),
+    skip: skipCheck,
+    timeout: TIMEOUT,
   })
 
   test('just rust-lint fails when rustfmt would rewrite a file', {

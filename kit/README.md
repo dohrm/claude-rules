@@ -34,7 +34,7 @@ reason; they need Node >= 18 and no dependencies.)
 | Tier | Recipe | Runs on | What | Latency |
 |------|--------|---------|------|---------|
 | 1 | `just <tech>-lint` | pre-commit | fmt-check, lint `-D warnings` | seconds |
-| 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build | tens of s |
+| 2 | `just <tech>-check` | pre-push, `just check` | + tests, deny/machete, build; `<tech>-audit` only when the lock changed against `base` | tens of s |
 | 3 | `just code-review` | per coherent block (one RFC), before push | independent review; CRITICAL blocks via pre-push review-guard | minutes |
 | 4 | `just mutate-diff` | PR gate after calibration; optional locally | mutation / Go coverage ratchet — NEVER a hook | minutes |
 
@@ -77,8 +77,10 @@ The commands **and their paths** live once, in the justfile recipes (via the
 truth — no path duplicated across the kit.
 
 **CI is the third caller of the same recipes**, never a second definition of them:
-`cicd/ci.snippet.yaml` runs `just <tech>-check`, so a gate the pipeline enforces is
-always one an agent can close its own loop on locally. Doctrine:
+`cicd/ci.snippet.yaml` runs `just base="$(just ci-base)" <tech>-check`, so a gate the pipeline enforces is
+always one an agent can close its own loop on locally. The audits it leaves out run
+daily from `cicd/audit.snippet.yaml`, which keeps one issue open per red
+`<tech>-audit` (`cicd/advisory-issue.mjs`, GitHub or Gitea). Doctrine:
 `../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
 
 Mutation testing re-runs the suite per mutant; putting it in a hook destroys the

@@ -5,19 +5,24 @@ title: "Go Quality Gates"
 ---
 
 ```bash
-just go-check     # go-lint → test -race → build → govulncheck
+just go-check     # go-lint → test -race → build → go-audit if go.sum changed
 ```
 
 `go-lint` is pre-commit; `go-check` is pre-push and `just check`. Tier 4
 is `just go-cover` — a coverage map, never mutation, never a hook.
 Wiring: `.dev/kit/go/README.md`. Needs **golangci-lint v2**.
+`go-check` runs the audit only when `go.sum` changed since its merge base
+with `base` (or that cannot be known), and prints which: an advisory database moves
+with the date, not the diff (`rules/cicd/pipeline.md`). `just go-audit`
+runs it always. A standard-library finding is fixed by the Go toolchain
+version, not by `go.mod`.
 
 | Recipe | Command | Config |
 |---|---|---|
 | `go-lint` | `golangci-lint run ./...` | `.golangci.yml` ← `golangci.base.yml` (gofmt, errcheck, staticcheck, govet, unused, gosec, bodyclose, sqlclosecheck, rowserrcheck, noctx, contextcheck, containedctx, errorlint, nilerr, exhaustive) |
 | `go-check` | `go test -race ./...` | — |
 | `go-check` | `go build ./...` | — |
-| `go-check` | `govulncheck ./...` | — |
+| `go-audit` | `govulncheck ./...` | — |
 | `go-cover` | `go test -coverprofile` + `go tool cover -func` | `.coverage-baseline` (CI ratchet only) |
 
 No `//nolint` or `staticcheck:ignore` without a reason on the same line.
