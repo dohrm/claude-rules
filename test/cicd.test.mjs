@@ -17,7 +17,9 @@ const WORKFLOWS = ['kit/cicd/ci.snippet.yaml', '.github/workflows/ci.yml']
 function ciOk(file) {
   const text = readFileSync(join(REPO, file), 'utf8')
   // Up to the next job, so a later job's `run: |` can never stand in for ci-ok's.
-  const rest = text.slice(text.indexOf('\n  ci-ok:') + 1)
+  const at = text.indexOf('\n  ci-ok:')
+  if (at === -1) throw new Error(`${file}: no ci-ok job`)
+  const rest = text.slice(at + 1)
   const next = rest.search(/\n  [\w-]+:\n/)
   const job = next === -1 ? rest : rest.slice(0, next)
   const needs = job.match(/needs: \[([^\]]*)\]/)[1].split(',').map(s => s.trim())
@@ -31,6 +33,7 @@ function ciOk(file) {
       run = []
       for (i++; i < lines.length && (lines[i] === '' || lines[i].startsWith(' '.repeat(10))); i++)
         run.push(lines[i].slice(10))
+      break
     }
   }
   return { needs, env, run: run.join('\n') }
