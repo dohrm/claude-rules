@@ -31,12 +31,12 @@ runner and keep the rest.
 ruff pass. Tests stay free of `S101` (assert) via
 `[tool.ruff.lint.per-file-ignores]`.
 
-`python-check` runs `python-audit` only when `uv.lock` changed against `base`, or when
-`base` does not resolve, and prints which before running or skipping it
-(`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`). An advisory database moves with the
-date, not with the diff, so an audit inside every check turns unrelated PRs red. To
-ignore an advisory or add a flag, override the `python_audit` variable, not the recipe:
-both recipes run it.
+`python-check` runs `python-audit` only when `uv.lock` changed against
+`base`, or when `base` does not resolve, and prints which before running or
+skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`).
+An advisory database moves with the date, not with the diff, so an audit inside
+every check turns unrelated PRs red. To ignore an advisory or add a flag, override
+the `python_audit` variable, not the recipe: both recipes run it.
 
 ## Requirements
 

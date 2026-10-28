@@ -43,8 +43,9 @@ go-audit:
 # runs the audit only when the lock changed against `base` (two-dot against its tip,
 # the working tree and an untracked lock included, so no merge base is needed), or
 # when `base` does not resolve: not knowing is not a reason to skip. It prints
-# `audit: …` (skipped, changed, unresolvable) before running or skipping the audit. `*-audit` runs the tool unconditionally — the scheduled job
-# (kit/cicd) calls it daily on the default branch.
+# `audit: …` (skipped, changed, unresolvable) before running or skipping the audit.
+# `*-audit` runs the tool unconditionally — the scheduled job (kit/cicd) calls it
+# daily on the default branch.
 # This recipe is identical in go.just, python.just and rust.just; the
 # allow-duplicate-recipes header keeps one.
 _audit-gate dir lock cmd:

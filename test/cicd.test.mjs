@@ -101,7 +101,7 @@ for (const file of WORKFLOWS) {
 // unresolvable base fails closed into running the audit. So a gate job that does not
 // fetch the PR base, or fetches it shallow, quietly turns every PR back into a daily
 // advisory lottery. The audit-bearing gates are the ones checked.
-const AUDITED = /^\s*just (?:base=\S+ )?(rust|go|python)-check\b/m
+const AUDITED = /^\s*(?:-\s+)?(?:run:\s+)?just (?:base=\S+ )?(rust|go|python)-check\b/m
 
 function jobs(file) {
   const text = readFileSync(join(REPO, file), 'utf8')
@@ -112,7 +112,7 @@ function jobs(file) {
 
 // This repo's own ci.yml runs the gates through `npm test` (the *-gates.test.mjs files
 // build a fixture repo with its own base), never `just <tech>-check` directly. Stated,
-// so a direct call added later lands in the snippet's checks below instead of nowhere.
+// so a direct call added later fails here and has to be wired like the snippet's step.
 test('.github/workflows/ci.yml calls no audited gate directly', () => {
   assert.deepEqual(jobs('.github/workflows/ci.yml').filter(j => AUDITED.test(j.block)).map(j => j.name), [])
 })
