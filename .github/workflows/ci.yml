@@ -248,12 +248,22 @@ jobs:
     needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates, devstack-gates]
     runs-on: ubuntu-latest
     steps:
+      # Same step as kit/cicd/ci.snippet.yaml: each job by name, an empty result fails.
       - name: Every gate must have actually succeeded
+        env:
+          TEST: ${{ needs.test.result }}
+          RUST_GATES: ${{ needs.rust-gates.result }}
+          PYTHON_GATES: ${{ needs.python-gates.result }}
+          GO_GATES: ${{ needs.go-gates.result }}
+          TS_GATES: ${{ needs.ts-gates.result }}
+          GODOT_GATES: ${{ needs.godot-gates.result }}
+          DEVSTACK_GATES: ${{ needs.devstack-gates.result }}
+        shell: bash
         run: |
-          RESULTS="${{ join(needs.*.result, ' ') }}"
-          echo "gate results: $RESULTS"
-          for r in $RESULTS; do
-            [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }
+          for job in TEST RUST_GATES PYTHON_GATES GO_GATES TS_GATES GODOT_GATES DEVSTACK_GATES; do
+            r="${!job}"
+            echo "$job: ${r:-<no result>}"
+            [ "$r" = "success" ] || { echo "✗ $job did not succeed (${r:-no result})"; exit 1; }
           done
 
   eval:
