@@ -6,9 +6,10 @@ name: CI
 # Doctrine:
 # rules/cicd/pipeline.md.
 #
-# COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — the syntax is
-# the same. ADAPT: `runs-on` (GitHub: ubuntu-latest; Gitea: your runner label,
-# often `linux`), and DELETE the jobs for technologies this repo does not have.
+# COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — one file for
+# both; the differences are in rules/cicd/pipeline.md § Forge note. ADAPT:
+# `runs-on` (GitHub: ubuntu-latest; Gitea: your runner label, often `linux`),
+# `ci-ok`'s job lists, and DELETE the jobs for technologies this repo does not have.
 #
 # `just` on the runner: baking it into the runner image is the fastest and the
 # most reliable (no marketplace action to mirror). The install step below is the
@@ -139,10 +140,19 @@ jobs:
     needs: [rust, ts, go, python]   # ADAPT to the jobs you kept
     runs-on: ubuntu-latest       # ADAPT
     steps:
+      # Each job BY NAME, never `join(needs.*.result)`: Gitea's runner expands that
+      # filter to nothing, and a loop over nothing passes. ADAPT both lists to `needs`
+      # — a job missing here is not checked; a line for a job not in `needs` fails.
       - name: Every gate must have actually succeeded
+        env:
+          RUST: ${{ needs.rust.result }}
+          TS: ${{ needs.ts.result }}
+          GO: ${{ needs.go.result }}
+          PYTHON: ${{ needs.python.result }}
+        shell: bash                # ${!job} is a bash indirection
         run: |
-          RESULTS="${{ join(needs.*.result, ' ') }}"
-          echo "gate results: $RESULTS"
-          for r in $RESULTS; do
-            [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }
+          for job in RUST TS GO PYTHON; do
+            r="${!job}"
+            echo "$job: ${r:-<no result>}"
+            [ "$r" = "success" ] || { echo "✗ $job did not succeed (${r:-no result})"; exit 1; }
           done
