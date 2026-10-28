@@ -151,7 +151,8 @@ docs/
 # in your repo, from its root — bare `add`, no args, prompts interactively
 # (pick profiles, agents, root, level); anything scriptable below skips the prompt.
 # Every command that fetches (add, update, remove --source) checks that the running
-# CLI is the one core ships at the locked ref: run `npx github:dohrm/claude-rules#<locked ref>`.
+# CLI is the one core ships at the ref this run fetches (the locked ref, or the --ref
+# you pass): run `npx github:dohrm/claude-rules#<that ref>`.
 # A mismatch — another ref, a stale npx cache — is refused, and the refusal prints the
 # command to re-run.
 npx github:dohrm/claude-rules add
