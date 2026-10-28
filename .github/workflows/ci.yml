@@ -8,7 +8,7 @@ name: CI
 #   ts-gates      — ts jalon + derivatives (test/fixtures/ts-gate)
 #   godot-gates   — godot jalon: just godot-lint / godot-check (test/fixtures/godot-gate)
 #   devstack-gates— devstack jalon: the log-file trap and the per-tree control socket
-#   cicd-gates    — the CI snippets' runtime cases that need `just` (ci-base)
+#   cicd-gates    — the CI snippets' runtime cases that need `just` (ci-base, the merge-base checkout)
 #
 # Language jobs are separate so a red toolchain names itself. Local `npm test`
 # skips those files when the toolchain is missing; each job sets RUST_GATES=1,
@@ -244,7 +244,8 @@ jobs:
       - name: devstack jalon (the log-file trap + the per-tree control socket)
         run: node --test test/devstack-gates.test.mjs
 
-  # `test` runs test/cicd.test.mjs too, but without `just`, so its ci-base case skips there.
+  # `test` runs test/cicd.test.mjs too, but without `just`, so its just-spawning cases
+  # (ci-base, the full-checkout merge base) skip there.
   cicd-gates:
     runs-on: ubuntu-latest
     env:
