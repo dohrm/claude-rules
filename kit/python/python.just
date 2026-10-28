@@ -57,12 +57,12 @@ python-audit:
 # allow-duplicate-recipes header keeps one.
 _audit-gate dir lock cmd:
     @if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null 2>&1; then \
-        echo 'audit: {{base}} unresolvable'; \
+        echo {{quote("audit: " + base + " unresolvable")}}; \
     elif git diff --quiet {{quote(base)}} -- {{quote(dir / lock)}} \
         && [ -z "$(git ls-files --others --exclude-standard -- {{quote(dir / lock)}})" ]; then \
-        echo 'audit: skipped — {{dir / lock}} unchanged against {{base}}'; exit 0; \
+        echo {{quote("audit: skipped — " + dir / lock + " unchanged against " + base)}}; exit 0; \
     else \
-        echo 'audit: {{dir / lock}} changed'; \
+        echo {{quote("audit: " + dir / lock + " changed")}}; \
     fi; \
     cd {{quote(dir)}} && {{cmd}}
 

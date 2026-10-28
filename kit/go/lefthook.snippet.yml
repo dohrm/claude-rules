@@ -2,7 +2,7 @@
 #
 # Thin triggers only: commands live in the justfile recipes (go-lint / go-check),
 # which hold the path via the `go_dir` variable. Layout-agnostic glob.
-# Aligned with rules/go/quality-gates.md (golangci-lint / test -race / go-audit's govulncheck).
+# Aligned with rules/go/quality-gates.md (golangci-lint / test -race / govulncheck).
 # golangci-lint + govulncheck must be installed (or baked into the runner image).
 
 pre-commit:

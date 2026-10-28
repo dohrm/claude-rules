@@ -52,17 +52,8 @@ jobs:
           command -v cargo-machete >/dev/null 2>&1 || cargo install cargo-machete --locked
       - name: just rust-check
         env:
-          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push
-        run: |
-          # The audit runs only when Cargo.lock changed against the PR base, so fetch that
-          # base in full, not shallow. On a push there is nothing to compare:
-          # base=HEAD skips the audit, and the scheduled audit covers the default branch.
-          base=HEAD
-          if [ -n "$BASE" ]; then
-            git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
-            base="origin/$BASE"
-          fi
-          just base="$base" rust-check
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" rust-check
 
   ts:                            # DELETE if no TypeScript
     runs-on: ubuntu-latest       # ADAPT
@@ -102,17 +93,8 @@ jobs:
           command -v govulncheck  >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: just go-check
         env:
-          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push
-        run: |
-          # The audit runs only when go.sum changed against the PR base, so fetch that
-          # base in full, not shallow. On a push there is nothing to compare:
-          # base=HEAD skips the audit, and the scheduled audit covers the default branch.
-          base=HEAD
-          if [ -n "$BASE" ]; then
-            git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
-            base="origin/$BASE"
-          fi
-          just base="$base" go-check
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" go-check
 
   python:                        # DELETE if no Python
     runs-on: ubuntu-latest       # ADAPT
@@ -135,17 +117,8 @@ jobs:
       # gate was written for — no `@latest` drifting between runs.
       - name: just python-check
         env:
-          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push
-        run: |
-          # The audit runs only when uv.lock changed against the PR base, so fetch that
-          # base in full, not shallow. On a push there is nothing to compare:
-          # base=HEAD skips the audit, and the scheduled audit covers the default branch.
-          base=HEAD
-          if [ -n "$BASE" ]; then
-            git fetch --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
-            base="origin/$BASE"
-          fi
-          just base="$base" python-check
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" python-check
 
   # Documents gate — OPT-IN, only if the repo keeps ADRs (docs/adr/) or a PRD/PLAN.
   # An agent proposes a decision, a human accepts it (rules/agent/decisions.md); a document

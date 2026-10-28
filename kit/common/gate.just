@@ -500,6 +500,23 @@ publish-summary slug status base=base:
     case '{{status}}' in COMPLETED|BLOCKED|BUDGET_EXHAUSTED) ;; *) echo "unknown status: {{status}}" >&2; exit 2 ;; esac
     node {{kit}}/publish-summary.mjs {{slug}} {{status}} {{base}}
 
+# ── CI: the base a gate job compares against ─────────────────────────────────
+# `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),
+# so a PR's gate job needs the PR's target branch. The job passes it through `env:`
+# (`BASE: ${{ github.base_ref }}`, never interpolated into the shell) and runs
+# `just base="$(just ci-base)" <tech>-check`. This recipe fetches that branch in full —
+# never shallow — and prints `origin/<branch>`. With no BASE (a push) it prints `HEAD`:
+# nothing to compare, so the audit is skipped, and the scheduled audit covers the
+# default branch. A failed fetch prints nothing, and an empty `base` does not resolve,
+# so the audit runs: fail closed. Only the ref goes to stdout; git talks on stderr.
+ci-base:
+    @if [ -n "${BASE:-}" ]; then \
+        git fetch --quiet --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE" >&2 \
+            && echo "origin/$BASE"; \
+    else \
+        echo HEAD; \
+    fi
+
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop
 # indicator" from rules/agent/guardrails.md a machine can measure. jscpd is

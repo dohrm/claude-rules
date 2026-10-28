@@ -77,7 +77,7 @@ The commands **and their paths** live once, in the justfile recipes (via the
 truth — no path duplicated across the kit.
 
 **CI is the third caller of the same recipes**, never a second definition of them:
-`cicd/ci.snippet.yaml` runs `just base=origin/<PR target> <tech>-check`, so a gate the pipeline enforces is
+`cicd/ci.snippet.yaml` runs `just base="$(just ci-base)" <tech>-check`, so a gate the pipeline enforces is
 always one an agent can close its own loop on locally. Doctrine:
 `../rules/cicd/pipeline.md`; `/ci-setup` wires it and audits the drift.
 

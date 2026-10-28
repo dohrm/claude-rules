@@ -30,9 +30,11 @@ can fix.
 - **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
 - **`go.just` and `python.just` define `base`** (`origin/main`), as `rust.just`
   already did, so each parses without `kit/common`.
-- **CI gate jobs pass the PR base.** The rust, go and python jobs of
-  `kit/cicd/ci.snippet.yaml` fetch `github.base_ref` in full and run
-  `just base=origin/<target> <tech>-check`. On a push, `base=HEAD` skips the audit.
+- **CI gate jobs pass the PR base.** New `just ci-base` (`kit/common`) fetches the
+  branch named by `$BASE` in full and prints `origin/<branch>`, or `HEAD` when `BASE`
+  is empty (a push: the audit is skipped). The rust, go and python jobs of
+  `kit/cicd/ci.snippet.yaml` take `BASE: ${{ github.base_ref }}` through `env:` and run
+  `just base="$(just ci-base)" <tech>-check`.
 
 Migration:
 

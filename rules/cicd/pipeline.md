@@ -64,8 +64,8 @@ pinning, fork-PR secrets, or a skipped required check reading as green.
   always runs (and short-circuits inside), or it is not a required check.
 - **A verdict that moves with the date does not block a PR.** A vulnerability
   audit reads an advisory database, not the diff: `<tech>-check` runs `<tech>-audit`
-  only when the lock changed against `base`, so the gate job fetches the PR base in
-  full and passes `base=origin/<target>`. The rest runs on a schedule on the default
+  only when the lock changed against `base`, so the gate job runs
+  `just base="$(just ci-base)" <tech>-check`, which fetches the PR base in full. The rest runs on a schedule on the default
   branch and opens an issue.
 - **Keep the workflow boring and short.** Long inline shell in a workflow is code
   with no tests, no lint and no local runner — move it into a script the justfile
