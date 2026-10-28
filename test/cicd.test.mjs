@@ -356,7 +356,7 @@ test('advisory-issue names the Go toolchain case in a go-audit issue, and only t
     } finally { await stub.close() }
   })))
 
-test('advisory-issue exits 1 when the forge refuses, 2 on a setup problem, and never reports an audit it could not run', async () => {
+test('advisory-issue exits 1 when the forge refuses, 2 on a setup problem; never reports an audit it could not run, nor another branch', async () => {
   const stub = await stubForge('github')
   try {
     const refused = await report('python-audit', { forge: 'github', url: `${stub.url}/not-the-api` }, { status: 1 })
@@ -373,6 +373,10 @@ test('advisory-issue exits 1 when the forge refuses, 2 on a setup problem, and n
     assert.match(noRecipe.out, /no `python-audit` recipe/)
     const noTool = await report('python-audit', { forge: 'github', url: stub.url }, { status: 127 })
     assert.equal(noTool.status, 2, noTool.out)
+    // A dispatch off the default branch: that branch's verdict, in the run, not the issue.
+    const offDefault = { GITHUB_REF_NAME: 'fix', DEFAULT_BRANCH: 'main' }
+    assert.equal((await report('python-audit', { forge: 'github', url: stub.url }, { status: 1, env: offDefault })).status, 1)
+    assert.equal((await report('python-audit', { forge: 'github', url: stub.url }, { env: offDefault })).status, 0)
     const noGiteaUrl = await report('python-audit', { forge: 'gitea', url: '' }, { env: { GITHUB_SERVER_URL: '' } })
     assert.equal(noGiteaUrl.status, 2, noGiteaUrl.out)
     assert.equal(stub.calls.length, calls, 'no setup failure may call the forge')
@@ -397,6 +401,7 @@ test('kit/cicd/audit.snippet.yaml: daily, one matrix entry per audit recipe, the
   const step = text.slice(text.lastIndexOf('\n      - name: '))
   assert.match(step, /\n {10}AUDIT: \$\{\{ matrix\.audit \}\}\n/)
   assert.match(step, /\n {10}GITHUB_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}\n/)
+  assert.match(step, /\n {10}DEFAULT_BRANCH: \$\{\{ github\.event\.repository\.default_branch \}\}/)
   assert.match(step, /\n {8}run: node \.dev\/kit\/cicd\/advisory-issue\.mjs "\$AUDIT"\n$/)
   const registry = JSON.parse(readFileSync(join(REPO, 'registry.json'), 'utf8'))
   assert.ok(Object.values(registry.profiles).flat().some((e) => e.from === 'kit/cicd' && e.to === '.dev/kit/cicd'),

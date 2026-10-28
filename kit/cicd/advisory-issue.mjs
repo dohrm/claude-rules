@@ -16,6 +16,9 @@
 // other failure is reported: an audit's exit code does not separate findings from a
 // tool or network error (`<tech>_audit` is the consumer's to change), so the issue
 // gives the exit code and the output, and says either may be the cause.
+// The issue is the DEFAULT branch's verdict. A run on another branch (a manual
+// dispatch, DEFAULT_BRANCH and GITHUB_REF_NAME both set and different) touches no
+// issue, and exits 1 when its audit is red.
 //
 // Forge access is the REST API through `fetch`, the same calls on both forges; the
 // runner's env picks the endpoint. Both runners set GITHUB_REPOSITORY and
@@ -128,6 +131,10 @@ function issueBody(status, out) {
 }
 
 const { status, out } = await audit()
+if (env.DEFAULT_BRANCH && env.GITHUB_REF_NAME && env.GITHUB_REF_NAME !== env.DEFAULT_BRANCH) {
+  console.log(`advisory-issue: ${recipe} ran on ${env.GITHUB_REF_NAME}, not ${env.DEFAULT_BRANCH} — no issue touched`)
+  process.exit(status === 0 ? 0 : 1)
+}
 try {
   const open = await findOpen()
   if (status !== 0 && open) {

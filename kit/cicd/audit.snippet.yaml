@@ -19,7 +19,7 @@ name: Security advisories
 on:
   schedule:
     - cron: '23 5 * * *'         # daily, on the default branch — ADAPT the hour
-  workflow_dispatch:             # by hand, e.g. to close the issue right after a fix
+  workflow_dispatch:             # by hand; off the default branch it reports nothing, the run says
 
 # One run at a time: two overlapping runs would both find no issue and both open one.
 concurrency:
@@ -64,5 +64,6 @@ jobs:
       - name: just ${{ matrix.audit }}, reported as an issue
         env:
           AUDIT: ${{ matrix.audit }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}   # empty: every run reports
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .dev/kit/cicd/advisory-issue.mjs "$AUDIT"
