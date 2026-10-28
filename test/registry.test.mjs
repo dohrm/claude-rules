@@ -175,6 +175,8 @@ test('review contract: the shared block is byte-identical in the agent and the h
   assert.match(agent, /<!-- CI_VERDICT: CRITICAL\|WARNINGS\|CLEAN -->/,
     'the shared block is where the report contract lives — review-guard parses that marker')
   assert.match(agent, /<!-- REVIEWED: /, 'a verdict without the sha it describes cannot be judged stale')
+  assert.match(agent, /Write the whole report in \*\*English\*\*/,
+    'the only language lever codex and cursor have (#55) — review-guard parses English headings')
   assert.equal(block('kit/common/review-prompt.md'), agent,
     'agents/code-reviewer.md and kit/common/review-prompt.md have drifted — edit both, or neither')
 })
