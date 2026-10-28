@@ -271,8 +271,9 @@ test('kit/python/mutation-ci.yaml and kit/go/coverage-ci.yaml take the full base
 })
 
 // Three files used to contradict each other; the doctrine is a target dir inside the
-// workspace and sccache for what persists (kit/rust/cargo-config.snippet.toml).
-test('no kit file sets or advises a CARGO_TARGET_DIR outside the workspace', () => {
+// workspace and sccache for what persists (kit/rust/cargo-config.snippet.toml). The
+// phrase itself is banned from kit/: the doctrine is stated in rules/cicd/pipeline.md.
+test('no kit file sets CARGO_TARGET_DIR or mentions a path outside the workspace', () => {
   const files = execFileSync('git', ['ls-files', 'kit'], { cwd: REPO, encoding: 'utf8' }).trim().split('\n')
   for (const f of files) {
     const text = readFileSync(join(REPO, f), 'utf8')

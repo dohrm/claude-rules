@@ -162,10 +162,10 @@ review_too_large := "prompt too large: %s > %s bytes — cut the change smaller 
 reviewer := "claude"
 
 # ── Code review (Tier 3 — judgment, not correctness) ───────────────────────
-# Once per coherent block, BEFORE the push. One
-# reviewer, one process, one prompt ({{review_prompt}}) — any agent CLI runs
-# it. stdout IS the report, and the recipe parks it in .work/review-report.md, so
-# gitignore `.work/`: a report is working memory, never a committed artifact.
+# Once per coherent block, BEFORE the push. One reviewer, one process, one
+# prompt ({{review_prompt}}) — any agent CLI runs it. stdout IS the report, and
+# the recipe parks it in .work/review-report.md, so gitignore `.work/`: a report
+# is working memory, never a committed artifact.
 #
 # Permissions are the point: a reviewer that can edit the code becomes its author,
 # and then nobody reviewed it — the reason each `review-<agent>` recipe below exists
