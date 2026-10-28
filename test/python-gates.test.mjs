@@ -10,7 +10,7 @@ import { cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, auditGateCases } from './helpers.mjs'
 
 const FIXTURE = join(REPO, 'test', 'fixtures', 'python-gate')
 const KIT_PY = join(REPO, 'kit', 'python')
@@ -67,8 +67,8 @@ const runEnv = {
   UV_LINK_MODE: 'copy',
 }
 
-const runJust = (dir, recipe) => {
-  const r = spawnSync('just', [recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
+const runJust = (dir, recipe, overrides = []) => {
+  const r = spawnSync('just', [...overrides, recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
   if (r.error) throw r.error
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
@@ -101,15 +101,31 @@ describe('python quality gates', { concurrency: 1 }, () => {
     })
   })
 
+  // With a base and an untouched lock, the audit is skipped: this case stays green
+  // whatever advisories are published against the fixture's pinned dependencies.
   test('just python-check passes on the witness package', {
     skip,
     timeout: TIMEOUT,
   }, () => {
     withTmpRepo((dir) => {
       assemble(dir)
-      const r = runJust(dir, 'python-check')
+      commitBase(dir)
+      const r = runJust(dir, 'python-check', ['base=HEAD'])
       assert.equal(r.status, 0, `python-check must be green:\n${r.out}`)
+      assert.match(r.out, /deptry/)
+      assert.ok(r.out.includes('audit: skipped — api/uv.lock unchanged against HEAD'), r.out)
     })
+  })
+
+  auditGateCases({
+    tech: 'python',
+    lock: 'api/uv.lock',
+    tool: 'pip-audit',
+    assemble,
+    runJust,
+    changeLock: (dir) => commitBase(dir, 'api/uv.lock'),
+    skip,
+    timeout: TIMEOUT,
   })
 
   test('just python-lint fails when ruff format would rewrite a file', {

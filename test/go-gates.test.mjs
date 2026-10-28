@@ -10,7 +10,7 @@ import { cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, auditGateCases } from './helpers.mjs'
 
 const FIXTURE = join(REPO, 'test', 'fixtures', 'go-gate')
 const KIT_GO = join(REPO, 'kit', 'go')
@@ -69,8 +69,8 @@ const runEnv = {
   GOTOOLCHAIN: 'local',
 }
 
-const runJust = (dir, recipe) => {
-  const r = spawnSync('just', [recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
+const runJust = (dir, recipe, overrides = []) => {
+  const r = spawnSync('just', [...overrides, recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
   if (r.error) throw r.error
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
@@ -104,9 +104,26 @@ describe('go quality gates', { concurrency: 1 }, () => {
   }, () => {
     withTmpRepo((dir) => {
       assemble(dir)
-      const r = runJust(dir, 'go-check')
+      commitBase(dir)
+      const r = runJust(dir, 'go-check', ['base=HEAD'])
       assert.equal(r.status, 0, `go-check must be green:\n${r.out}`)
+      assert.ok(r.out.includes('audit: skipped — api/go.sum unchanged against HEAD'), r.out)
     })
+  })
+
+  // The witness has no dependency, so no go.sum: a new one is the changed lock.
+  auditGateCases({
+    tech: 'go',
+    lock: 'api/go.sum',
+    tool: 'govulncheck',
+    assemble,
+    runJust,
+    changeLock: (dir) => {
+      commitBase(dir)
+      write(dir, 'api/go.sum', '')
+    },
+    skip: skipCheck,
+    timeout: TIMEOUT,
   })
 
   test('just go-lint fails when gofmt would rewrite a file', {

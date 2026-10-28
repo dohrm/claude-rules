@@ -14,9 +14,10 @@
 # root justfile's managed block, which overrides this default.
 rust_dir := "."
 
-# Merge-base for Tier 4. kit/common/gate.just defines the same default when `agent
-# --level gates` is installed; allow-duplicate-variables on the root justfile
-# lets either win. Defined here so `just rust-mutate` parses without common.
+# Merge-base for Tier 4, and the trunk `rust-check` compares Cargo.lock against.
+# kit/common/gate.just defines the same default when `agent --level gates` is
+# installed; allow-duplicate-variables on the root justfile lets either win. Defined
+# here so this file parses without common.
 base := "origin/main"
 
 # Each line runs in its own shell, so `cd {{dir}} &&` per line (portable: works
@@ -36,10 +37,39 @@ rust-lint:
     cd {{rust_dir}} && cargo fmt --all --check
     cd {{rust_dir}} && cargo clippy --workspace --all-targets -- -D warnings -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented -D clippy::undocumented_unsafe_blocks
     cd {{rust_dir}} && cargo clippy --workspace --lib --bins -- -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic -D clippy::string_slice
-rust-check: rust-lint
+rust-check: rust-lint && (_audit-gate rust_dir "Cargo.lock" rust_audit)
     cd {{rust_dir}} && cargo test --workspace
-    cd {{rust_dir}} && cargo deny check licenses advisories sources
+    cd {{rust_dir}} && cargo deny check licenses sources
     cd {{rust_dir}} && cargo machete --skip-target-dir
+
+# Time-dependent: its verdict moves with the advisory database, not with the diff.
+# `licenses` and `sources` stay in rust-check: they are a function of the lock.
+# Override `rust_audit`, never the recipe: `rust-check` runs the same command when
+# Cargo.lock changed.
+rust_audit := "cargo deny check advisories"
+rust-audit:
+    cd {{rust_dir}} && {{rust_audit}}
+
+# The audit leaves the gate unless the diff touches the lock. An advisory database
+# moves on its own schedule, not with the diff: an audit inside `*-check` turns a
+# docs-only PR red the day a CVE is published (rules/cicd/pipeline.md). So `*-check`
+# runs the audit only when the lock changed against `base` (two-dot against its tip,
+# the working tree and an untracked lock included, so no merge base is needed), or
+# when `base` does not resolve: not knowing is not a reason to skip. The first line
+# it prints says which. `*-audit` runs the tool unconditionally — the scheduled job
+# (kit/cicd) calls it daily on the default branch.
+# This recipe is identical in go.just, python.just and rust.just; the
+# allow-duplicate-recipes header keeps one.
+_audit-gate dir lock cmd:
+    @if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null 2>&1; then \
+        echo 'audit: {{base}} unresolvable'; \
+    elif git diff --quiet {{quote(base)}} -- {{quote(dir / lock)}} \
+        && [ -z "$(git ls-files --others --exclude-standard -- {{quote(dir / lock)}})" ]; then \
+        echo 'audit: skipped — {{dir / lock}} unchanged against {{base}}'; exit 0; \
+    else \
+        echo 'audit: {{dir / lock}} changed'; \
+    fi; \
+    cd {{quote(dir)}} && {{cmd}}
 
 # ── Tier 4 economics ───────────────────────────────────────────────────────
 # Measured on one real workspace, and the numbers decide which levers are worth

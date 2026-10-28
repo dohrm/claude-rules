@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { REPO } from './helpers.mjs'
+import { REPO, withTmpRepo } from './helpers.mjs'
 
 const WORKFLOWS = ['kit/cicd/ci.snippet.yaml', '.github/workflows/ci.yml']
 
@@ -95,3 +95,66 @@ for (const file of WORKFLOWS) {
     assert.notEqual(r.status, 0, `no result at all must fail ci-ok:\n${r.out}`)
   })
 }
+
+// ------------------------------------------------- gate jobs pass the PR base
+// `<tech>-check` audits only when the lock changed against `base` (#50), and an
+// unresolvable base fails closed into running the audit. So a gate job that does not
+// fetch the PR base, or fetches it shallow, quietly turns every PR back into a daily
+// advisory lottery. The audit-bearing gates are the ones checked.
+const AUDITED = /^\s*just (?:base=\S+ )?(rust|go|python)-check\b/m
+
+function jobs(file) {
+  const text = readFileSync(join(REPO, file), 'utf8')
+  const body = text.slice(text.indexOf('\njobs:\n'))
+  return [...body.matchAll(/\n {2}([\w-]+):[^\n]*\n([\s\S]*?)(?=\n {2}[\w-]+:[^\n]*\n|$)/g)]
+    .map(([, name, block]) => ({ name, block }))
+}
+
+for (const file of WORKFLOWS) {
+  test(`${file}: every audited gate job passes base= and never fetches shallow`, () => {
+    const gated = jobs(file).filter(j => AUDITED.test(j.block))
+    if (file.startsWith('kit/')) assert.equal(gated.length, 3, 'the snippet ships the rust, go and python gate jobs')
+    for (const { name, block } of gated) {
+      for (const line of block.split('\n').filter(l => AUDITED.test(l)))
+        assert.match(line, /just base="?\$base"? (rust|go|python)-check/, `${name}: ${line.trim()}`)
+      assert.doesNotMatch(block, /--depth[= ]1\b|fetch-depth:\s*1\b/, `${name} fetches shallow`)
+      assert.match(block, /git fetch [^\n]*"\+refs\/heads\/\$BASE:refs\/remotes\/origin\/\$BASE"/, `${name} must fetch the PR base`)
+      assert.match(block, /BASE: \$\{\{ github\.base_ref \}\}/, `${name} must take the base through env:`)
+    }
+  })
+}
+
+// The step's shell, run for real: a shallow clone (what actions/checkout leaves), a
+// `just` on PATH that prints its arguments, a PR base on the remote.
+test('kit/cicd/ci.snippet.yaml: the gate step fetches the PR base and passes it, HEAD on a push', () => {
+  const block = jobs('kit/cicd/ci.snippet.yaml').find(j => j.name === 'rust').block
+  const lines = block.split('\n')
+  const named = lines.findIndex(l => l.trim() === '- name: just rust-check')
+  const at = lines.findIndex((l, i) => i > named && /^ {8}run: \|$/.test(l))
+  assert.ok(named !== -1 && at !== -1, 'no run block under the rust-check step')
+  const run = []
+  for (let i = at + 1; i < lines.length && (lines[i] === '' || lines[i].startsWith(' '.repeat(10))); i++) run.push(lines[i].slice(10))
+
+  withTmpRepo((dir) => {
+    const sh = (cmd, cwd = dir) => {
+      const r = spawnSync('bash', ['-e', '-c', cmd], { cwd, encoding: 'utf8' })
+      assert.equal(r.status, 0, `${cmd}\n${r.stdout}${r.stderr}`)
+      return r.stdout
+    }
+    const git = 'git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null'
+    sh(`git init -q -b main origin && cd origin && ${git} commit -q --allow-empty -m one && ${git} commit -q --allow-empty -m two`
+      + ` && git branch next HEAD~1`)
+    sh(`git clone -q --depth 1 file://${dir}/origin work`)
+    sh(`mkdir bin && printf '#!/bin/sh\\necho "just $*"\\n' > bin/just && chmod +x bin/just`)
+    const step = (BASE) => {
+      const r = spawnSync('bash', ['-e', '-c', run.join('\n')], {
+        cwd: join(dir, 'work'), encoding: 'utf8', env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, BASE },
+      })
+      assert.equal(r.status, 0, r.stdout + r.stderr)
+      return r.stdout
+    }
+    assert.match(step('next'), /^just base=origin\/next rust-check$/m)
+    sh('git rev-parse --verify --quiet origin/next', join(dir, 'work'))
+    assert.match(step(''), /^just base=HEAD rust-check$/m)
+  })
+})
