@@ -86,3 +86,4 @@ loop (hypothesis 1) is the defect.
 - `npm test`: 500 pass, 2 fail — same 2 `python-gates` cases as on 319310a (#50).
 - PR #60 opened against next; the human merges it.
 - Tier 3 re-run with #62's recipe (`just --justfile <defect-55>/justfile`): promoted, WARNINGS at 683fa6f. Note 1 applied (the test's parser stops at the next job). Note 2 (`shell: bash` needs bash on the runner) left: it fails closed, and the step comment names the bash indirection.
+- Review rounds on the test parser: bounded to the job, fails on a missing job, keeps the first run block, dead guard removed. Last round (1894b7e) not promoted — French headings despite `--settings` (this tree lacks #62's prompt sentence); its only note (a named error when ci-ok has no run block) is a message-quality nit, left. Promoted report stands at 56b6801 (WARNINGS, fixed in 1894b7e).
