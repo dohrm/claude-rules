@@ -25,7 +25,7 @@ can fix.
 - **`<tech>-check` calls the audit only when its lock changed** against `base`
   (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree included) or
   when `base` does not resolve. It prints which before running or skipping it: `audit: skipped — …`,
-  `audit: … changed`, `audit: … unresolvable`. A PR that adds or bumps a dependency
+  `audit: … changed`, `audit: … unresolvable`, `audit: base is empty …`. A PR that adds or bumps a dependency
   still fails on a known advisory.
 - **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
 - **`go.just` and `python.just` define `base`** (`origin/main`), as `rust.just`

@@ -56,7 +56,9 @@ python-audit:
 # This recipe is identical in go.just, python.just and rust.just; the
 # allow-duplicate-recipes header keeps one.
 _audit-gate dir lock cmd:
-    @if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null 2>&1; then \
+    @if [ -z {{quote(base)}} ]; then \
+        echo 'audit: base is empty (in CI: kit/common missing, or ci-base failed to fetch)'; \
+    elif ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null 2>&1; then \
         echo {{quote("audit: " + base + " unresolvable")}}; \
     elif git diff --quiet {{quote(base)}} -- {{quote(dir / lock)}} \
         && [ -z "$(git ls-files --others --exclude-standard -- {{quote(dir / lock)}})" ]; then \

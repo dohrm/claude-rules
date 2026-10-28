@@ -30,7 +30,8 @@ free. That is why the second clippy pass is `--lib --bins`, not
 skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`).
 An advisory database moves with the date, not with the diff, so an audit inside
 every check turns unrelated PRs red. To ignore an advisory or add a flag, override
-the `rust_audit` variable, not the recipe: both recipes run it.
+the `rust_audit` variable, not the recipe: both recipes run it. A `Cargo.lock` you do
+not commit never reads as changed, so the gate never audits it.
 `licenses` and `sources` stay in `rust-check`: they are a function of the lock.
 
 ## Requirements

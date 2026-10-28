@@ -90,7 +90,7 @@ export function commitBase(dir, blank) {
   if (blank) writeFileSync(join(dir, blank), saved)
 }
 
-// The `<tech>-check` audit decision, the same four cases for every language. The audit
+// The `<tech>-check` audit decision, the same cases for every language. The audit
 // command is replaced by a sentinel: an audit's verdict depends on the date, so these
 // tests assert the DECISION (the marker the recipe prints, the sentinel's presence),
 // never that an audit is green. `<tech>-audit`'s wiring to the real tool is asserted
@@ -129,6 +129,18 @@ export function auditGateCases({ tech, lock, tool, assemble, runJust, changeLock
       const r = runJust(dir, `${tech}-check`, ['base=HEAD', stub])
       assert.equal(r.status, 0, r.out)
       assert.ok(r.out.includes(`audit: ${lock} changed`), `no changed line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+
+  // What a CI job gets when `just ci-base` is missing or its fetch failed.
+  test(`just ${tech}-check runs the audit and says so when base is empty`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      const r = runJust(dir, `${tech}-check`, ['base=', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes('audit: base is empty'), `no empty-base line:\n${r.out}`)
       assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
     })
   })
