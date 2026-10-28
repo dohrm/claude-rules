@@ -1,6 +1,6 @@
 # Bug — the Tier 3 review report comes back translated, and review-guard rejects it
 
-- **Status**: fixing
+- **Status**: done
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
@@ -74,3 +74,4 @@ artifact of Tier 3 follows a per-user preference.
   asserts the English sentence. Note 2 (inline-JSON `--settings` on old CLIs) left: it
   fails loudly, and the current CLI takes it (probe above).
 - `npm test`: 485 pass, 2 fail — the `python-gates` pair, as on the base (#50).
+- PR opened against next; the human merges it.
