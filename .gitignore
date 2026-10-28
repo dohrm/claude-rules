@@ -25,3 +25,5 @@ test/fixtures/godot-gate/bin/
 test/fixtures/godot-gate/obj/
 kit/godot/analyzers/bin/
 kit/godot/analyzers/obj/
+# Audit inspirations: pinned clones, re-fetched by `just audit-prep`; the SHAs live in each run's manifest.
+.work/audit-sources/

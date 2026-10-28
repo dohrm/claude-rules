@@ -82,7 +82,7 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 
 ## Decision log
 
-- [ADR-0001](./adr/0001-emission-targets-claude-and-cursor.md) — Emission targets are Claude Code and Cursor (Proposed; its scope was taken over by ADR-0003)
+- [ADR-0001](./adr/0001-emission-targets-claude-and-cursor.md) — Emission targets are Claude Code and Cursor (Superseded by ADR-0003)
 - [ADR-0002](./adr/0002-mutation-is-a-pr-gate.md) — Mutation testing is a PR gate
 - [ADR-0003](./adr/0003-claude-codex-sharing.md) — Share source assets across Claude Code and Codex
 - [ADR-0004](./adr/0004-autonomy-levels.md) — Per-run autonomy levels, defaulting to guided
