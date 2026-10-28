@@ -85,6 +85,9 @@ both. The adaptation surface is deliberately tiny:
   a repo/org secret you set by hand, and the wiring note must say which.
 - Self-hosted runners are **not** ephemeral by default: never assume a clean
   workspace, and never write outside the workspace.
+- `actions/upload-artifact@v4` fails on Gitea (`GHESNotSupportedError`), and v3 no
+  longer runs on github.com. A snippet that uploads carries one step per forge, guarded
+  by `github.server_url == 'https://github.com'` and its negation.
 - Gitea's runner expands the `needs.*` object filter to **nothing**, so
   `join(needs.*.result, ' ')` is an empty string and an aggregator looping over it
   passes with every gate red. Read each result by name (`needs.<job>.result`), and

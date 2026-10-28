@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdtempSync, chmodSync, rmSync } from 'nod
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:http'
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn, spawnSync, execFileSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
 
 const WORKFLOWS = ['kit/cicd/ci.snippet.yaml', '.github/workflows/ci.yml']
@@ -223,6 +223,64 @@ test('a full CI checkout of a PR behind a lock bump skips the audit; a shallow o
       assert.equal(out.includes('audit-ran'), audits, `${depth || 'full'}: ${out}`)
     }
   })
+})
+
+// ------------------------------------------------ the Tier 4 snippets (#70)
+// Each one was measured failing downstream: mutated against `main` instead of the PR's
+// base, a `--depth=1` base with no merge base (#43), a 5 h run with no limit, a disk
+// filled by target dirs outside the workspace, a red job on Gitea from upload-artifact.
+const snippet = (file) => readFileSync(join(REPO, file), 'utf8')
+const SHALLOW = /--depth[= ]1\b|fetch-depth:\s*1\b/
+const FULL_CHECKOUT = /uses: actions\/checkout@v4\n {8}with:\n {10}fetch-depth: 0\b/
+const BASE_ENV = /BASE: \$\{\{ github\.base_ref \}\}/
+// One upload per forge: v4 on github.com, v3 elsewhere — each guarded, never both bare.
+function assertUploadsPerForge(file) {
+  const steps = snippet(file).split(/\n(?= {6}- )/).filter(s => /uses: actions\/upload-artifact@/.test(s))
+  const guards = steps.map(s => [s.match(/upload-artifact@(v\d)/)[1], (s.match(/\n\s+if: (.*)/) || [])[1]])
+  assert.deepEqual(guards, [
+    ['v4', "always() && github.server_url == 'https://github.com'"],
+    ['v3', "always() && github.server_url != 'https://github.com'"],
+  ], file)
+}
+
+test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, bounded, skips the rfc/* PR, uploads per forge', () => {
+  const file = 'kit/rust/mutation-ci.yaml'
+  const text = snippet(file)
+  const runs = text.split('\n').filter(l => /^\s+run: .*\b(cargo mutants|rust-mutate)\b/.test(l)).map(l => l.trim())
+  assert.deepEqual(runs, ['run: just base="$(just ci-base)" mutate_jobs=2 rust-mutate'], 'one definition of the range: the recipe')
+  assert.match(text, BASE_ENV, 'the base through env:, never interpolated into the shell')
+  assert.doesNotMatch(text, SHALLOW, 'a shallow base has no merge base (#43)')
+  assert.match(text, FULL_CHECKOUT)
+  assert.match(text, /\n {4}timeout-minutes: \d+\n/, 'the job is bounded')
+  assert.match(text, /\n {4}if: \$\{\{ !\(startsWith\(github\.head_ref, 'rfc\/'\) && github\.base_ref == github\.event\.repository\.default_branch\) \}\}\n/,
+    'the rfc/* → default-branch PR is skipped: its phases are the proof')
+  assertUploadsPerForge(file)
+})
+
+test('the Python, TS mutation and Go coverage snippets take the full base from ci-base', () => {
+  for (const file of ['kit/python/mutation-ci.yaml', 'kit/ts/mutation-ci.yaml', 'kit/go/coverage-ci.yaml']) {
+    const text = snippet(file)
+    assert.doesNotMatch(text, SHALLOW, `${file} fetches shallow`)
+    assert.doesNotMatch(text, /origin\/\$\{\{/, `${file} interpolates the base into the shell`)
+    assert.match(text, FULL_CHECKOUT, file)
+    assert.match(text, BASE_ENV, file)
+    assert.match(text, /\n {10}base="\$\(just ci-base\)" /, `${file}: the base comes from ci-base, assigned so a failed fetch fails the step`)
+    assert.match(text, /"\$base\.\.\.HEAD"/, file)
+  }
+  assertUploadsPerForge('kit/go/coverage-ci.yaml')
+  assertUploadsPerForge('kit/ts/mutation-ci.yaml')
+})
+
+// Three files used to contradict each other; the doctrine is a target dir inside the
+// workspace and sccache for what persists (kit/rust/cargo-config.snippet.toml). The
+// phrase itself is banned from kit/: the doctrine is stated in rules/cicd/pipeline.md.
+test('no kit file sets CARGO_TARGET_DIR or mentions a path outside the workspace', () => {
+  const files = execFileSync('git', ['ls-files', 'kit'], { cwd: REPO, encoding: 'utf8' }).trim().split('\n')
+  for (const f of files) {
+    const text = readFileSync(join(REPO, f), 'utf8')
+    assert.doesNotMatch(text, /CARGO_TARGET_DIR\s*[:=]/, `${f} sets CARGO_TARGET_DIR`)
+    assert.doesNotMatch(text, /outside the workspace/i, `${f} advises a path outside the workspace`)
+  }
 })
 
 // ------------------------------------------------ the scheduled audit's reporter

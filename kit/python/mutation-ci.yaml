@@ -26,6 +26,8 @@ name: Mutation (Python)
 # syntax is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g.
 # `linux`; GitHub: `ubuntu-latest`) and working-directory to your python_dir.
 #
+# Needs kit/common imported by the root justfile: the PR's base comes from `ci-base`.
+#
 # One-time setup: `uv add --dev mutmut`, then the [tool.mutmut] section from
 # pyproject.snippet.toml. Add `.mutmut-cache` and `mutants/` to .gitignore.
 
@@ -34,6 +36,9 @@ on:
     branches:
       - main
       - 'rfc/**'   # L4 phase PRs merge on this proof (rules/agent/autonomy.md § L4)
+
+env:
+  JUST_VERSION: '1.42.4'               # ADAPT / bump deliberately
 
 jobs:
   mutation:
@@ -48,6 +53,12 @@ jobs:
         with:
           fetch-depth: 0               # need the base branch to compute the diff
 
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -58,9 +69,11 @@ jobs:
 
       - name: Compute changed source files
         id: changed
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
+          base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
                   | grep -E '\.py$' | grep -v -E '(^|/)(tests?|conftest)' | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
