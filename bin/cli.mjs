@@ -976,10 +976,17 @@ const RANGE_MUTATORS = new Set(['rust-mutate'])
  *
  *  `just` stops a recipe at the first failing line, so `mutate-mark` runs LAST and only
  *  on success: a surviving mutant leaves the marker where it was, and the next run
- *  re-mutates that block together with its fix. */
+ *  re-mutates that block together with its fix.
+ *
+ *  A nested `just` re-reads its variables from the files, so a command-line override
+ *  (`just mutate_jobs=8 mutate-diff`) reaches it only if this line passes it on. Only
+ *  the range mutator reads `base`, `mutate_jobs` and `mutate_args`; the others take
+ *  nothing, and naming `mutate_jobs` where rust.just is not imported would not parse. */
+const RANGE_CALL = (m) => 'just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} '
+  + `${m} "$(just base={{quote(base)}} mutate-from)"`
 const mutateBody = (list) => [
   'mutate-diff:',
-  ...list.map(m => RANGE_MUTATORS.has(m) ? `    just ${m} "$(just mutate-from)"` : `    just ${m}`),
+  ...list.map(m => `    ${RANGE_MUTATORS.has(m) ? RANGE_CALL(m) : `just ${m}`}`),
   '    just mutate-mark',
 ]
 function genJustfile(techs, modules, ratchetTechs = []) {

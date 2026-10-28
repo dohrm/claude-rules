@@ -157,6 +157,51 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Fixed — mutation in CI measures the PR's own diff, in bounded time and disk
+
+Mutation in CI was measured failing on a downstream repo
+([#70](https://github.com/dohrm/claude-rules/issues/70), absorbs
+[#43](https://github.com/dohrm/claude-rules/issues/43)). A phase PR into `rfc/<slug>`
+was mutated against `main`, which included the phases already merged: 732 mutants. The
+final `rfc/<slug>` → `main` PR mutated the whole RFC again. A run with no time limit
+used up an account's Actions quota. Target dirs outside the workspace filled the
+runner's disk. The base was fetched `--depth=1`, so there was no merge base.
+`upload-artifact@v4` failed the job on Gitea. And `just mutate_jobs=N mutate-diff`
+ignored `N`.
+
+- **`kit/rust/mutation-ci.yaml` calls `just`.** The step is
+  `just base="$(just ci-base)" mutate_jobs=2 rust-mutate`, with
+  `BASE: ${{ github.base_ref }}` through `env:`, so the range is the PR's diff against
+  its own target branch, fetched in full. The job installs `just` if it is missing,
+  carries `timeout-minutes: 120`, and is skipped on a `rfc/*` → default-branch PR
+  (its phases are the proof). It uploads `mutants.out/` with `upload-artifact@v4` on
+  github.com and `@v3` elsewhere. It no longer suggests a `CARGO_TARGET_DIR` outside
+  the workspace: the target dir stays in the workspace, and sccache is the persistent
+  part. It has no `working-directory` any more: `rust-mutate` reads `rust_dir`.
+- **`rust-mutate` refuses an empty range.** `just base= rust-mutate` exits 2 instead of
+  mutating the empty diff and passing, which is what a failed `ci-base` fetch produced.
+- **`kit/rust/mutants.toml` sets `timeout_multiplier = 3.0`**, so one hanging mutant
+  cannot use up the job's time limit on its own.
+- **`kit/python/mutation-ci.yaml` and `kit/go/coverage-ci.yaml` take their base from
+  `ci-base`** (`base="$(just ci-base)"`, fetched in full; a failed fetch fails the
+  step), and install `just` if it is missing. The Go job uploads its profile per forge
+  like the Rust one.
+- **`init` writes a `mutate-diff` that forwards the overrides.** The Rust line passes
+  `base`, `mutate_jobs` and `mutate_args` to the nested `just` calls, which otherwise
+  re-read them from the files.
+
+Hand-merge — `init` never rewrites an existing justfile, and the snippets are copies:
+
+- In your justfile's `mutate-diff`, replace `just rust-mutate "$(just mutate-from)"`
+  with:
+  `just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} rust-mutate "$(just base={{quote(base)}} mutate-from)"`
+- Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`,
+  `RUSTC_WRAPPER`, report path (`<rust_dir>/mutants.out/`, `<go_dir>/coverage.out`)
+  and `timeout-minutes`. The root justfile must import `kit/common`, for `ci-base`.
+- If your runner sets a `CARGO_TARGET_DIR` outside the workspace for this job, remove
+  it and clean what it left on the runner's disk.
+- Add `timeout_multiplier` to your `.cargo/mutants.toml`.
+
 ### Added — layered sources and `.dev/overrides/`
 
 A team can add its private rules, skills and kit as a second pinned source, and a

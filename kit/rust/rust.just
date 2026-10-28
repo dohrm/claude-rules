@@ -97,10 +97,10 @@ _audit-gate dir lock cmd:
 #     because a gate that gets slower the more it finds is a gate on its way out
 #     (rules/testing/ratchet.md).
 #
-# `mutate_jobs` matches the `-j 2` mutation-ci.yaml already runs with. Each job gets
-# its OWN copy of the build directory, so raising it multiplies DISK, not just CPU:
-# a 10 GB target dir at `-j 8` is 80 GB mid-run. Raise it in the root justfile once
-# you know what your workspace weighs.
+# `mutate_jobs` is the `-j`; mutation-ci.yaml passes its own (`mutate_jobs=2`).
+# Each job gets its OWN copy of the build directory, so raising it multiplies DISK,
+# not just CPU: a 10 GB target dir at `-j 8` is 80 GB mid-run. Raise it in the root
+# justfile once you know what your workspace weighs.
 mutate_jobs := "2"
 
 # Everything else is ONE escape hatch rather than five knobs, because every useful
@@ -138,6 +138,11 @@ mutate_args := ""
 # re-mutate only what is new: `just rust-mutate "$(just mutate-from)"`, which is
 # what common/gate.just's `mutate-from` prints. Mutants cost minutes each, so on a
 # branch built by successive loops that argument is most of the runtime.
+#
+# An EMPTY `from` is refused, not run: `git diff ...HEAD` is the empty diff, which
+# mutates nothing and passes. In CI that is `base="$(just ci-base)"` after a failed
+# fetch, and a gate that goes green on its own setup error is fail-open.
 rust-mutate from=base:
+    @[ -n {{quote(from)}} ] || { echo 'rust-mutate: the range start is empty (in CI: kit/common missing, or ci-base failed to fetch)' >&2; exit 2; }
     cd {{rust_dir}} && git diff {{from}}...HEAD --relative -- . > pr.diff
     cd {{rust_dir}} && cargo mutants --in-diff pr.diff --no-shuffle -j {{mutate_jobs}} {{mutate_args}}

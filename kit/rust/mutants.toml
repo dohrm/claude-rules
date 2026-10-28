@@ -82,3 +82,7 @@ exclude_re = [
 # `mutate_args`) gives per-test timeouts instead, which cuts the tail rather than
 # capping it.
 minimum_test_timeout = 30
+# Above that floor, a mutant's test run is cut at this multiple of the baseline test
+# time (cargo-mutants' default is 5). The CI job has a `timeout-minutes` of its own;
+# this keeps one mutant that spins forever from spending it alone.
+timeout_multiplier = 3.0

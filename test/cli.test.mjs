@@ -1124,10 +1124,45 @@ test('init wires mutate-diff to the marker when kit/common is installed', () => 
     ok(runCliBare(['init'], dir))
     const just = read(dir, 'justfile')
     assert.match(just, /^mutate-diff:$/m, 'must be a recipe body, not a dependency list')
-    assert.match(just, /^ {4}just rust-mutate "\$\(just mutate-from\)"$/m, 'the range must come from the marker')
+    assert.match(just, /^ {4}just .*rust-mutate "\$\(just base=\{\{quote\(base\)\}\} mutate-from\)"$/m, 'the range must come from the marker')
     // Last line, and only reached when every mutator above it passed: just stops a recipe
     // at the first failure, so a surviving mutant leaves the marker where it was.
     const body = just.split(/^mutate-diff:$/m)[1].trim().split('\n').map(l => l.trim())
     assert.equal(body[body.length - 1], 'just mutate-mark', 'mutate-mark must run last')
+  })
+})
+
+// The generated body run for real, a stub `cargo` recording what reached it. A nested
+// `just` re-reads its variables from the files: before #70, `just mutate_jobs=7
+// mutate-diff` ran `-j 2`, and a `base=` from the command line never reached the range.
+const JUST = spawnSync('just', ['--version'], { encoding: 'utf8' })
+test('mutate-diff hands base, mutate_jobs and mutate_args to the nested just', { skip: JUST.error ? 'just not installed' : false }, () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'agent', '--level', 'ratchet', '--agent', 'claude'], dir))
+    ok(runCliBare(['init'], dir))
+    const sh = (cmd, env = {}) => spawnSync('bash', ['-e', '-c', cmd], { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } })
+    const git = 'git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null'
+    // Two commits on the branch; `base=` names the first, so only `after.rs` is in range.
+    assert.equal(sh(`git init -q -b feat && echo a > before.rs && git add -A && ${git} commit -q -m one`
+      + ` && git tag basepoint && echo b > after.rs && git add after.rs && ${git} commit -q -m two`).status, 0)
+    mkdirSync(join(dir, 'stub'))
+    writeFileSync(join(dir, 'stub/cargo'), '#!/bin/sh\necho "$@" > "$RECORD/args"\ncp pr.diff "$RECORD/diff"\n', { mode: 0o755 })
+    const r = sh('just mutate_jobs=7 mutate_args=--foo base=basepoint mutate-diff',
+      { PATH: `${join(dir, 'stub')}:${process.env.PATH}`, RECORD: dir })
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    const args = read(dir, 'args')
+    assert.match(args, /(^|\s)-j 7(\s|$)/, `mutate_jobs: ${args}`)
+    assert.match(args, /(^|\s)--foo(\s|$)/, `mutate_args: ${args}`)
+    const diff = read(dir, 'diff')
+    assert.match(diff, /after\.rs/, 'the range starts at the base passed on the command line')
+    assert.doesNotMatch(diff, /before\.rs/, 'the base passed on the command line, not origin/main')
+
+    // An empty base is what CI gets from a failed `ci-base`: refused, never an empty
+    // diff that mutates nothing and passes.
+    rmSync(join(dir, 'args'))
+    const empty = sh('just base= rust-mutate', { PATH: `${join(dir, 'stub')}:${process.env.PATH}`, RECORD: dir })
+    assert.notEqual(empty.status, 0)
+    assert.match(empty.stderr, /range start is empty/)
+    assert.ok(!existsSync(join(dir, 'args')), 'cargo must not run on an empty range')
   })
 })
