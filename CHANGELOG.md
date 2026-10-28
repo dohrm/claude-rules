@@ -195,10 +195,11 @@ Hand-merge — `init` never rewrites an existing justfile, and the snippets are 
 - In your justfile's `mutate-diff`, replace `just rust-mutate "$(just mutate-from)"`
   with:
   `just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} rust-mutate "$(just base={{quote(base)}} mutate-from)"`
-- Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`,
-  `RUSTC_WRAPPER`, report path (`<rust_dir>/mutants.out/`, `<ts_dir>/reports/mutation/`,
-  `<go_dir>/coverage.out`)
-  and `timeout-minutes`. The root justfile must import `kit/common`, for `ci-base`.
+- Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`, report
+  path (`<rust_dir>/mutants.out/`, `<ts_dir>/reports/mutation/`, `<go_dir>/coverage.out`)
+  and, for Rust, `RUSTC_WRAPPER` and `timeout-minutes`. The root justfile must import
+  `kit/common`, for `ci-base`. Only the Rust job is time-bounded and skips the
+  `rfc/*` → default-branch PR.
 - If your runner sets a `CARGO_TARGET_DIR` outside the workspace for this job, remove
   it and clean what it left on the runner's disk.
 - Add `timeout_multiplier` to your `.cargo/mutants.toml`.
