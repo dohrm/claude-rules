@@ -331,6 +331,15 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Fixed
 
+- **The Tier 3 report came back translated, and `review-guard` rejected it**
+  ([#55](https://github.com/dohrm/claude-rules/issues/55)). `claude -p` inherits the
+  user's `"language"` setting, so on a machine set to French the report's headings —
+  `### Files reviewed` among them — were translated, and every review failed as
+  incomplete. `review-claude` now passes `--settings '{"language":"English"}'`, and the
+  prompt asks every reviewer for English. Delivered by `update` (`gate.just`,
+  `review-prompt.md`); a repo that overrides `review-claude` or `review_prompt` adds the
+  flag or the sentence by hand.
+
 - **`reviewer=codex` reviewed the diff blind.** The review prompt told every reviewer
   "you have no shell — Read/Glob/Grep is all you need", which is true for Claude only.
   Codex reads through its read-only sandbox shell, took the sentence literally, and
