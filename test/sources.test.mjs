@@ -29,9 +29,9 @@ function git(args, cwd) {
   return r.stdout.trim()
 }
 
-// What `rust` at --level rules emits, plus the registry: a core small enough to commit
-// per test, and shaped like the real one.
-const CORE_PATHS = ['registry.json', ...[...registry.shared, ...registry.profiles.rust].map(e => e.from)]
+// What `rust` at --level rules emits, plus the registry and the CLI (#54: a core ships
+// the CLI that installs it): a core small enough to commit per test, shaped like the real one.
+const CORE_PATHS = ['registry.json', 'bin', ...[...registry.shared, ...registry.profiles.rust].map(e => e.from)]
 
 /** A source repository: `paths` copied from this working tree, then `edits` written
  *  over them. Returns { url, commit(edits) → sha, tag(name) }. */
@@ -69,15 +69,13 @@ test('update fetches core from a git URL at a branch, a tag and a SHA', () => {
     const repo = join(root, 'consumer')
     mkdirSync(repo)
 
-    writeLock(repo, [{ name: 'core', url: core.url, ref: 'v1' }])
-    // No --ref: core follows defaultRef (main), as it always has.
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
     ok(cli(['update'], repo))
     assert.equal(read(repo, '.claude/rules', 'rust/code-style.md'), marked('main'), 'the branch head, from the source — not the CLI\'s own tree')
-    assert.equal(lockOf(repo).sources[0].ref, registry.defaultRef)
 
     ok(cli(['update', '--ref', 'v1'], repo))
     assert.equal(read(repo, '.claude/rules', 'rust/code-style.md'), marked('v1'))
-    assert.deepEqual(lockOf(repo).sources, [{ name: 'core', url: core.url, ref: 'v1' }])
+    assert.deepEqual(lockOf(repo).sources, [{ name: 'core', url: core.url, ref: 'v1', rev: core.first }])
 
     ok(cli(['update', '--ref', core.first], repo))
     assert.equal(read(repo, '.claude/rules', 'rust/code-style.md'), marked('v1'), 'a SHA, which `clone --branch` refuses')
@@ -647,7 +645,7 @@ test('add --source appends an overlay to the lock; remove --source drops it, its
 
     ok(cli(['add', 'team-extra', '--source', `team=${team.url}#main`], repo))
     let lock = lockOf(repo)
-    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }, { name: 'team', url: team.url, ref: 'main' }])
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main', rev: core.first }, { name: 'team', url: team.url, ref: 'main', rev: team.first }])
     assert.deepEqual(lock.profiles, ['team', 'team-extra'])
     assert.equal(read(repo, '.claude/rules/team/a.md'), '# overlay a\n')
     assert.ok(has(repo, '.claude/rules/team-extra/x.md'))
@@ -655,7 +653,7 @@ test('add --source appends an overlay to the lock; remove --source drops it, its
     const r = ok(cli(['remove', '--source', 'team'], repo))
     assert.match(r.stdout, /Dropping \[team-extra\]: no remaining source defines it/)
     lock = lockOf(repo)
-    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main' }])
+    assert.deepEqual(lock.sources, [{ name: 'core', url: core.url, ref: 'main', rev: core.first }])
     assert.deepEqual(lock.profiles, ['team'])
     assert.ok(!has(repo, '.claude/rules/team-extra'), 'the overlay-only profile\'s files go')
     assert.equal(read(repo, '.claude/rules/team/a.md'), '# core a\n', 'the file it overrode is core\'s again')
@@ -950,5 +948,65 @@ test('a middle layer that drops an overridden path is named, whatever the layer 
     assert.ok(!r.stdout.includes('changed in core'), `same=${same}: core did not change`)
     assert.equal(read(repo, LOCK), lock)
     assert.equal(read(repo, '.claude/rules/team/a.md'), '# mine a\n')
+  })
+})
+
+// #54: the lock says which commit each source installed, `update` says what moved,
+// and a CLI from another ref than its core is refused before it writes anything.
+test('update records each source\'s rev, replays the locked ref, and reports what moved', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS, { [STYLE]: marked('v1') })
+    core.tag('v1')
+    const next = core.commit({ [STYLE]: marked('main') })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'v1' }])
+
+    let r = ok(cli(['update'], repo))
+    assert.deepEqual(lockOf(repo).sources, [{ name: 'core', url: core.url, ref: 'v1', rev: core.first }],
+      'no --ref: core stays on its locked ref and records the commit it fetched')
+    assert.match(r.stdout, /core {2}v1 {2}\(no rev recorded\) → [0-9a-f]{7}/)
+
+    r = ok(cli(['update'], repo))
+    assert.match(r.stdout, new RegExp(`core {2}v1 {2}unchanged \\(${core.first.slice(0, 7)}\\)`))
+
+    r = ok(cli(['update', '--ref', 'main'], repo))
+    assert.match(r.stdout, new RegExp(`${core.first.slice(0, 7)} → ${next.slice(0, 7)}`))
+    assert.equal(lockOf(repo).sources[0].rev, next)
+  })
+})
+
+test('a CLI that is not the one its core ships is refused before anything is written', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS)
+    const other = core.commit({ 'bin/cli.mjs': read(REPO, 'bin', 'cli.mjs') + '\n// another version\n' })
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const before = read(repo, LOCK)
+
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /This CLI is not the one core@main/)
+    assert.ok(r.stderr.includes(`npx git+${core.url}#${other} update`), `the re-run command, got:\n${r.stderr}`)
+    assert.equal(read(repo, LOCK), before, 'the lock is untouched')
+    assert.deepEqual(readdirSync(repo), [LOCK], 'nothing emitted')
+  })
+})
+
+test('a core with no bin/cli.mjs, or a lock rev that is not a commit SHA, is refused', () => {
+  withTmpRepo(root => {
+    const core = makeSource(root, 'core', CORE_PATHS.filter(p => p !== 'bin'))
+    const repo = join(root, 'consumer')
+    mkdirSync(repo)
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main' }])
+    const r = cli(['update'], repo)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /has no bin\/cli\.mjs — not a claude-rules core/)
+
+    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main', rev: '--upload-pack=x' }])
+    const bad = cli(['update'], repo)
+    assert.equal(bad.status, 1)
+    assert.match(bad.stderr, /rev must be a full 40-hex commit SHA/)
   })
 })

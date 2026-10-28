@@ -688,7 +688,7 @@ const FINAL_MSG = {
 // `fetched` are the run's layers, already on disk (withSources): the sources, then the
 // project layer, which the lock never records.
 async function install(profiles, fetched, agents, modules, levels) {
-  const sources = fetched.filter(l => !l.project).map(({ name, url, ref }) => ({ name, url, ref }))
+  const sources = fetched.filter(l => !l.project).map(({ name, url, ref, rev }) => ({ name, url, ref, ...(rev ? { rev } : {}) }))
   modules = normalizeModules(profiles, modules, false)
   safePath(LOCK)
   for (const [dir, ps] of Object.entries(modules)) {

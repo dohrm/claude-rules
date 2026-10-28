@@ -34,12 +34,18 @@ Route first:
 
 Same `--agent` set and ref as the lock (`npx github:dohrm/claude-rules#<ref>`;
 ask once for `<ref>` if the lock says `main` and they did not name one). The
-`#<ref>` picks the CLI; `--ref` picks the assets and is what the lock records —
-without it, `update` falls back to `main`:
+`#<ref>` picks the CLI and `--ref` the assets; without `--ref`, `update` replays
+the locked ref. They must match: a CLI that is not the one `core` ships is refused
+before anything changes, and the error prints the command to re-run — run that one.
 
 ```
 npx github:dohrm/claude-rules#<ref> update --ref <ref>
 ```
+
+Read the line `update` prints per source (`core  next  5728086 → 319310a`). If it
+says `unchanged` when the human expected a move, or the lock's `rev` did not change,
+the update did not happen: stop and say so — never triage a CHANGELOG against an
+install that did not move.
 
 The lock may list several sources: `--ref <ref>` moves `core` only, and every other
 source replays its locked ref unless the human names one (`--ref <name>=<ref>`).

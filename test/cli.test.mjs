@@ -74,7 +74,7 @@ test('--ref targets core; --ref <name>=<ref> must name a locked source', () => {
     ok(runCli(['update', '--ref', 'core=v2.1.0'], dir))
     assert.equal(lockOf(dir).sources[0].ref, 'v2.1.0', 'core=<ref> is the long form of --ref <ref>')
     ok(runCli(['update'], dir))
-    assert.equal(lockOf(dir).sources[0].ref, registry.defaultRef, 'without --ref, core follows defaultRef')
+    assert.equal(lockOf(dir).sources[0].ref, 'v2.1.0', 'without --ref, core replays its locked ref (#54)')
     const before = read(dir, '.claude-rules.lock')
     const r = runCli(['update', '--ref', 'team=v1'], dir)
     assert.equal(r.status, 1)

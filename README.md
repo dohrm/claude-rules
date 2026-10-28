@@ -127,7 +127,7 @@ See [testing and mutation](docs/reference.md#the-commands-you-end-up-with).
 npx github:dohrm/claude-rules list
 npx github:dohrm/claude-rules doctor
 npx github:dohrm/claude-rules budget apps/api/src/main.rs --agent codex
-npx github:dohrm/claude-rules update --ref <tag-or-commit>
+npx github:dohrm/claude-rules#<tag-or-commit> update --ref <tag-or-commit>
 npx github:dohrm/claude-rules remove <profile>
 ```
 

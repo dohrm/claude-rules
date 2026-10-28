@@ -12,6 +12,34 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — the lock pins the commit it installed, and the CLI must match it
+
+An `update` could move a repo silently, and nothing showed it
+([#54](https://github.com/dohrm/claude-rules/issues/54)). The lock recorded `ref: next`
+but not a commit. Without `--ref`, `update` sent core back to `main`. And
+`npx github:dohrm/claude-rules` without `#<ref>` ran `main`'s CLI. Together these could
+install an older tree while the lock looked unchanged.
+
+- **`rev` per source.** The lock records the commit each source was fetched at.
+  `update` prints one line per source: `core  next  5728086 → 319310a`, or
+  `unchanged (…)`. A lock without `rev` gets one on its next write.
+- **Core replays its locked ref.** Without `--ref`, `update` stays on the ref the lock
+  names, as the other sources already did. `defaultRef` only seeds a first `add`.
+- **The CLI must be the one core ships.** `add`, `update` and `remove --source` refuse
+  before writing when the running CLI's `bin/` differs from the fetched core's. The
+  error prints the command to re-run. `--local` is exempt.
+- **`rules-check` runs the locked CLI.** It runs `npx <core url>#<rev> doctor`, resolved
+  by the new `.dev/kit/common/cli-spec.mjs`, instead of the default branch.
+
+Migration:
+
+- Run the CLI at the ref you install: `npx github:dohrm/claude-rules#<ref> update`.
+  On a mismatch, the refusal names the exact command.
+- A repo that relied on `update` without `--ref` to follow `main` now passes
+  `--ref main`.
+- `rules-check` is delivered by `update`. A repo that overrides it adopts the
+  `cli-spec.mjs` line by hand.
+
 ### Breaking — `/investigate` is now `/defect`
 
 `/investigate` was a debug method that stopped after every phase. `/defect` keeps the same
