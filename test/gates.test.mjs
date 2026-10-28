@@ -2,7 +2,7 @@
 // build a throwaway docs/ tree, run the script, assert exit code + message.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo } from './helpers.mjs'
@@ -193,6 +193,34 @@ const commitAll = (dir) => {
   const git = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' })
   git('add', '-A'); git('commit', '-q', '-m', 'change')
 }
+
+test('review-claude pins the report language: a user language setting cannot translate parsed headings',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  // #55: `claude -p` inherits the user's `"language"` setting. Measured with "Francais":
+  // a heading meaning "Files reviewed" came back as `### Fichiers examinés`, and with
+  // `--settings '{"language":"English"}'` as `### Files reviewed`. This stand-in CLI
+  // behaves that way, so the library recipe — not a stub of it — is what is tested.
+  withReviewRepo(BASE_PREV, (dir) => {
+    write(dir, 'src/x.rs', 'fn x() {}\n')
+    commitAll(dir)
+    const bin = join(dir, '.bin')
+    write(dir, '.bin/claude', `#!/bin/sh
+lang=Francais
+for a in "$@"; do case "$a" in *'"language":"English"'*) lang=English ;; esac; done
+cat > /dev/null
+[ "$lang" = English ] && h='### Files reviewed' || h='### Fichiers examinés'
+printf '## Review\\n\\n%s\\n\\n' "$h"
+tr '\\0' '\\n' < .work/review-files.txt | sed 's/.*/- \`&\`/'
+printf '\\n<!-- CI_VERDICT: CLEAN -->\\n<!-- REVIEWED: %s -->\\n' "$(git rev-parse HEAD)"
+`)
+    chmodSync(join(bin, 'claude'), 0o755)
+    const r = spawnSync('just', ['code-review', 'claude'], {
+      cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    })
+    assert.equal(r.status, 0, `the review must be promoted:\n${r.stdout}${r.stderr}`)
+    assert.match(readFileSync(join(dir, '.work/review-report.md'), 'utf8'), /^### Files reviewed$/m)
+  })
+})
 
 test('the prompt lists every changed file but omits generated/vendored/locked bodies',
   { skip: JUST.error ? 'just not installed' : false }, () => {

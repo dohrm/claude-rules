@@ -186,8 +186,10 @@ reviewer := "claude"
 # re-opens the door silently — re-enumerate on a CLI bump with:
 #   echo 'List every tool available to you, one per line.' | claude -p ...
 review_deny := "Bash,Write,Edit,NotebookEdit,Task,Agent,Artifact,WebFetch,WebSearch,Monitor,Workflow,Skill,ToolSearch,CronCreate,CronDelete,CronList,EnterWorktree,ExitWorktree,LSP,PushNotification,RemoteTrigger,SendMessage,ScheduleWakeup,TaskOutput,TaskStop,ListAgents,ListMcpResourcesTool,ReadMcpResourceTool,WaitForMcpServers,mcp__*"
+# `--settings` pins the language: `claude -p` otherwise inherits the user's `"language"`
+# and translates the headings review-guard parses (#55).
 review-claude:
-    claude -p --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < {{review_in}} > {{review_out}}
+    claude -p --settings '{"language":"English"}' --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < {{review_in}} > {{review_out}}
 
 # ── codex ── `codex exec` sandboxes to read-only BY DEFAULT (no writes, no network
 # unless enabled) — passed explicitly anyway so a future default change cannot silently

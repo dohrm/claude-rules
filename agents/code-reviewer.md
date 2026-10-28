@@ -160,6 +160,10 @@ into strings and "1 byte = 1 char" assumptions. In Rust: `s[i..j]`,
 
 ## Output format
 
+Write the whole report in **English**, whatever language you were configured to use:
+`review-guard` matches these headings verbatim, and a translated report is rejected as
+incomplete.
+
 ```
 ## Code Review: [file(s) or feature]
 
