@@ -150,6 +150,9 @@ docs/
 ```bash
 # in your repo, from its root — bare `add`, no args, prompts interactively
 # (pick profiles, agents, root, level); anything scriptable below skips the prompt.
+# Once a lock pins a ref other than main, every command that fetches (add, update,
+# remove --source) runs as `npx github:dohrm/claude-rules#<that ref>`: a CLI that is
+# not core's own is refused, and the refusal prints the command to re-run.
 npx github:dohrm/claude-rules add
 
 # aliases unpack; --root is the glob lever:
@@ -328,7 +331,8 @@ installer never asks for or stores a token. `github:owner/repo` means
   `remove --source` compare the running CLI's `bin/*.mjs` with the fetched core's and
   refuse on a difference, before writing anything, naming the command to re-run
   (`npx github:<repo>#<rev> <same args>`). An `npx github:dohrm/claude-rules` without
-  `#<ref>` runs `main`'s CLI, which is what this stops. `--local` is exempt.
+  `#<ref>` runs `main`'s CLI, which is what this stops. `--local` is exempt, and
+  records no `rev`: a tree on disk is not a commit.
 - **Last path wins.** The sources are overlaid by repo-relative path in order, then
   emitted for every target. The unit is a file for `rules/`, `agents/` and `kit/`,
   and a whole directory for a skill: a later `skills/<name>/` replaces the earlier

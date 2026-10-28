@@ -1007,6 +1007,6 @@ test('a core with no bin/cli.mjs, or a lock rev that is not a commit SHA, is ref
     writeLock(repo, [{ name: 'core', url: core.url, ref: 'main', rev: '--upload-pack=x' }])
     const bad = cli(['update'], repo)
     assert.equal(bad.status, 1)
-    assert.match(bad.stderr, /rev must be a full 40-hex commit SHA/)
+    assert.match(bad.stderr, /rev must be a full commit SHA/)
   })
 })

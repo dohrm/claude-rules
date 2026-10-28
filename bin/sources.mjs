@@ -22,14 +22,14 @@ export function lockSources(raw, registry, lockName) {
   // `rev` is the commit an install fetched: a record, never a fetch input. A lock is
   // repository content, so it is checked like `url` and `ref` before anything reads it.
   const badRev = list.find(s => s.rev !== undefined && !REV.test(s.rev))
-  if (badRev) throw new Error(`${lockName}: source "${badRev.name}" rev must be a full 40-hex commit SHA`)
+  if (badRev) throw new Error(`${lockName}: source "${badRev.name}" rev must be a full commit SHA (40 or 64 hex)`)
   if (list[0].name !== CORE) throw new Error(`${lockName}: the first source must be "${CORE}", found "${list[0].name}"`)
   const names = list.map(s => s.name)
   const twice = names.filter((n, i) => names.indexOf(n) !== i)
   if (twice.length) throw new Error(`${lockName}: source "${twice[0]}" is listed twice`)
   return list.map(({ name, url, ref, rev }) => ({ name, url, ref, ...(rev ? { rev } : {}) }))
 }
-const REV = /^[0-9a-f]{40}$/
+const REV = /^[0-9a-f]{40}([0-9a-f]{24})?$/ // SHA-1, or SHA-256 object format
 // `--ref <ref>` → { core: ref }; `--ref <name>=<ref>` → { name: ref }.
 export function parseRefs(refFlags) {
   const refs = {}
@@ -43,13 +43,14 @@ export function parseRefs(refFlags) {
 }
 // The sources this run installs from: the lock's (or core alone on a first add), each
 // at its --ref. Without one, every source replays its locked ref, core included:
-// defaultRef only seeds a first add. The locked rev is what this run replaces.
+// defaultRef only seeds a first add. The locked rev is a record of the last install:
+// this run's fetch writes a new one, and `--local` none (a tree on disk is no commit).
 function resolveSources(locked, refs, registry, edit) {
   const sources = editSources(locked || [{ name: CORE, url: `github:${registry.repo}`, ref: registry.defaultRef }], edit).map(s => ({ ...s }))
   const unknown = Object.keys(refs).filter(n => !sources.some(s => s.name === n))
   if (unknown.length)
     throw new Error(`--ref names unknown source(s): ${unknown.join(', ')}. Locked: ${sources.map(s => s.name).join(', ')}`)
-  for (const s of sources) { s.ref = refs[s.name] || s.ref; s.lockedRev = s.rev; delete s.rev }
+  for (const s of sources) { s.ref = refs[s.name] || s.ref; delete s.rev }
   return sources
 }
 // `add --source <name>=<url>#<ref>`: the ref is after the last `#`, so a URL may hold one.
@@ -121,9 +122,11 @@ function fetchSource(source, localDir) {
 // What moved since the lock, one line per source: a lock that did not move says so,
 // instead of reading like a run with nothing to do.
 function reportRevs(fetched, locked) {
-  for (const s of fetched.filter(f => f.temp)) {
-    const was = s.lockedRev ? short(s.lockedRev) : locked.some(l => l.name === s.name) ? '(no rev recorded)' : '(new source)'
-    console.log(s.lockedRev === s.rev ? `  ${s.name}  ${s.ref}  unchanged (${short(s.rev)})` : `  ${s.name}  ${s.ref}  ${was} → ${short(s.rev)}`)
+  for (const s of fetched) {
+    if (!s.temp) { console.log(`  ${s.name}  ${s.ref}  local (no rev)`); continue }
+    const before = locked.find(l => l.name === s.name)
+    const was = before?.rev ? short(before.rev) : before ? '(no rev recorded)' : '(new source)'
+    console.log(before?.rev === s.rev ? `  ${s.name}  ${s.ref}  unchanged (${short(s.rev)})` : `  ${s.name}  ${s.ref}  ${was} → ${short(s.rev)}`)
   }
   console.log()
 }
@@ -132,6 +135,8 @@ function reportRevs(fetched, locked) {
 // `npx …` without `#<ref>`, a cached copy) writes another ref's lock format and
 // emitters over these assets. Refused, never re-executed: running fetched code
 // silently is worse than one re-run. `--local` runs the tree it is pointed at.
+// `bin/` is the whole CLI (package.json "files": bin + registry.json, and the registry
+// is replaced by the fetched one): code imported from elsewhere would escape this check.
 const RUNNING_BIN = dirname(fileURLToPath(import.meta.url))
 const binHashes = dir => Object.fromEntries(readdirSync(dir).filter(f => f.endsWith('.mjs')).sort().map(f => [f, hash(readFileSync(join(dir, f), 'utf8'))]))
 function assertSameCli(core) {
