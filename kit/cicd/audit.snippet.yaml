@@ -20,6 +20,11 @@ on:
     - cron: '23 5 * * *'         # daily, on the default branch — ADAPT the hour
   workflow_dispatch:             # by hand, e.g. to close the issue right after a fix
 
+# One run at a time: two overlapping runs would both find no issue and both open one.
+concurrency:
+  group: security-advisories
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write                  # the reporter opens, updates and closes its issues

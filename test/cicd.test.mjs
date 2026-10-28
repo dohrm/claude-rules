@@ -232,7 +232,8 @@ test('a full CI checkout of a PR behind a lock bump skips the audit; a shallow o
 const REPORTER = join(REPO, 'kit/cicd/advisory-issue.mjs')
 const BIN = mkdtempSync(join(tmpdir(), 'claude-rules-advisory-'))
 after(() => rmSync(BIN, { recursive: true, force: true }))
-writeFileSync(join(BIN, 'just'), '#!/bin/sh\necho "ran: just $*"\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_STATUS"\n')
+writeFileSync(join(BIN, 'just'), '#!/bin/sh\n[ "$1" = --show ] && exit "${STUB_SHOW:-0}"\n'
+  + 'echo "ran: just $*"\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_STATUS"\n')
 chmodSync(join(BIN, 'just'), 0o755)
 
 const FORGES = {
@@ -315,6 +316,7 @@ for (const forge of Object.keys(FORGES)) {
     assert.equal(body.title, TITLE)
     assert.match(body.body, /Found 2 known vulnerabilities in certifi/)
     assert.match(body.body, /ran: just python-audit/)
+    assert.match(body.body, /failed \(exit 1\)/)
     assert.equal(auth, 'token tkn')
   }))
 
@@ -354,7 +356,7 @@ test('advisory-issue names the Go toolchain case in a go-audit issue, and only t
     } finally { await stub.close() }
   })))
 
-test('advisory-issue exits 1 when the forge refuses, 2 with no token, and never reports an audit it could not run', async () => {
+test('advisory-issue exits 1 when the forge refuses, 2 on a setup problem, and never reports an audit it could not run', async () => {
   const stub = await stubForge('github')
   try {
     const refused = await report('python-audit', { forge: 'github', url: `${stub.url}/not-the-api` }, { status: 1 })
@@ -365,6 +367,14 @@ test('advisory-issue exits 1 when the forge refuses, 2 with no token, and never 
     assert.equal(noToken.status, 2, noToken.out)
     const noJust = await report('python-audit', { forge: 'github', url: stub.url }, { env: { PATH: '/nonexistent' } })
     assert.equal(noJust.status, 2, noJust.out)
+    // An audit that never ran is a red job, not an advisory issue.
+    const noRecipe = await report('python-audit', { forge: 'github', url: stub.url }, { status: 1, env: { STUB_SHOW: '1' } })
+    assert.equal(noRecipe.status, 2, noRecipe.out)
+    assert.match(noRecipe.out, /no `python-audit` recipe/)
+    const noTool = await report('python-audit', { forge: 'github', url: stub.url }, { status: 127 })
+    assert.equal(noTool.status, 2, noTool.out)
+    const noGiteaUrl = await report('python-audit', { forge: 'gitea', url: '' }, { env: { GITHUB_SERVER_URL: '' } })
+    assert.equal(noGiteaUrl.status, 2, noGiteaUrl.out)
     assert.equal(stub.calls.length, calls, 'neither may call the forge')
   } finally { await stub.close() }
 })
