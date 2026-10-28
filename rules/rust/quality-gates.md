@@ -8,7 +8,7 @@ title: "Rust Quality Gates"
 just rust-check     # rust-lint → tests → deny + machete → rust-audit if Cargo.lock changed
 ```
 
-`rust-lint` is pre-commit; `rust-check` is pre-push and `just check`. Tier 4 is `just rust-mutate` — never a hook. Wiring: `.dev/kit/rust/README.md`. `rust-check` runs the audit only when `Cargo.lock` changed against `base` (or `base` does not resolve), and prints which: an advisory database moves with the date, not the diff (`rules/cicd/pipeline.md`). `just rust-audit` runs it always.
+`rust-lint` is pre-commit; `rust-check` is pre-push and `just check`. Tier 4 is `just rust-mutate` — never a hook. Wiring: `.dev/kit/rust/README.md`. `rust-check` runs the audit only when `Cargo.lock` changed since its merge base with `base` (or that cannot be known), and prints which: an advisory database moves with the date, not the diff (`rules/cicd/pipeline.md`). `just rust-audit` runs it always.
 
 | Recipe | Command | Config |
 |---|---|---|

@@ -26,10 +26,12 @@ runs `just go-check`.
 files still has to compile. `errcheck` is why unhandled errors do not
 need a second lint pass.
 
-`go-check` runs `go-audit` only when `go.sum` changed against
-`base`, or when `base` does not resolve, and prints which before running or
-skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
-`audit: base is empty …`).
+`go-check` runs `go-audit` only when `go.sum` changed since its
+merge base with `base`, or when that cannot be known (`base` empty or unresolvable,
+no merge base in a shallow clone). It prints which before running or skipping it
+(`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`, `audit: no merge base with …`). A branch merely behind a
+lock bump on `base` changed nothing, so it skips the audit.
 An advisory database moves with the date, not with the diff, so an audit inside
 every check turns unrelated PRs red. To ignore an advisory or add a flag, override
 the `go_audit` variable, not the recipe: both recipes run it.

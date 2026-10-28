@@ -11,8 +11,8 @@ just go-check     # go-lint → test -race → build → go-audit if go.sum chan
 `go-lint` is pre-commit; `go-check` is pre-push and `just check`. Tier 4
 is `just go-cover` — a coverage map, never mutation, never a hook.
 Wiring: `.dev/kit/go/README.md`. Needs **golangci-lint v2**.
-`go-check` runs the audit only when `go.sum` changed against `base` (or
-`base` does not resolve), and prints which: an advisory database moves
+`go-check` runs the audit only when `go.sum` changed since its merge base
+with `base` (or that cannot be known), and prints which: an advisory database moves
 with the date, not the diff (`rules/cicd/pipeline.md`). `just go-audit`
 runs it always. A standard-library finding is fixed by the Go toolchain
 version, not by `go.mod`.
