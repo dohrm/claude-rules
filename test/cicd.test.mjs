@@ -101,7 +101,8 @@ for (const file of WORKFLOWS) {
 // unresolvable base fails closed into running the audit. So a gate job that does not
 // fetch the PR base, or fetches it shallow, quietly turns every PR back into a daily
 // advisory lottery. The audit-bearing gates are the ones checked.
-const AUDITED = /^\s*(?:-\s+)?(?:run:\s+)?just (?:base=\S+ )?(rust|go|python)-check\b/m
+// The token, not a YAML shape: any `just … <tech>-check` outside a comment or a step name.
+const AUDITED = /^(?!\s*(?:-\s*)?name:)[^#\n]*\bjust\b[^#\n]*\b(rust|go|python)-check\b/m
 
 function jobs(file) {
   const text = readFileSync(join(REPO, file), 'utf8')
