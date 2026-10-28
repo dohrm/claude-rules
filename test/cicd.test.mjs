@@ -70,6 +70,16 @@ for (const forge of ['github', 'gitea']) {
   })
 }
 
+// A job in `needs` but in neither list below it is never checked: the one way the
+// named form can still fail open. Hold the shipped snippet's three lists equal.
+test('ci-ok checks every job it needs, by name', () => {
+  const { needs, env, run } = ciOk()
+  const upper = needs.map(j => j.toUpperCase().replace(/-/g, '_'))
+  assert.deepEqual(Object.keys(env), upper, 'one env line per job in needs')
+  for (const [k, v] of Object.entries(env)) assert.match(v, new RegExp(`needs\\.${needs[upper.indexOf(k)]}\\.result`))
+  assert.deepEqual(run.match(/^for job in (.*); do$/m)?.[1].split(' '), upper, 'the loop walks every env line')
+})
+
 test('ci-ok fails closed when a result expands to nothing', () => {
   const r = verdict('github', {})
   assert.notEqual(r.status, 0, `no result at all must fail ci-ok:\n${r.out}`)

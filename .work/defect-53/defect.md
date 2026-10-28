@@ -1,7 +1,7 @@
 # Bug — `ci-ok` reports success on Gitea while gate jobs failed
 
-- **Status**: diagnosed
-- **Autonomy**: L1
+- **Status**: fixing
+- **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
 - **Branch**: fix/defect-53
@@ -63,7 +63,7 @@ loop (hypothesis 1) is the defect.
 
 ## Blocked on the human
 
-- L1: validate this diagnosis before `/defect fix`.
+- none
 
 ## Log
 
@@ -71,3 +71,11 @@ loop (hypothesis 1) is the defect.
   (forge note), `skills/ci-setup` (aggregator wiring). Repro `test/cicd.test.mjs` fails
   on 319310a, 3/7, for the reported reason.
 - phase 2–3: hypothesis 1 confirmed by the repro, 2 by downstream evidence, 3 refuted.
+- human: diagnosis validated; `/defect fix` asked at L3 (level raised by the human).
+- phase 4: repro re-run on 319310a + diagnosis commit, still 3/7 failing. Fix: `ci-ok`
+  reads each `needs.<job>.result` by name through `env:`, fails on an empty or
+  non-`success` one, `shell: bash`; a test holds `needs`, `env` and the loop equal.
+  Forge note in `rules/cicd/pipeline.md`, CHANGELOG hand-merge entry. Repro 8/8 green.
+- `npm test`: 492 pass, 2 fail — `python-gates` (`pip-audit` finds new advisories in the
+  fixture's `uv.lock`: certifi, filelock). Same 2 failures on 319310a: pre-existing,
+  external, tracked in #50. Not bypassed.

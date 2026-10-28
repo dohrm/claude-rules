@@ -79,3 +79,7 @@ both. The adaptation surface is deliberately tiny:
   a repo/org secret you set by hand, and the wiring note must say which.
 - Self-hosted runners are **not** ephemeral by default: never assume a clean
   workspace, and never write outside the workspace.
+- Gitea's runner expands the `needs.*` object filter to **nothing**, so
+  `join(needs.*.result, ' ')` is an empty string and an aggregator looping over it
+  passes with every gate red. Read each result by name (`needs.<job>.result`), and
+  fail on an empty one — the shipped `ci-ok` does both.

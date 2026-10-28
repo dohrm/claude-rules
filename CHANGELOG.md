@@ -331,6 +331,14 @@ the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing
 
 ### Fixed
 
+- **`ci-ok` passed with every gate red on Gitea** ([#53](https://github.com/dohrm/claude-rules/issues/53)).
+  The aggregator looped over `join(needs.*.result, ' ')`. Gitea's runner expands that
+  filter to nothing, and a loop over nothing exits 0: the one required check was green
+  whatever the gates said. It now reads each job by name (`needs.<job>.result`) and fails
+  on an empty result, on both forges. **Hand-merge**: `ci.snippet.yaml` is copied, not
+  installed — replace your `ci-ok` step with the new one and list YOUR jobs in its `env:`
+  and its loop. A Gitea repo on the old step has had no aggregate gate since it copied it.
+
 - **`reviewer=codex` reviewed the diff blind.** The review prompt told every reviewer
   "you have no shell — Read/Glob/Grep is all you need", which is true for Claude only.
   Codex reads through its read-only sandbox shell, took the sentence literally, and
