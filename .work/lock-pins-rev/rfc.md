@@ -6,3 +6,7 @@
 - **Base branch**: next
 - **Branch**: feat/lock-pins-rev
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/54
+
+## Blocked on the human
+
+- Merge the PR into next. `npm test` stays red on the 2 python-gates cases until #50.
