@@ -28,7 +28,7 @@ function ciOk(file) {
   let run = null
   for (let i = 0; i < lines.length; i++) {
     const kv = lines[i].match(/^ {10}([A-Z_][A-Z0-9_]*): (.*)$/)
-    if (kv && run === null) env[kv[1]] = kv[2].replace(/\s+#.*$/, '')
+    if (kv) env[kv[1]] = kv[2].replace(/\s+#.*$/, '')
     if (/^ {8}run: \|$/.test(lines[i])) {
       run = []
       for (i++; i < lines.length && (lines[i] === '' || lines[i].startsWith(' '.repeat(10))); i++)
