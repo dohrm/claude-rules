@@ -27,7 +27,8 @@ free. That is why the second clippy pass is `--lib --bins`, not
 
 `rust-check` runs `rust-audit` only when `Cargo.lock` changed against
 `base`, or when `base` does not resolve, and prints which before running or
-skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`).
+skipping it (`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`).
 An advisory database moves with the date, not with the diff, so an audit inside
 every check turns unrelated PRs red. To ignore an advisory or add a flag, override
 the `rust_audit` variable, not the recipe: both recipes run it. A `Cargo.lock` you do
