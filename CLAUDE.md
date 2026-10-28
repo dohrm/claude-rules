@@ -31,6 +31,11 @@ See [the sharing contract](docs/agent-sharing.md) for alias, scope and ownership
 
 ## Working rules
 
+- **Autonomy defaults** (raised by the human, 2026-10-28): `/defect` runs at **L3**
+  (diagnosis through to the PR), `/rfc` at **L4**. Pass the level at launch
+  (`/defect L3 …`, `/rfc L4 …`) so the state file header records it. An RFC without a
+  `## Delegation board` runs as L3 (`agent/autonomy.md` § L4). Hard checkpoints are
+  unchanged: ADR status, `ready`, scope changes and the merge stay the human's.
 - Keep the split honest: a new **convention** → `rules/`; a new **check** → `kit/`;
   a repeatable **procedure/methodology** → `skills/` (a `SKILL.md` dir); an **agent**
   only when the work needs its own context/tools (else a skill is lighter); otherwise it's a rule.
