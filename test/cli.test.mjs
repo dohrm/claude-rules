@@ -71,7 +71,8 @@ test('--ref targets core; --ref <name>=<ref> must name a locked source', () => {
   withTmpRepo(dir => {
     ok(runCli(['add', 'rust', '--agent', 'claude', '--ref', 'v2.0.0'], dir))
     assert.equal(lockOf(dir).sources[0].ref, 'v2.0.0')
-    ok(runCli(['update', '--ref', 'core=v2.1.0'], dir))
+    const moved = ok(runCli(['update', '--ref', 'core=v2.1.0'], dir))
+    assert.match(moved.stdout, /core {2}v2\.0\.0 → v2\.1\.0 {2}local \(no rev\)/, 'a --local run still shows the ref it moved')
     assert.equal(lockOf(dir).sources[0].ref, 'v2.1.0', 'core=<ref> is the long form of --ref <ref>')
     const pinned = lockOf(dir)
     pinned.sources[0].rev = 'b'.repeat(40)
