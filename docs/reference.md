@@ -150,9 +150,10 @@ docs/
 ```bash
 # in your repo, from its root — bare `add`, no args, prompts interactively
 # (pick profiles, agents, root, level); anything scriptable below skips the prompt.
-# Once a lock pins a ref other than main, every command that fetches (add, update,
-# remove --source) runs as `npx github:dohrm/claude-rules#<that ref>`: a CLI that is
-# not core's own is refused, and the refusal prints the command to re-run.
+# Every command that fetches (add, update, remove --source) checks that the running
+# CLI is the one core ships at the locked ref: run `npx github:dohrm/claude-rules#<locked ref>`.
+# A mismatch — another ref, a stale npx cache — is refused, and the refusal prints the
+# command to re-run.
 npx github:dohrm/claude-rules add
 
 # aliases unpack; --root is the glob lever:

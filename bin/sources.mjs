@@ -125,8 +125,9 @@ function reportRevs(fetched, locked) {
   for (const s of fetched) {
     if (!s.temp) { console.log(`  ${s.name}  ${s.ref}  local (no rev)`); continue }
     const before = locked.find(l => l.name === s.name)
+    const ref = before && before.ref !== s.ref ? `${before.ref} → ${s.ref}` : s.ref
     const was = before?.rev ? short(before.rev) : before ? '(no rev recorded)' : '(new source)'
-    console.log(before?.rev === s.rev ? `  ${s.name}  ${s.ref}  unchanged (${short(s.rev)})` : `  ${s.name}  ${s.ref}  ${was} → ${short(s.rev)}`)
+    console.log(before?.rev === s.rev ? `  ${s.name}  ${ref}  unchanged (${short(s.rev)})` : `  ${s.name}  ${ref}  ${was} → ${short(s.rev)}`)
   }
   console.log()
 }

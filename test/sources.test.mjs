@@ -8,6 +8,7 @@ import { join, dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { REPO, CLI, registry, withTmpRepo, read, has } from './helpers.mjs'
+import { lockSources } from '../bin/sources.mjs'
 
 const LOCK = '.claude-rules.lock'
 const lockOf = dir => JSON.parse(read(dir, LOCK))
@@ -1004,9 +1005,19 @@ test('a core with no bin/cli.mjs, or a lock rev that is not a commit SHA, is ref
     assert.equal(r.status, 1)
     assert.match(r.stderr, /has no bin\/cli\.mjs — not a claude-rules core/)
 
-    writeLock(repo, [{ name: 'core', url: core.url, ref: 'main', rev: '--upload-pack=x' }])
-    const bad = cli(['update'], repo)
-    assert.equal(bad.status, 1)
-    assert.match(bad.stderr, /rev must be a full commit SHA/)
+    for (const rev of ['--upload-pack=x', 'a'.repeat(41), 'a'.repeat(63), 'A'.repeat(40)]) {
+      writeLock(repo, [{ name: 'core', url: core.url, ref: 'main', rev }])
+      const bad = cli(['update'], repo)
+      assert.equal(bad.status, 1, rev)
+      assert.match(bad.stderr, /rev must be a full commit SHA/, rev)
+    }
   })
+})
+
+test('lockSources keeps a SHA-1 or SHA-256 rev as it is', () => {
+  for (const rev of ['a'.repeat(40), 'b'.repeat(64)])
+    assert.deepEqual(lockSources({ sources: [{ name: 'core', url: 'github:o/r', ref: 'main', rev }] }, registry, LOCK),
+      [{ name: 'core', url: 'github:o/r', ref: 'main', rev }])
+  assert.deepEqual(lockSources({ sources: [{ name: 'core', url: 'github:o/r', ref: 'main' }] }, registry, LOCK),
+    [{ name: 'core', url: 'github:o/r', ref: 'main' }], 'a lock from before rev reads without one')
 })
