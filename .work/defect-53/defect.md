@@ -1,6 +1,6 @@
 # Bug — `ci-ok` reports success on Gitea while gate jobs failed
 
-- **Status**: fixing
+- **Status**: done
 - **Autonomy**: L3
 - **Repository**: git@github.com:dohrm/claude-rules.git
 - **Base branch**: next
@@ -84,3 +84,4 @@ loop (hypothesis 1) is the defect.
   repo's own `.github/workflows/ci.yml` `ci-ok` moved to the named form, and the test
   covers both files (16 cases). Re-review after #55 lands.
 - `npm test`: 500 pass, 2 fail — same 2 `python-gates` cases as on 319310a (#50).
+- PR #60 opened against next; the human merges it.
