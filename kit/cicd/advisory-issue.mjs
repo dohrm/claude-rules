@@ -53,7 +53,8 @@ function audit() {
   return new Promise((resolve) => {
     const child = spawn('just', [recipe], { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
-    const keep = (stream, sink) => stream.on('data', (chunk) => { out += chunk; sink.write(chunk) })
+    // Decoded per stream, so a character split across two chunks survives (cargo deny draws boxes).
+    const keep = (stream, sink) => stream.setEncoding('utf8').on('data', (chunk) => { out += chunk; sink.write(chunk) })
     keep(child.stdout, process.stdout)
     keep(child.stderr, process.stderr)
     child.on('error', (e) => bail(`cannot run just: ${e.message}`))

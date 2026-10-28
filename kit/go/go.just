@@ -59,7 +59,7 @@ _audit-gate dir lock cmd:
         echo {{quote("audit: no merge base with " + base + " (a shallow clone?)")}}; \
     elif git diff --quiet "$fork" -- {{quote(dir / lock)}} \
         && [ -z "$(git ls-files --others --exclude-standard -- {{quote(dir / lock)}})" ]; then \
-        echo {{quote("audit: skipped — " + dir / lock + " unchanged against " + base)}}; exit 0; \
+        echo {{quote("audit: skipped — " + dir / lock + " unchanged since its merge base with " + base)}}; exit 0; \
     else \
         echo {{quote("audit: " + dir / lock + " changed")}}; \
     fi; \

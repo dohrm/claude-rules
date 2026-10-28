@@ -37,7 +37,9 @@ can fix.
   branch named by `$BASE` in full and prints `origin/<branch>`, or `HEAD` when `BASE`
   is empty (a push: the audit is skipped). The rust, go and python jobs of
   `kit/cicd/ci.snippet.yaml` take `BASE: ${{ github.base_ref }}` through `env:` and run
-  `just base="$(just ci-base)" <tech>-check`.
+  `just base="$(just ci-base)" <tech>-check`. Their checkout sets `fetch-depth: 0`: the
+  default shallow HEAD has no merge base with the PR base, so the audit would run on
+  every PR.
 - **The default branch is audited daily.** New `kit/cicd/audit.snippet.yaml` runs each
   `<tech>-audit` on a schedule. New `kit/cicd/advisory-issue.mjs` opens one issue per
   red audit, titled `security-advisory: <tech>-audit`, updates it while the audit stays
@@ -47,9 +49,9 @@ can fix.
 
 Migration:
 
-- Merge the new gate step into each rust, go and python job of your CI workflow by
-  hand. Without it, `base` does not resolve on the runner, so every PR still runs
-  the audit: it fails closed.
+- Merge the new gate step, and `fetch-depth: 0` on its checkout, into each rust, go
+  and python job of your CI workflow by hand. Without them, `base` does not resolve or
+  has no merge base on the runner, so every PR still runs the audit: it fails closed.
 - Copy `audit.snippet.yaml` next to your CI workflow and delete the matrix entries for
   the technologies you don't have. The job token needs `issues: write`. Without the
   workflow, an advisory published after your lock was committed is reported nowhere.

@@ -7,7 +7,7 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync, mkdtempSync, chmodSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:http'
 import { spawn, spawnSync } from 'node:child_process'
@@ -142,6 +142,7 @@ test('kit/cicd/ci.snippet.yaml: every audited gate job resolves its base through
     assert.deepEqual(calls, [GATE_STEP(name)], `${name}: the gate call`)
     assert.match(block, /BASE: \$\{\{ github\.base_ref \}\}/, `${name} must take the base through env:`)
     assert.doesNotMatch(block, /--depth[= ]1\b|fetch-depth:\s*1\b/, `${name} fetches shallow`)
+    assert.match(block, /- uses: actions\/checkout@v4\n {8}with:\n {10}fetch-depth: 0\b/, `${name}: HEAD needs its history for the merge base`)
   }
 })
 
@@ -185,6 +186,41 @@ test('ci-base fetches the PR base in full and the gate line passes it; HEAD on a
       const line = GATE_STEP(tech).replace(/^run: /, '')
       assert.equal(ok(line, work, { BASE: 'next' }), `${tech}-check base=origin/next\n`)
       assert.equal(ok(line, work, { BASE: '' }), `${tech}-check base=HEAD\n`)
+    }
+  })
+})
+
+// The CI checkout end to end: a PR branch forked before its base bumped the lock. What
+// actions/checkout leaves by default (depth 1) has no merge base, so the gate audits
+// every PR; the snippet's `fetch-depth: 0` gives HEAD its history, and the gate skips.
+// The shipped gate.just and go.just, the audit stubbed.
+test('a full CI checkout of a PR behind a lock bump skips the audit; a shallow one cannot tell, and audits',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withTmpRepo((dir) => {
+    const sh = (cmd, cwd, env = {}) => {
+      const r = spawnSync('bash', ['-e', '-c', cmd], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
+      assert.equal(r.status, 0, `${cmd}\n${r.stdout}${r.stderr}`)
+      return r.stdout
+    }
+    const git = 'git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null'
+    sh(`git init -q -b main origin && cd origin && echo a > go.sum && git add go.sum && ${git} commit -q -m lock`
+      + ` && git checkout -q -b pr && echo x > x && git add x && ${git} commit -q -m 'the PR'`
+      + ` && git checkout -q main && echo b > go.sum && ${git} commit -q -am 'base bumps the lock'`, dir)
+    for (const [depth, marker, audits] of [
+      ['--depth 1', 'audit: no merge base with origin/main', true],
+      ['', 'go.sum unchanged since its merge base with origin/main', false],
+    ]) {
+      const work = join(dir, `work${depth ? '-shallow' : '-full'}`)
+      sh(`git clone -q ${depth} --branch pr file://${dir}/origin ${work} && mkdir -p ${work}/.dev/kit`, dir)
+      for (const lib of ['common/gate.just', 'go/go.just']) {
+        sh(`mkdir -p .dev/kit/${dirname(lib)}`, work)
+        writeFileSync(join(work, '.dev/kit', lib), readFileSync(join(REPO, 'kit', lib)))
+      }
+      writeFileSync(join(work, 'justfile'), 'set allow-duplicate-recipes := true\nset allow-duplicate-variables := true\n'
+        + "import '.dev/kit/common/gate.just'\nimport '.dev/kit/go/go.just'\n")
+      const out = sh('just base="$(just ci-base)" _audit-gate . go.sum "echo audit-ran"', work, { BASE: 'main' })
+      assert.ok(out.includes(marker), `${depth || 'full'}: ${out}`)
+      assert.equal(out.includes('audit-ran'), audits, `${depth || 'full'}: ${out}`)
     }
   })
 })

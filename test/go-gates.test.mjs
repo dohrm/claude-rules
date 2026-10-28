@@ -107,7 +107,7 @@ describe('go quality gates', { concurrency: 1 }, () => {
       commitBase(dir)
       const r = runJust(dir, 'go-check', ['base=HEAD'])
       assert.equal(r.status, 0, `go-check must be green:\n${r.out}`)
-      assert.ok(r.out.includes('audit: skipped — api/go.sum unchanged against HEAD'), r.out)
+      assert.ok(r.out.includes('audit: skipped — api/go.sum unchanged since its merge base with HEAD'), r.out)
     })
   })
 
