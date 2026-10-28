@@ -146,7 +146,11 @@ test('kit/cicd/ci.snippet.yaml: every audited gate job resolves its base through
 // The snippet's gate line and `ci-base`, run for real: the shipped gate.just in a
 // shallow clone (what actions/checkout leaves), `<tech>-check` stubbed to print the
 // base it received, a PR base with history on the remote.
-test('ci-base fetches the PR base in full and the gate line passes it; HEAD on a push; nothing on a failed fetch', () => {
+// The node-only `test` CI job has no `just`: skip there, like test/gates.test.mjs.
+const JUST = spawnSync('just', ['--version'], { encoding: 'utf8' })
+
+test('ci-base fetches the PR base in full and the gate line passes it; HEAD on a push; nothing on a failed fetch',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
   withTmpRepo((dir) => {
     const sh = (cmd, cwd = dir, env = {}) => spawnSync('bash', ['-e', '-c', cmd], { cwd, encoding: 'utf8', env: { ...process.env, ...env } })
     const ok = (cmd, cwd, env) => {
