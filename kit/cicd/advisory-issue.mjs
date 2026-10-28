@@ -10,10 +10,12 @@
 //
 // A red audit is REPORTED, not failed: its verdict moves with the advisory database,
 // not with a commit, so the job stays green and the default branch never turns red
-// with no change (rules/cicd/pipeline.md). An audit that could not run is no advisory:
-// exit 2 on a usage or setup problem (bad argument, no token, `just` or the recipe
-// missing, the audit tool not found, the audit killed), 1 when the issue could not be
-// written.
+// with no change (rules/cicd/pipeline.md). Exit 2 on a usage or setup problem this
+// script can tell apart (bad argument, no token, `just` or the recipe missing, a
+// command not found, the audit killed), 1 when the issue could not be written. Any
+// other failure is reported: an audit's exit code does not separate findings from a
+// tool or network error (`<tech>_audit` is the consumer's to change), so the issue
+// gives the exit code and the output, and says either may be the cause.
 //
 // Forge access is the REST API through `fetch`, the same calls on both forges; the
 // runner's env picks the endpoint. Both runners set GITHUB_REPOSITORY and
@@ -109,7 +111,8 @@ function issueBody(status, out) {
   const tail = out.length > MAX_OUTPUT ? `…(truncated)\n${out.slice(-MAX_OUTPUT)}` : out
   const at = env.GITHUB_SHA ? ` at \`${env.GITHUB_SHA.slice(0, 12)}\`` : ''
   return [
-    `\`just ${recipe}\` failed (exit ${status}) on the default branch${at}: the output below names the advisories. This issue is kept up to date by the`,
+    `\`just ${recipe}\` failed (exit ${status}) on the default branch${at}. The output below says why: advisories,`,
+    'most often, but a tool or network error lands here too. This issue is kept up to date by the',
     'scheduled audit (`.dev/kit/cicd/advisory-issue.mjs`) and closed when the audit is green again.',
     '',
     ...(NOTES[recipe] ? [NOTES[recipe], ''] : []),

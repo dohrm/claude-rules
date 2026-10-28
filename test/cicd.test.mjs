@@ -375,7 +375,11 @@ test('advisory-issue exits 1 when the forge refuses, 2 on a setup problem, and n
     assert.equal(noTool.status, 2, noTool.out)
     const noGiteaUrl = await report('python-audit', { forge: 'gitea', url: '' }, { env: { GITHUB_SERVER_URL: '' } })
     assert.equal(noGiteaUrl.status, 2, noGiteaUrl.out)
-    assert.equal(stub.calls.length, calls, 'neither may call the forge')
+    assert.equal(stub.calls.length, calls, 'no setup failure may call the forge')
+    // Past those, an exit code cannot tell findings from a tool error: reported, as such.
+    const toolError = await report('python-audit', { forge: 'github', url: stub.url }, { status: 2, out: 'Failed to spawn: `pip-audit`' })
+    assert.equal(toolError.status, 0, toolError.out)
+    assert.match(stub.writes()[0].body.body, /failed \(exit 2\)[\s\S]*a tool or network error[\s\S]*Failed to spawn: `pip-audit`/)
   } finally { await stub.close() }
 })
 

@@ -69,9 +69,9 @@ Propose it in a few lines and get a yes:
 
 Start from the installed snippets — `kit/cicd/ci.snippet.yaml`,
 `kit/cicd/audit.snippet.yaml`, `kit/cicd/release.snippet.yaml`, and the Tier-4 job
-from each language kit — and adapt: delete the jobs for absent technologies, set `runs-on`, pin the toolchain
-versions, point the working directories at the justfile's `*_dir` values. Never
-copy a command out of the justfile into the workflow.
+from each language kit — and adapt: delete the jobs for absent technologies, set
+`runs-on`, pin the toolchain versions, point the working directories at the
+justfile's `*_dir` values. Never copy a command out of the justfile into the workflow.
 
 ### 5. Hand off — the human's part
 
