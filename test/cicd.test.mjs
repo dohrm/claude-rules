@@ -257,8 +257,8 @@ test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, bounded, sk
   assertUploadsPerForge(file)
 })
 
-test('kit/python/mutation-ci.yaml and kit/go/coverage-ci.yaml take the full base from ci-base', () => {
-  for (const file of ['kit/python/mutation-ci.yaml', 'kit/go/coverage-ci.yaml']) {
+test('the Python, TS mutation and Go coverage snippets take the full base from ci-base', () => {
+  for (const file of ['kit/python/mutation-ci.yaml', 'kit/ts/mutation-ci.yaml', 'kit/go/coverage-ci.yaml']) {
     const text = snippet(file)
     assert.doesNotMatch(text, SHALLOW, `${file} fetches shallow`)
     assert.doesNotMatch(text, /origin\/\$\{\{/, `${file} interpolates the base into the shell`)
@@ -268,6 +268,7 @@ test('kit/python/mutation-ci.yaml and kit/go/coverage-ci.yaml take the full base
     assert.match(text, /"\$base\.\.\.HEAD"/, file)
   }
   assertUploadsPerForge('kit/go/coverage-ci.yaml')
+  assertUploadsPerForge('kit/ts/mutation-ci.yaml')
 })
 
 // Three files used to contradict each other; the doctrine is a target dir inside the

@@ -24,6 +24,8 @@ name: Mutation (TS)
 # is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
 # GitHub: `ubuntu-latest`) and the working-directory to your ts_dir.
 #
+# Needs kit/common imported by the root justfile: the PR's base comes from `ci-base`.
+#
 # One-time setup in the frontend/package root:
 #   npm i -D @stryker-mutator/core @stryker-mutator/vitest-runner   # or the jest runner
 #   npx stryker init      # then commit stryker.config.json
@@ -39,6 +41,7 @@ on:
 
 env:
   CI: 'true'
+  JUST_VERSION: '1.42.4'               # ADAPT / bump deliberately
 
 jobs:
   mutation:
@@ -53,6 +56,12 @@ jobs:
         with:
           fetch-depth: 0               # need the base branch to compute the diff
 
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -63,9 +72,11 @@ jobs:
 
       - name: Compute changed files
         id: changed
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
+          base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
                   | grep -E '\.(ts|tsx)$' | grep -v -E '(\.test\.|/generated/)' | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
@@ -74,12 +85,21 @@ jobs:
         if: steps.changed.outputs.files != ''
         run: npx stryker run --mutate "${{ steps.changed.outputs.files }}" --reporters clear-text,html
 
-      - name: Upload mutation report
-        if: always()
+      # upload-artifact@v4 fails on Gitea (GHESNotSupportedError) and v3 no longer runs
+      # on github.com: one step per forge.
+      - name: Upload mutation report (github.com)
+        if: always() && github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: stryker-report
-          path: reports/mutation/
+          path: reports/mutation/      # ADAPT: <ts_dir>/reports/mutation/
+
+      - name: Upload mutation report (Gitea)
+        if: always() && github.server_url != 'https://github.com'
+        uses: actions/upload-artifact@v3
+        with:
+          name: stryker-report
+          path: reports/mutation/      # ADAPT: <ts_dir>/reports/mutation/
 
 # ---------------------------------------------------------------------------
 # Nightly full sweep (enable when ready): track the score over time and catch

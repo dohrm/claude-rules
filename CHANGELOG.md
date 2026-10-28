@@ -182,10 +182,10 @@ ignored `N`.
   mutating the empty diff and passing, which is what a failed `ci-base` fetch produced.
 - **`kit/rust/mutants.toml` sets `timeout_multiplier = 3.0`**, so one hanging mutant
   cannot use up the job's time limit on its own.
-- **`kit/python/mutation-ci.yaml` and `kit/go/coverage-ci.yaml` take their base from
-  `ci-base`** (`base="$(just ci-base)"`, fetched in full; a failed fetch fails the
-  step), and install `just` if it is missing. The Go job uploads its profile per forge
-  like the Rust one.
+- **`kit/python/mutation-ci.yaml`, `kit/ts/mutation-ci.yaml` and
+  `kit/go/coverage-ci.yaml` take their base from `ci-base`** (`base="$(just ci-base)"`,
+  fetched in full; a failed fetch fails the step), and install `just` if it is missing.
+  The TS and Go jobs upload their report per forge like the Rust one.
 - **`init` writes a `mutate-diff` that forwards the overrides.** The Rust line passes
   `base`, `mutate_jobs` and `mutate_args` to the nested `just` calls, which otherwise
   re-read them from the files.
@@ -196,7 +196,8 @@ Hand-merge — `init` never rewrites an existing justfile, and the snippets are 
   with:
   `just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} rust-mutate "$(just base={{quote(base)}} mutate-from)"`
 - Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`,
-  `RUSTC_WRAPPER`, report path (`<rust_dir>/mutants.out/`, `<go_dir>/coverage.out`)
+  `RUSTC_WRAPPER`, report path (`<rust_dir>/mutants.out/`, `<ts_dir>/reports/mutation/`,
+  `<go_dir>/coverage.out`)
   and `timeout-minutes`. The root justfile must import `kit/common`, for `ci-base`.
 - If your runner sets a `CARGO_TARGET_DIR` outside the workspace for this job, remove
   it and clean what it left on the runner's disk.
