@@ -47,10 +47,12 @@ python-audit:
 # The audit leaves the gate unless the diff touches the lock. An advisory database
 # moves on its own schedule, not with the diff: an audit inside `*-check` turns a
 # docs-only PR red the day a CVE is published (rules/cicd/pipeline.md). So `*-check`
-# runs the audit only when the lock changed against `base` (two-dot against its tip,
-# the working tree and an untracked lock included, so no merge base is needed), or
-# when `base` does not resolve: not knowing is not a reason to skip. It prints
-# `audit: …` (skipped, changed, unresolvable, empty base) before running or skipping it.
+# runs the audit only when the lock changed since the merge base of `base` and HEAD
+# (the working tree and an untracked lock included; a branch merely behind a lock bump
+# on `base` changed nothing), or when that cannot be known: `base` empty or
+# unresolvable, or no merge base (a shallow clone). Not knowing is not a reason to
+# skip. It prints `audit: …` (skipped, changed, unresolvable, empty base, no merge
+# base) before running or skipping it.
 # `*-audit` runs the tool unconditionally — the scheduled job (kit/cicd) calls it
 # daily on the default branch.
 # This recipe is identical in go.just, python.just and rust.just; the
@@ -60,9 +62,11 @@ _audit-gate dir lock cmd:
         echo 'audit: base is empty (in CI: kit/common missing, or ci-base failed to fetch)'; \
     elif ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null 2>&1; then \
         echo {{quote("audit: " + base + " unresolvable")}}; \
-    elif git diff --quiet {{quote(base)}} -- {{quote(dir / lock)}} \
+    elif ! fork="$(git merge-base {{quote(base)}} HEAD 2>/dev/null)"; then \
+        echo {{quote("audit: no merge base with " + base + " (a shallow clone?)")}}; \
+    elif git diff --quiet "$fork" -- {{quote(dir / lock)}} \
         && [ -z "$(git ls-files --others --exclude-standard -- {{quote(dir / lock)}})" ]; then \
-        echo {{quote("audit: skipped — " + dir / lock + " unchanged against " + base)}}; exit 0; \
+        echo {{quote("audit: skipped — " + dir / lock + " unchanged since its merge base with " + base)}}; exit 0; \
     else \
         echo {{quote("audit: " + dir / lock + " changed")}}; \
     fi; \

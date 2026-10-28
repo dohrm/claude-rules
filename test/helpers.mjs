@@ -73,20 +73,24 @@ export const read = (...p) => readFileSync(join(...p), 'utf8')
 export const has = (...p) => existsSync(join(...p))
 
 // ------------------------------------------------------------ audit gate
+// git in a fixture repo, with an identity and no hook or signing from this machine.
+function git(dir, args, input) {
+  const r = spawnSync('git', [
+    '-c', 'init.defaultBranch=main', '-c', 'user.name=gate-test', '-c', 'user.email=gate-test@example.invalid',
+    '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args,
+  ], { cwd: dir, encoding: 'utf8', input })
+  if (r.error) throw r.error
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
+  return r.stdout.trim()
+}
+
 // Commits the tree, so a gate run with `base=HEAD` has a real base to compare the lock
 // against. `blank` (a repo-relative path) is committed EMPTY, then restored, so the tree
 // shows that file changed against the base while staying valid for the toolchain.
 export function commitBase(dir, blank) {
   const saved = blank && readFileSync(join(dir, blank))
   if (blank) writeFileSync(join(dir, blank), '')
-  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'base']]) {
-    const r = spawnSync('git', [
-      '-c', 'init.defaultBranch=main', '-c', 'user.name=gate-test', '-c', 'user.email=gate-test@example.invalid',
-      '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args,
-    ], { cwd: dir, encoding: 'utf8' })
-    if (r.error) throw r.error
-    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
-  }
+  for (const args of [['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'base']]) git(dir, args)
   if (blank) writeFileSync(join(dir, blank), saved)
 }
 
@@ -117,7 +121,7 @@ export function auditGateCases({ tech, lock, tool, assemble, runJust, changeLock
       commitBase(dir)
       const r = runJust(dir, `${tech}-check`, ['base=HEAD', stub])
       assert.equal(r.status, 0, r.out)
-      assert.ok(r.out.includes(`audit: skipped — ${lock} unchanged against HEAD`), `no skip line:\n${r.out}`)
+      assert.ok(r.out.includes(`audit: skipped — ${lock} unchanged since its merge base with HEAD`), `no skip line:\n${r.out}`)
       assert.ok(!r.out.includes(SENTINEL), `the audit must not run:\n${r.out}`)
     })
   })
@@ -129,6 +133,39 @@ export function auditGateCases({ tech, lock, tool, assemble, runJust, changeLock
       const r = runJust(dir, `${tech}-check`, ['base=HEAD', stub])
       assert.equal(r.status, 0, r.out)
       assert.ok(r.out.includes(`audit: ${lock} changed`), `no changed line:\n${r.out}`)
+      assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
+    })
+  })
+
+  // A PR checked out at its head (Gitea may not build a merge ref) whose base bumped the
+  // lock since the branch forked: the branch changed nothing, so the audit is skipped.
+  test(`just ${tech}-check skips the audit when only base moved ${lock} since the fork`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      git(dir, ['checkout', '-q', '-b', 'pr'])
+      git(dir, ['checkout', '-q', 'main'])
+      writeFileSync(join(dir, lock), '')
+      git(dir, ['add', lock])
+      git(dir, ['commit', '-q', '-m', 'bump the lock on base'])
+      git(dir, ['checkout', '-q', 'pr'])
+      const r = runJust(dir, `${tech}-check`, ['base=main', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes(`audit: skipped — ${lock} unchanged since its merge base with main`), `no skip line:\n${r.out}`)
+      assert.ok(!r.out.includes(SENTINEL), `the audit must not run:\n${r.out}`)
+    })
+  })
+
+  // A shallow clone whose history stops before the fork: base resolves, but no merge
+  // base can be found. An unrelated root commit gives git the same answer.
+  test(`just ${tech}-check runs the audit when base shares no merge base with HEAD`, { skip, timeout }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir)
+      commitBase(dir)
+      git(dir, ['branch', 'unrelated', git(dir, ['commit-tree', git(dir, ['mktree'], ''), '-m', 'unrelated'])])
+      const r = runJust(dir, `${tech}-check`, ['base=unrelated', stub])
+      assert.equal(r.status, 0, r.out)
+      assert.ok(r.out.includes('audit: no merge base with unrelated'), `no merge-base line:\n${r.out}`)
       assert.ok(r.out.includes(SENTINEL), `the audit must run:\n${r.out}`)
     })
   })

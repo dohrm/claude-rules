@@ -8,7 +8,7 @@ title: "Python Quality Gates"
 just python-check     # python-lint → mypy → pytest → deptry → python-audit if uv.lock changed
 ```
 
-Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is pre-push and `just check`. Tier 4 is `just python-mutate` — never a hook. Wiring: `.dev/kit/python/README.md`. `python-check` runs the audit only when `uv.lock` changed against `base` (or `base` does not resolve), and prints which: an advisory database moves with the date, not the diff (`rules/cicd/pipeline.md`). `just python-audit` runs it always.
+Every line is `uv run --locked`. `python-lint` is pre-commit; `python-check` is pre-push and `just check`. Tier 4 is `just python-mutate` — never a hook. Wiring: `.dev/kit/python/README.md`. `python-check` runs the audit only when `uv.lock` changed since its merge base with `base` (or that cannot be known), and prints which: an advisory database moves with the date, not the diff (`rules/cicd/pipeline.md`). `just python-audit` runs it always.
 
 | Recipe | Command | Config (merge `pyproject.snippet.toml`) |
 |---|---|---|

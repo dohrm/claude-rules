@@ -60,15 +60,18 @@ Propose it in a few lines and get a yes:
 - Tier 4 as its own job, **non-blocking until ratcheted** (`testing/ratchet.md`).
 - One aggregator job (`ci-ok`) as the single required check, so a skipped job
   cannot read as green.
+- A scheduled audit workflow when the repo has Rust, Go or Python: `<tech>-check`
+  audits only a changed lock, so without it a new advisory is reported nowhere.
+  It is not a required check, and a red audit opens an issue, not a red run.
 - A release workflow only if the repo publishes something.
 
 ### 4. Write
 
 Start from the installed snippets — `kit/cicd/ci.snippet.yaml`,
-`kit/cicd/release.snippet.yaml`, and the Tier-4 job from each language kit — and
-adapt: delete the jobs for absent technologies, set `runs-on`, pin the toolchain
-versions, point the working directories at the justfile's `*_dir` values. Never
-copy a command out of the justfile into the workflow.
+`kit/cicd/audit.snippet.yaml`, `kit/cicd/release.snippet.yaml`, and the Tier-4 job
+from each language kit — and adapt: delete the jobs for absent technologies, set
+`runs-on`, pin the toolchain versions, point the working directories at the
+justfile's `*_dir` values. Never copy a command out of the justfile into the workflow.
 
 ### 5. Hand off — the human's part
 
@@ -76,6 +79,8 @@ End with the short list only a human can do, each with why:
 
 - the runner label / self-hosted runner,
 - the secrets to create (name them; never a value, never in a file),
+- that the job token may write issues, for the scheduled audit (`issues: write`
+  on GitHub; on Gitea, check the instance's Actions token permissions),
 - the **branch protection**: make `ci-ok` the required check,
 - when to flip Tier 4 to blocking (after the baseline is measured),
 - who pushes tags — the release trigger is a human act (`cicd/release.md`).

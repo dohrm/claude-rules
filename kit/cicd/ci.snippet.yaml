@@ -37,6 +37,8 @@ jobs:
     runs-on: ubuntu-latest       # ADAPT to your runner label
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -78,6 +80,8 @@ jobs:
     runs-on: ubuntu-latest       # ADAPT
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - uses: actions/setup-go@v5
         with:
           go-version: stable     # ADAPT — pin a version for a release-bearing repo
@@ -100,6 +104,8 @@ jobs:
     runs-on: ubuntu-latest       # ADAPT
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:

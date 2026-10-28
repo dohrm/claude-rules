@@ -8,10 +8,11 @@ name: CI
 #   ts-gates      — ts jalon + derivatives (test/fixtures/ts-gate)
 #   godot-gates   — godot jalon: just godot-lint / godot-check (test/fixtures/godot-gate)
 #   devstack-gates— devstack jalon: the log-file trap and the per-tree control socket
+#   cicd-gates    — the CI snippets' runtime cases that need `just` (ci-base, the merge-base checkout)
 #
 # Language jobs are separate so a red toolchain names itself. Local `npm test`
 # skips those files when the toolchain is missing; each job sets RUST_GATES=1,
-# PYTHON_GATES=1, GO_GATES=1, TS_GATES=1, GODOT_GATES=1 or DEVSTACK_GATES=1 so a missing tool is a failure,
+# PYTHON_GATES=1, GO_GATES=1, TS_GATES=1, GODOT_GATES=1, DEVSTACK_GATES=1 or CICD_GATES=1 so a missing tool is a failure,
 # never a skip-as-pass.
 #
 # The eval harness (eval/run.mjs) is deliberately NOT here: it calls the `claude`
@@ -243,9 +244,28 @@ jobs:
       - name: devstack jalon (the log-file trap + the per-tree control socket)
         run: node --test test/devstack-gates.test.mjs
 
+  # `test` runs test/cicd.test.mjs too, but without `just`, so its just-spawning cases
+  # (ci-base, the full-checkout merge base) skip there.
+  cicd-gates:
+    runs-on: ubuntu-latest
+    env:
+      CICD_GATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
+      - name: the CI snippets, ci-base run for real
+        run: node --test test/cicd.test.mjs
+
   ci-ok:
     if: always()
-    needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates, devstack-gates]
+    needs: [test, rust-gates, python-gates, go-gates, ts-gates, godot-gates, devstack-gates, cicd-gates]
     runs-on: ubuntu-latest
     steps:
       # Same step as kit/cicd/ci.snippet.yaml: each job by name, an empty result fails.
@@ -258,9 +278,10 @@ jobs:
           TS_GATES: ${{ needs.ts-gates.result }}
           GODOT_GATES: ${{ needs.godot-gates.result }}
           DEVSTACK_GATES: ${{ needs.devstack-gates.result }}
+          CICD_GATES: ${{ needs.cicd-gates.result }}
         shell: bash
         run: |
-          for job in TEST RUST_GATES PYTHON_GATES GO_GATES TS_GATES GODOT_GATES DEVSTACK_GATES; do
+          for job in TEST RUST_GATES PYTHON_GATES GO_GATES TS_GATES GODOT_GATES DEVSTACK_GATES CICD_GATES; do
             r="${!job}"
             echo "$job: ${r:-<no result>}"
             [ "$r" = "success" ] || { echo "✗ $job did not succeed (${r:-no result})"; exit 1; }

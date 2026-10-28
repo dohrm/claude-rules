@@ -113,7 +113,7 @@ describe('python quality gates', { concurrency: 1 }, () => {
       const r = runJust(dir, 'python-check', ['base=HEAD'])
       assert.equal(r.status, 0, `python-check must be green:\n${r.out}`)
       assert.match(r.out, /deptry/)
-      assert.ok(r.out.includes('audit: skipped — api/uv.lock unchanged against HEAD'), r.out)
+      assert.ok(r.out.includes('audit: skipped — api/uv.lock unchanged since its merge base with HEAD'), r.out)
     })
   })
 

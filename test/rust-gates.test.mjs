@@ -127,7 +127,7 @@ describe('rust quality gates', { concurrency: 1 }, () => {
       commitBase(dir)
       const r = runJust(dir, 'rust-check', ['base=HEAD'])
       assert.equal(r.status, 0, `rust-check must be green:\n${r.out}`)
-      assert.ok(r.out.includes('audit: skipped — api/Cargo.lock unchanged against HEAD'), r.out)
+      assert.ok(r.out.includes('audit: skipped — api/Cargo.lock unchanged since its merge base with HEAD'), r.out)
     })
   })
 
