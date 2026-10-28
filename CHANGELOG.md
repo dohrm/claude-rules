@@ -185,7 +185,9 @@ ignored `N`.
 - **`kit/python/mutation-ci.yaml`, `kit/ts/mutation-ci.yaml` and
   `kit/go/coverage-ci.yaml` take their base from `ci-base`** (`base="$(just ci-base)"`,
   fetched in full; a failed fetch fails the step), and install `just` if it is missing.
-  The TS and Go jobs upload their report per forge like the Rust one.
+  The TS and Go jobs upload their report per forge like the Rust one. The TS and Python
+  mutation jobs carry `timeout-minutes: 120` and skip the `rfc/*` → default-branch PR,
+  like the Rust one.
 - **`init` writes a `mutate-diff` that forwards the overrides.** The Rust line passes
   `base`, `mutate_jobs` and `mutate_args` to the nested `just` calls, which otherwise
   re-read them from the files.
@@ -197,9 +199,8 @@ Hand-merge — `init` never rewrites an existing justfile, and the snippets are 
   `just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} rust-mutate "$(just base={{quote(base)}} mutate-from)"`
 - Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`, report
   path (`<rust_dir>/mutants.out/`, `<ts_dir>/reports/mutation/`, `<go_dir>/coverage.out`)
-  and, for Rust, `RUSTC_WRAPPER` and `timeout-minutes`. The root justfile must import
-  `kit/common`, for `ci-base`. Only the Rust job is time-bounded and skips the
-  `rfc/*` → default-branch PR.
+  and `timeout-minutes` (Rust also `RUSTC_WRAPPER`). The root justfile must import
+  `kit/common`, for `ci-base`.
 - If your runner sets a `CARGO_TARGET_DIR` outside the workspace for this job, remove
   it and clean what it left on the runner's disk.
 - Add `timeout_multiplier` to your `.cargo/mutants.toml`.

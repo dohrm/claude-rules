@@ -42,7 +42,12 @@ env:
 
 jobs:
   mutation:
+    # The `rfc/<slug>` → default-branch PR is not mutated again: each phase was, against
+    # `rfc/<slug>`, and those runs are the proof (rules/agent/autonomy.md § L4).
+    # An `if:` rather than a trigger filter, so the PR shows the job skipped, not missing.
+    if: ${{ !(startsWith(github.head_ref, 'rfc/') && github.base_ref == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest             # ADAPT to your runner label
+    timeout-minutes: 120               # ADAPT once you know your numbers — bounded by default
     continue-on-error: true            # ← remove once the baseline is ratcheted
     defaults:
       run:
