@@ -102,7 +102,17 @@ for (const file of WORKFLOWS) {
 // fetch the PR base, or fetches it shallow, quietly turns every PR back into a daily
 // advisory lottery. The audit-bearing gates are the ones checked.
 // The token, not a YAML shape: any `just … <tech>-check` outside a comment or a step name.
-const AUDITED = /^(?!\s*(?:-\s*)?name:)[^#\n]*\bjust\b[^#\n]*\b(rust|go|python)-check\b/m
+const AUDITED = /^(?![ \t]*(?:-[ \t]*)?name:)[^#\n]*\bjust\b[^#\n]*\b(rust|go|python)-check\b/m
+
+// The ci.yml test below is negative, so the matcher needs its own positive cases.
+test('AUDITED matches a gate call, not its step label or a comment', () => {
+  for (const l of ['run: just rust-check', '  - run: just base="$base" go-check', '- { name: x, run: just python-check }',
+    '      - run: "just rust-check"', 'just -f justfile go-check', 'just  base=x python-check'])
+    assert.match(l, AUDITED, l)
+  for (const l of ['- name: just rust-check', '  # just go-check runs the audit', 'run: npm test # just python-check',
+    'run: just ts-check'])
+    assert.doesNotMatch(l, AUDITED, l)
+})
 
 function jobs(file) {
   const text = readFileSync(join(REPO, file), 'utf8')
