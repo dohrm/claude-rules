@@ -79,3 +79,8 @@ loop (hypothesis 1) is the defect.
 - `npm test`: 492 pass, 2 fail — `python-gates` (`pip-audit` finds new advisories in the
   fixture's `uv.lock`: certifi, filelock). Same 2 failures on 319310a: pre-existing,
   external, tracked in #50. Not bypassed.
+- Tier 3: `just code-review` ran (claude). The report was not promoted: written in French,
+  `### Files reviewed` missing — #55 reproduced here. Its findings read and applied: this
+  repo's own `.github/workflows/ci.yml` `ci-ok` moved to the named form, and the test
+  covers both files (16 cases). Re-review after #55 lands.
+- `npm test`: 500 pass, 2 fail — same 2 `python-gates` cases as on 319310a (#50).
