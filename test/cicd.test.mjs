@@ -320,6 +320,7 @@ test('the Rust mutation step tolerates survivors and timeouts during calibration
 test('the TS and Python changed-files steps pass on a PR with no source file, under pipefail', () => {
   const steps = { 'kit/ts/mutation-ci.yaml': ['Compute changed files', 'src/a.ts'],
     'kit/python/mutation-ci.yaml': ['Compute changed source files', 'src/a.py'] }
+  const realGrep = execFileSync('sh', ['-c', 'command -v grep'], { encoding: 'utf8' }).trim()
   const dir = mkdtempSync(join(tmpdir(), 'changed-step-'))
   try {
     writeFileSync(join(dir, 'just'), '#!/bin/sh\necho origin/main\n')
@@ -338,10 +339,15 @@ test('the TS and Python changed-files steps pass on a PR with no source file, un
       }
       assert.deepEqual(step('README.md docs/x.md'), { status: 0, files: 'files=\n' }, `${file}: nothing to mutate is not a failure`)
       assert.deepEqual(step(`README.md ${source}`), { status: 0, files: `files=${source}\n` }, file)
-      // No match (exit 1) is tolerated; grep failing (exit 2) is not.
-      writeFileSync(join(dir, 'grep'), '#!/bin/sh\nexit 2\n')
-      chmodSync(join(dir, 'grep'), 0o755)
-      assert.notEqual(step(`README.md ${source}`).status, 0, `${file}: a failed grep fails the step`)
+      // No match (exit 1) is tolerated; grep failing (exit 2) is not — each grep, so the
+      // stub fails one call (told apart by its first flag) and runs the real grep otherwise.
+      // It drains stdin first: exiting unread would SIGPIPE the grep upstream, which
+      // fails the step whatever the guard under test says.
+      for (const flag of ['-E', '-v']) {
+        writeFileSync(join(dir, 'grep'), `#!/bin/sh\n[ "$1" = ${flag} ] && { cat >/dev/null; exit 2; }\nexec ${realGrep} "$@"\n`)
+        chmodSync(join(dir, 'grep'), 0o755)
+        assert.notEqual(step(`README.md ${source}`).status, 0, `${file}: the grep ${flag} failing fails the step`)
+      }
       rmSync(join(dir, 'grep'))
     }
   } finally {
