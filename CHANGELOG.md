@@ -167,10 +167,14 @@ findings that calibration is meant to tolerate.
 - **No snippet sets `continue-on-error` on the job.** A crash, a failed baseline or a
   cancelled or timed-out run now shows red.
 - **The Rust mutation step tolerates cargo-mutants' findings, and nothing else.** Exit 2
-  (survivors) and 3 (timeouts) pass while calibrating. Every other exit fails the step.
-  The base is resolved on its own line, so a failed `ci-base` fails the step.
+  (survivors) and 3 (timeouts) pass while calibrating, and the log says so. Every other
+  exit fails the step. The base is resolved on its own line, so a failed `ci-base`
+  fails the step.
 - **TS, Python and Go need no tolerance.** Stryker without `thresholds.break`,
   `mutmut run`, and the Go ratchet at a `0.0` baseline all exit 0 on findings.
+- **The TS and Python changed-files steps pass when nothing matches.** Under
+  `pipefail` (Gitea's default shell), a PR with no source file failed on `grep`'s
+  exit 1. The key used to hide that.
 - **`rust-mutate`'s empty-range refusal exits 1, not 2.** 2 is the code the step
   tolerates.
 - `testing/ratchet.md` § The ratchet: "non-blocking" now means non-blocking on findings.
@@ -178,7 +182,8 @@ findings that calibration is meant to tolerate.
 Hand-merge — in each copied workflow (`mutation*.yaml`, `coverage-go.yaml`):
 
 - Remove the job's `continue-on-error: true`.
-- Rust only: replace the mutation step's `run:` with the snippet's three-line block.
+- Rust: replace the mutation step's `run:` with the snippet's block.
+- TS and Python: in the changed-files step, wrap each `grep` as `{ grep … || true; }`.
 
 ### Fixed — mutation in CI measures the PR's own diff, in bounded time and disk
 

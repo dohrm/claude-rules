@@ -97,13 +97,16 @@ jobs:
       - name: Mutation testing (the PR's diff against its base)
         env:
           BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
-        # CALIBRATION ONLY: cargo-mutants exits 2 on survivors and 3 on timeouts — findings,
-        # tolerated while the baseline is measured. Any other exit stays red. Once
-        # ratcheted, drop the last line and `|| rc=$?`: this is the gate.
+        # cargo-mutants exits 2 on survivors and 3 on timeouts — findings, tolerated while
+        # the baseline is measured. Any other exit stays red.
         run: |
           base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
           rc=0; just base="$base" mutate_jobs=2 rust-mutate || rc=$?
-          [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || [ "$rc" -eq 3 ]
+          case "$rc" in
+            0) ;;
+            2|3) echo "cargo-mutants exit $rc: findings, tolerated while calibrating — see mutants.out/" ;;  # CALIBRATION ONLY: drop this line once ratcheted
+            *) exit "$rc" ;;
+          esac
 
       # upload-artifact@v4 fails on Gitea (GHESNotSupportedError) and v3 no longer runs
       # on github.com: one step per forge.

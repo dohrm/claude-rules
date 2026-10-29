@@ -315,6 +315,35 @@ test('the Rust mutation step tolerates survivors and timeouts during calibration
   }
 })
 
+// Without the job-level mask, a PR with nothing to mutate must still pass: under
+// Gitea's default `-e -o pipefail`, a grep matching nothing failed the step.
+test('the TS and Python changed-files steps pass on a PR with no source file, under pipefail', () => {
+  const steps = { 'kit/ts/mutation-ci.yaml': ['Compute changed files', 'src/a.ts'],
+    'kit/python/mutation-ci.yaml': ['Compute changed source files', 'src/a.py'] }
+  const dir = mkdtempSync(join(tmpdir(), 'changed-step-'))
+  try {
+    writeFileSync(join(dir, 'just'), '#!/bin/sh\necho origin/main\n')
+    writeFileSync(join(dir, 'git'), '#!/bin/sh\nprintf "%s\\n" $CHANGED\n')
+    chmodSync(join(dir, 'just'), 0o755)
+    chmodSync(join(dir, 'git'), 0o755)
+    for (const [file, [name, source]] of Object.entries(steps)) {
+      const run = stepRun(file, name)
+      const step = (changed) => {
+        const out = join(dir, 'output')
+        writeFileSync(out, '')
+        const r = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', run], {
+          encoding: 'utf8', env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_OUTPUT: out, CHANGED: changed },
+        })
+        return { status: r.status, files: readFileSync(out, 'utf8') }
+      }
+      assert.deepEqual(step('README.md docs/x.md'), { status: 0, files: 'files=\n' }, `${file}: nothing to mutate is not a failure`)
+      assert.deepEqual(step(`README.md ${source}`), { status: 0, files: `files=${source}\n` }, file)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('the Python, TS mutation and Go coverage snippets take the full base from ci-base', () => {
   for (const file of ['kit/python/mutation-ci.yaml', 'kit/ts/mutation-ci.yaml', 'kit/go/coverage-ci.yaml']) {
     const text = snippet(file)
