@@ -141,17 +141,20 @@ test('the shipped eslint configs name any / ! (and the React overlay names hooks
 
 // The witness is only a proof for what the README installs (#49: it locked react-hooks 5
 // and eslint 9 while the README installed 7 and 10 unpinned, so both breakages passed here).
-test('the React install block pins the majors the witness lock tests', () => {
+test('the ts-web README pins the majors the witness lock tests', () => {
   const readme = readFileSync(join(KIT.web, 'README.md'), 'utf8')
   const lock = JSON.parse(readFileSync(join(FIXTURE, 'package-lock.json'), 'utf8')).packages
-  // Every `name@N` the install block pins, read from the block, so a new pin is guarded too.
-  const pins = [...readme.matchAll(/^npm i -D (.+)$/gm)]
-    .flatMap(m => m[1].split(/\s+/)).map(t => t.match(/^(@?[^@\s]+)@(\d+)$/)).filter(Boolean)
+  // Every `name@spec` on an `npm i` line, so a new pin is guarded too — and only a bare
+  // major is comparable with the lock, so any other spec fails rather than being skipped.
+  const pins = [...readme.matchAll(/^npm i(?: -D)? (.+)$/gm)]
+    .flatMap(m => m[1].split(/\s+/)).map(t => t.match(/^(@?[^@\s]+)@(.+)$/)).filter(Boolean)
   const pinned = pins.map(([, name]) => name)
   for (const name of ['eslint', '@eslint/js', 'eslint-plugin-react-hooks', 'eslint-plugin-jsx-a11y'])
     assert.ok(pinned.includes(name), `${name} pinned: an unpinned major drifts from the witness`)
-  for (const [, name, major] of pins)
-    assert.equal(lock[`node_modules/${name}`]?.version.split('.')[0], major, `${name}@${major}: the witness locks that major`)
+  for (const [tok, name, major] of pins) {
+    assert.match(major, /^\d+$/, `${tok}: pin a bare major, the one the guard compares`)
+    assert.equal(lock[`node_modules/${name}`]?.version.split('.')[0], major, `${tok}: the witness locks that major`)
+  }
 })
 
 describe('ts language floor', { concurrency: 1 }, () => {
