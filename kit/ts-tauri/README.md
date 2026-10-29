@@ -24,7 +24,8 @@ The Rust host is `just rust-check`. This recipe does not run
 ## Requirements
 
 Same as `kit/ts` (Node.js >= 18 + npm) — see its Requirements section. The
-Rust host's requirements are `kit/rust/README.md`'s.
+webview's packages are `kit/ts-web/README.md`'s install block, eslint 9 pin included.
+The Rust host's requirements are `kit/rust/README.md`'s.
 
 ## Configs — copy once, then they are yours
 

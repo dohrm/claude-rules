@@ -30,8 +30,9 @@ Same as `kit/ts` (Node.js >= 18 + npm) — see its Requirements section.
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook |
 
 ```bash
-npm i -D eslint typescript typescript-eslint globals vitest
-npm i -D eslint-plugin-react-hooks eslint-plugin-jsx-a11y
+# eslint 9: eslint-plugin-jsx-a11y 6.10 refuses eslint 10 (peer range). Lift it with jsx-a11y.
+npm i -D eslint@9 @eslint/js@9 typescript typescript-eslint globals vitest
+npm i -D eslint-plugin-react-hooks@7 eslint-plugin-jsx-a11y@6
 npm i react
 ```
 
