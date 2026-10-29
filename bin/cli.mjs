@@ -522,13 +522,19 @@ function remove(profilesArg) {
     codex = prepareCodex(files, rules, fullUninstall ? {} : modules, lock.codex)
   }
   // The kept records follow: a rewritten file gets its new hash, a dropped one goes.
+  // A Claude or Cursor rule of a kept profile goes too once its language is: install
+  // would not emit it (`isLanguageDead`). The lock holds no globs, so they are read from
+  // the installed file; an edited one is then refused by the tree check below.
+  const remainingLangs = remaining.filter(p => LANG_EXT[p])
+  const deadRule = path => /^\.(claude|cursor)\/rules\/.+\.mdc?$/.test(path) && existsSync(path)
+    && isLanguageDead((({ paths, globs }) => paths ?? globs)(splitFm(readFileSync(path, 'utf8')).fm), remainingLangs)
   for (const record of keptInstalled) for (const path of Object.keys(record.files)) {
-    if (codexDropped.includes(path)) delete record.files[path]
+    if (codexDropped.includes(path) || (record.kind === 'rule' && deadRule(path))) delete record.files[path]
     else if (writes.has(path)) record.files[path] = hash(writes.get(path))
   }
   // Delete exactly the files the removed records hold that no kept record still does.
   const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
-  const plan = { writes, deletes: [...new Set([...lock.installed.filter(i => !isKept(i)).flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
+  const plan = { writes, deletes: [...new Set([...lock.installed.flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
   plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: emptiedSkills(lock.installed, plan.deletes) }))
   safePath(LOCK)
 

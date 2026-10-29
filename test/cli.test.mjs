@@ -271,6 +271,22 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   })
 })
 
+// #48: a kept profile's overlay for the removed language is one install would not emit.
+test('remove <stack> also removes that language\'s overlays in the kept profiles', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude,cursor,codex'], dir))
+    const overlays = ['.claude/rules/hexagonal/go.md', '.cursor/rules/hexagonal/go.mdc', '.agents/rules/hexagonal/go.md']
+    for (const path of overlays) assert.ok(has(dir, path), `${path} installed`)
+
+    ok(runCliBare(['remove', 'go'], dir))
+    for (const path of overlays) assert.ok(!has(dir, path), `${path} removed with go`)
+    const owned = lockOf(dir).installed.flatMap(i => Object.keys(i.files))
+    assert.deepEqual(owned.filter(path => overlays.includes(path)), [], 'the lock no longer owns them')
+    assert.ok(has(dir, '.claude/rules/hexagonal/rust.md') && has(dir, '.cursor/rules/hexagonal/rust.mdc'), 'the kept language\'s overlay stays')
+    assert.ok(has(dir, '.claude/rules/hexagonal/principle.md'), 'a language-free rule stays')
+  })
+})
+
 test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')

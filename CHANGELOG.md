@@ -157,6 +157,18 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Fixed — `remove <language>` takes that language's overlays with it
+
+`remove go` left `.claude/rules/hexagonal/go.md` (and the Cursor `.mdc`) installed and
+owned by the lock: the kept profile's records were never re-checked for the removed
+language ([#48](https://github.com/dohrm/claude-rules/issues/48)). `remove` now drops a
+kept profile's Claude or Cursor rule whose every glob targets a language no longer
+locked — exactly what `add` and `update` would not emit. Codex was already right.
+
+- **Nothing to hand-merge.** A repo that hit this: `update` removes the leftover, or
+  delete it and its lock entry by hand. An overlay you edited is refused like any edited
+  file (`--force` deletes it).
+
 ### Fixed — the React eslint overlay works on current packages
 
 ([#49](https://github.com/dohrm/claude-rules/issues/49)) The `kit/ts-web` install block,
