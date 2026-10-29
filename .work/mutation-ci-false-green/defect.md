@@ -1,6 +1,6 @@
 # Bug — a mutation job killed from outside is reported green
 
-- **Status**: diagnosed
+- **Status**: fixing
 - **Autonomy**: L3
 - **Repository**: https://github.com/dohrm/claude-rules
 - **Base branch**: next
@@ -86,3 +86,4 @@ cargo-mutants' "missed mutants" code. Tolerating 2 in the step would let a faile
 
 - phase 1–3: root cause confirmed (hypothesis 1); tool exit codes checked at the source
   (cargo-mutants `src/exit_code.rs`, mutmut `__main__.py`, Stryker configuration docs).
+- phase 4: repro re-run on the base, fails as recorded (`continue-on-error` found; exit 2 not tolerated). Fix: no job-level `continue-on-error` in the four snippets; the Rust step tolerates 2 and 3 only; the empty-range guard exits 1. `PYTHON_GATES=1 GO_GATES=1 RUST_GATES=1 just check` → 554 pass, 0 fail, 7 skipped (Godot).

@@ -17,10 +17,12 @@ name: Mutation (Python)
 # touched, not on the hunks — a large file with a two-line change still mutates
 # whole. Narrow `source_paths` in pyproject.toml if that gets slow.
 #
-# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose, and
-# mutmut has no built-in threshold flag. First establish a baseline, triage real
+# CALIBRATION PHASE: this job is NON-BLOCKING ON ITS FINDINGS on purpose — mutmut
+# has no built-in threshold flag, and `mutmut run` exits 0 whatever survives, non-zero
+# only when the run itself failed. First establish a baseline, triage real
 # gaps vs equivalent mutants, THEN decide what number you defend — and enforce it
 # in the last step rather than by hand. Never a round number: see the ratchet rule.
+# Never `continue-on-error` on the job: it also greens a crash or a cancelled run.
 #
 # COPY to .gitea/workflows/mutation-python.yaml (or .github/workflows/). The
 # syntax is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g.
@@ -48,7 +50,6 @@ jobs:
     if: ${{ !(startsWith(github.head_ref, 'rfc/') && github.base_ref == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest             # ADAPT to your runner label
     timeout-minutes: 120               # ADAPT once you know your numbers — bounded by default
-    continue-on-error: true            # ← remove once the baseline is ratcheted
     defaults:
       run:
         working-directory: .           # ADAPT to your python_dir (e.g. services/api)

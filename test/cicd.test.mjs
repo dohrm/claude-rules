@@ -246,8 +246,9 @@ function assertUploadsPerForge(file) {
 test('kit/rust/mutation-ci.yaml: just with the PR base from ci-base, uploads per forge', () => {
   const file = 'kit/rust/mutation-ci.yaml'
   const text = snippet(file)
-  const runs = text.split('\n').filter(l => /^\s+run: .*\b(cargo mutants|rust-mutate)\b/.test(l)).map(l => l.trim())
-  assert.deepEqual(runs, ['run: just base="$(just ci-base)" mutate_jobs=2 rust-mutate'], 'one definition of the range: the recipe')
+  assert.doesNotMatch(text, /cargo mutants --in-diff/, 'one definition of the range: the recipe')
+  assert.match(stepRun(file, "Mutation testing (the PR's diff against its base)"),
+    /^base="\$\(just ci-base\)" .*\n.*just base="\$base" mutate_jobs=2 rust-mutate\b/, 'the recipe, with the base from ci-base')
   assert.match(text, BASE_ENV, 'the base through env:, never interpolated into the shell')
   assert.doesNotMatch(text, SHALLOW, 'a shallow base has no merge base (#43)')
   assert.match(text, FULL_CHECKOUT)
@@ -261,6 +262,56 @@ test('every mutation snippet is bounded and skips the rfc/* → default-branch P
     assert.match(text, /\n {4}timeout-minutes: \d+\b/, `${file}: the job is bounded`)
     assert.match(text, /\n {4}if: \$\{\{ !\(startsWith\(github\.head_ref, 'rfc\/'\) && github\.base_ref == github\.event\.repository\.default_branch\) \}\}\n/,
       `${file}: the rfc/* → default-branch PR is skipped, its phases are the proof`)
+  }
+})
+
+// Calibration tolerates a tool's FINDINGS, never its failures. On the job,
+// continue-on-error also turned a failed baseline, a crash or a cancelled run green: a
+// hwe-platform job SIGTERM'd before its first mutant reported success.
+test('no Tier 4 snippet sets continue-on-error on the job', () => {
+  for (const file of [...MUTATION_SNIPPETS, 'kit/go/coverage-ci.yaml'])
+    assert.doesNotMatch(snippet(file), /\n {4}continue-on-error:/, `${file}: a cancelled or crashed run would read green`)
+})
+
+// A step's `run:` script, one line or a `|` block, found by the step's name.
+function stepRun(file, name) {
+  const lines = snippet(file).split('\n')
+  const at = lines.findIndex(l => l === `      - name: ${name}`)
+  if (at === -1) throw new Error(`${file}: no step named ${name}`)
+  for (let i = at + 1; i < lines.length && !/^ {6}- /.test(lines[i]); i++) {
+    const one = lines[i].match(/^ {8}run: (.+)$/)
+    if (!one) continue
+    if (one[1] !== '|') return one[1]
+    const run = []
+    for (i++; i < lines.length && (lines[i] === '' || lines[i].startsWith(' '.repeat(10))); i++)
+      run.push(lines[i].slice(10))
+    return run.join('\n')
+  }
+  throw new Error(`${file}: step ${name} has no run:`)
+}
+
+test('the Rust mutation step tolerates survivors and timeouts during calibration, and nothing else', () => {
+  const run = stepRun('kit/rust/mutation-ci.yaml', "Mutation testing (the PR's diff against its base)")
+  const dir = mkdtempSync(join(tmpdir(), 'mutate-step-'))
+  try {
+    // `just ci-base` prints the base (or fails); any other call is rust-mutate, exiting $RC.
+    writeFileSync(join(dir, 'just'), '#!/bin/sh\n'
+      + 'if [ "$1" = ci-base ]; then [ -z "$CI_BASE_FAILS" ] || exit 1; echo origin/main; exit 0; fi\n'
+      + 'echo "$@" > "$RECORD"; exit "$RC"\n')
+    chmodSync(join(dir, 'just'), 0o755)
+    const step = (env) => spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', run], {
+      encoding: 'utf8', env: { PATH: `${dir}:${process.env.PATH}`, RECORD: join(dir, 'called'), ...env },
+    })
+    for (const rc of [0, 2, 3])
+      assert.equal(step({ RC: String(rc) }).status, 0, `cargo-mutants exit ${rc} is a finding: tolerated while calibrating`)
+    for (const rc of [1, 4, 5, 6, 70, 143])
+      assert.notEqual(step({ RC: String(rc) }).status, 0, `exit ${rc} measured nothing: the step must fail`)
+    assert.match(readFileSync(join(dir, 'called'), 'utf8'), /^base=origin\/main mutate_jobs=2 rust-mutate$/m)
+    rmSync(join(dir, 'called'))
+    assert.notEqual(step({ RC: '0', CI_BASE_FAILS: '1' }).status, 0, 'a failed fetch fails the step')
+    assert.throws(() => readFileSync(join(dir, 'called')), 'rust-mutate never runs without a base')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 })
 

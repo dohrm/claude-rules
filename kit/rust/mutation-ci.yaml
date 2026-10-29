@@ -18,7 +18,7 @@ name: Mutation
 # THE RANGE IS THE PR'S. The job calls `just rust-mutate` — the same recipe as a local
 # run, one definition — with `base` from kit/common's `ci-base`: the PR's own target
 # branch, fetched in full. A phase PR into `rfc/<slug>` mutates that phase only, not
-# the phases already merged there. A failed fetch leaves `base` empty, and rust-mutate
+# the phases already merged there. A failed fetch fails the step, and rust-mutate
 # refuses an empty range rather than mutating nothing and passing.
 #
 # Because this is the gate, the compiler cache below is PART OF IT, not a tuning
@@ -33,10 +33,13 @@ name: Mutation
 # shared one is wrong anyway. What persists between runs is sccache's cache, which
 # SCCACHE_CACHE_SIZE bounds.
 #
-# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose. A
+# CALIBRATION PHASE: this job is NON-BLOCKING ON ITS FINDINGS on purpose — the
+# mutation step tolerates cargo-mutants' survivor and timeout exits, nothing else. A
 # healthy repo often sits ~70% (below a naive 0.75 bar). First establish
 # per-crate baselines, triage real gaps vs equivalent mutants, THEN flip to
-# blocking with a ratcheted threshold ("no lower than baseline").
+# blocking with a ratcheted threshold ("no lower than baseline"). Never
+# `continue-on-error` on the job: it also greens a failed baseline or a run killed
+# before its first mutant, which measured nothing.
 #
 # COPY to .gitea/workflows/mutation.yaml (or .github/workflows/). ADAPT `runs-on`,
 # `timeout-minutes`, `RUSTC_WRAPPER` and the report path to your CI and rust_dir.
@@ -67,7 +70,6 @@ jobs:
     # ADAPT once you know your numbers. Bounded by default: an unbounded run went
     # 5 h 17 on hosted runners and spent the account's whole Actions quota.
     timeout-minutes: 120
-    continue-on-error: true            # ← CALIBRATION ONLY. Remove it: this is the gate.
     # WIRE THIS. On a persistent runner a shared compiler cache is what keeps this gate
     # in minutes — measured 972 s → 113 s of baseline build. The value is a path on
     # YOUR runner, so it stays a placeholder, but skipping it is not the neutral choice
@@ -95,7 +97,13 @@ jobs:
       - name: Mutation testing (the PR's diff against its base)
         env:
           BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
-        run: just base="$(just ci-base)" mutate_jobs=2 rust-mutate
+        # CALIBRATION ONLY: cargo-mutants exits 2 on survivors and 3 on timeouts — findings,
+        # tolerated while the baseline is measured. Any other exit stays red. Once
+        # ratcheted, drop the last line and `|| rc=$?`: this is the gate.
+        run: |
+          base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          rc=0; just base="$base" mutate_jobs=2 rust-mutate || rc=$?
+          [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || [ "$rc" -eq 3 ]
 
       # upload-artifact@v4 fails on Gitea (GHESNotSupportedError) and v3 no longer runs
       # on github.com: one step per forge.
