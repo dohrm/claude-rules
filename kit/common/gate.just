@@ -461,8 +461,9 @@ tree slug branch="":
 # and never `base`: a branch cut from `origin/next` tracks `next`, and `next` is not
 # this tree's to delete. It goes when the remote holds the local tip or an ancestor of
 # it (nothing there that has not landed); a commit pushed from elsewhere is never
-# discarded. A forge that already deleted it on merge leaves nothing to do; an
-# unreachable remote is said, never an error.
+# discarded. A forge that already deleted it on merge leaves nothing to do. An
+# unreachable remote, or a push the pre-push hook or the forge refuses, is said, never
+# an error: the tree and the local branch are already gone by then.
 tree-rm slug:
     #!/usr/bin/env sh
     set -eu
@@ -492,7 +493,8 @@ tree-rm slug:
     live=${live%%[[:space:]]*}
     if [ -z "$live" ]; then exit 0; fi
     if [ "$live" = "$tip" ] || { git cat-file -e "$live^{commit}" 2>/dev/null && git merge-base --is-ancestor "$live" "$tip"; }; then
-        git push --quiet "$remote" --delete "$branch"
+        git push --quiet "$remote" --delete "$branch" \
+            || printf 'could not delete %s/%s (pre-push hook, protection or permission) — left as it is.\n' "$remote" "$branch" >&2
     else
         printf '%s/%s holds commits this tree never had — left as it is.\n' "$remote" "$branch" >&2
     fi

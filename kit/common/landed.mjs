@@ -24,19 +24,29 @@ const git = (cwd, args, input) => {
   const r = spawnSync('git', args, { cwd, input, encoding: 'utf8', maxBuffer: 1 << 30 })
   return r.status === 0 ? r.stdout : null
 }
+const RAW = ['--binary', '--no-ext-diff', '--no-color', '--no-textconv']
 const patchIds = (cwd, patch) => new Set((git(cwd, ['patch-id', '--stable'], patch) || '')
   .split('\n').map((l) => l.split(' ')[0]).filter(Boolean))
 
 /** true when `branch` is an ancestor of `base`, or its cumulative diff is a commit on
  *  `base` (a squash). null when either ref does not resolve. */
+const seen = new Map()
 export function landed(branch, base, cwd = '.') {
+  const key = `${cwd}\0${branch}\0${base}`
+  if (!seen.has(key)) seen.set(key, judge(branch, base, cwd))
+  return seen.get(key)
+}
+
+function judge(branch, base, cwd) {
   for (const ref of [branch, base]) if (git(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) === null) return null
   if (spawnSync('git', ['merge-base', '--is-ancestor', branch, base], { cwd }).status === 0) return true
   const mb = git(cwd, ['merge-base', base, branch])?.trim()
   if (!mb) return false
-  const [own] = patchIds(cwd, git(cwd, ['diff', '--binary', mb, branch]) || '')
+  // Plumbing-stable text: a user's external diff, colour or textconv would change what
+  // patch-id reads, and a real squash would go unrecognised.
+  const [own] = patchIds(cwd, git(cwd, ['diff', ...RAW, mb, branch]) || '')
   if (!own) return false // a branch whose changes cancel out proves nothing
-  return patchIds(cwd, git(cwd, ['log', '-p', '--binary', '--format=commit %H', `${mb}..${base}`]) || '').has(own)
+  return patchIds(cwd, git(cwd, ['log', '-p', ...RAW, '--format=commit %H', `${mb}..${base}`]) || '').has(own)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

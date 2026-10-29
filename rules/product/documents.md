@@ -20,8 +20,8 @@ a 900-line PRD does not.
 
 **Neither the intent nor the RFC is on this table.** `/interview` and `/rfc` write
 under `.work/<slug>/` — committed (so a PR shows what was being framed and the steps
-it landed on), but **ephemeral**: the PR that ends an RFC deletes it in its last commit,
-so it never reaches the base branch. The PRD's capability table is what still says "done"
+it landed on), but **ephemeral**: the PR that ends an RFC deletes it in its last commit.
+Only a multi-phase RFC at L1–L3 sits on the base branch, between its phases. The PRD's capability table is what still says "done"
 afterward — the RFC doesn't need to, because nothing durable reads it once the code
 and the git log are the record. One file per RFC is enough at this scale; the unit/index split above exists for
 documents that must stay readable for the life of the project, which this one never

@@ -197,8 +197,8 @@ closes the RFC.
 **The RFC removes its own state.** The PR that ends it — the last phase's at L1–L3,
 `rfc/<slug>` at L4 — carries in its description what `.work/<slug>/` holds that is still
 worth reading: the local decisions, the assumptions, the `changed:` lines. Its last commit,
-after the final `just code-review`, deletes `.work/<slug>/`. So the state never reaches the base branch, and no cleanup PR
-follows the merge. A round after the hand-back restores the directory from the branch
+after the final `just code-review`, deletes `.work/<slug>/`, and no cleanup PR follows the merge. Earlier phases at L1–L3
+carry it onto the base branch; the last one takes it away. A round after the hand-back restores the directory from the branch
 (`git checkout <deleting commit>^ -- .work/<slug>`) and deletes it again before its push.
 
 <rfc-body>
