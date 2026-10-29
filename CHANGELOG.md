@@ -167,8 +167,9 @@ its legacy config since v7. The kit's own TS gate tested react-hooks 5, so it pa
 
 - **Both `eslint.react.js` copies (ts-web, ts-tauri) read
   `reactHooks.configs.flat['recommended-latest']`.**
-- **The ts-web install block pins `eslint@9 @eslint/js@9`**, until jsx-a11y supports 10,
-  and `eslint-plugin-react-hooks@7`. The ts-tauri README points to it.
+- **The ts-web install block pins its majors**: `eslint@9 @eslint/js@9` (until jsx-a11y
+  supports 10), `eslint-plugin-react-hooks@7`, `eslint-plugin-jsx-a11y@6`. The ts-tauri
+  README points to it.
 - The TS gate's witness tests react-hooks 7. A test keeps each major the README pins on the
   one the witness locks.
 
@@ -179,7 +180,7 @@ Hand-merge — `eslint.config.js` is a copy:
 - If npm resolved eslint 10, `npm i -D eslint@9 @eslint/js@9`.
 - **Expect new findings.** react-hooks 7's `recommended-latest` is no longer 2 rules. It
   adds the React Compiler rules (`purity`, `refs`, `immutability`, `set-state-in-effect`,
-  `static-components`…), 13 of 17 at `error`. Your first `just ts-web-lint` (or
+  `static-components`…), 14 of 17 at `error` on 7.1.1. Your first `just ts-web-lint` (or
   `ts-tauri-lint`) may go red on code that passed under react-hooks 5.
 
 ### Fixed — a Tier 4 job that measured nothing is no longer green
