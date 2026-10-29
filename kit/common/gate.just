@@ -457,9 +457,12 @@ tree slug branch="":
 # `-D`, after the check). A `base` that does not resolve (no remote fetched yet) fails
 # CLOSED: unproven is not the same as merged.
 #
-# The remote branch goes too, only when the remote still holds exactly the local tip:
-# a commit pushed from elsewhere is never discarded. A forge that already deleted it on
-# merge leaves nothing to do; an unreachable remote is said, never an error.
+# The remote branch goes too, only when it is the branch's OWN upstream — same name —
+# and never `base`: a branch cut from `origin/next` tracks `next`, and `next` is not
+# this tree's to delete. It goes when the remote holds the local tip or an ancestor of
+# it (nothing there that has not landed); a commit pushed from elsewhere is never
+# discarded. A forge that already deleted it on merge leaves nothing to do; an
+# unreachable remote is said, never an error.
 tree-rm slug:
     #!/usr/bin/env sh
     set -eu
@@ -481,15 +484,18 @@ tree-rm slug:
     upstream=$(git config "branch.$branch.merge" || true)
     git worktree remove "$path"
     git branch -D "$branch"
-    [ -n "$remote" ] && [ "$remote" != . ] && [ -n "$upstream" ] || exit 0
+    [ -n "$remote" ] && [ "$remote" != . ] && [ "$upstream" = "refs/heads/$branch" ] || exit 0
+    case "$(git rev-parse --abbrev-ref {{quote(base)}} 2>/dev/null)" in "$branch"|"$remote/$branch") exit 0 ;; esac
     if ! live=$(git ls-remote --heads "$remote" "$upstream"); then
-        printf '%s unreachable — remote branch %s left as it is.\n' "$remote" "${upstream#refs/heads/}" >&2; exit 0
+        printf '%s unreachable — remote branch %s left as it is.\n' "$remote" "$branch" >&2; exit 0
     fi
-    case "$live" in
-        '') ;;
-        "$tip"*) git push --quiet "$remote" --delete "${upstream#refs/heads/}" ;;
-        *) printf '%s/%s holds commits this tree never had — left as it is.\n' "$remote" "${upstream#refs/heads/}" >&2 ;;
-    esac
+    live=${live%%[[:space:]]*}
+    if [ -z "$live" ]; then exit 0; fi
+    if [ "$live" = "$tip" ] || { git cat-file -e "$live^{commit}" 2>/dev/null && git merge-base --is-ancestor "$live" "$tip"; }; then
+        git push --quiet "$remote" --delete "$branch"
+    else
+        printf '%s/%s holds commits this tree never had — left as it is.\n' "$remote" "$branch" >&2
+    fi
 
 # One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the
 # tree it runs in: two sessions in one checkout share one verdict, and A's CLEAN

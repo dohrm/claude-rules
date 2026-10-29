@@ -3,10 +3,13 @@
 // work-stale — what `.work/` still holds for work that is over (#57). Two kinds:
 //
 // - a marker-only directory: nothing, or nothing but per-developer gate files (`.latest_review`,
-//   `.latest_mutate`, `review-context.md`, all gitignored), no state file, and no local
+//   `.latest_mutate`, `review-context.md`, all gitignored), no state file, no local
 //   branch that resolves to it (`work-slug.mjs`: the branch name sanitized, or a phase
-//   branch `phase/<dir>/<n>`). Every gate run on a branch leaves one, and nothing else
-//   ever removed it. `--prune` deletes them: untracked, so no shared state is lost.
+//   branch `phase/<dir>/<n>`), and no unlanded local branch that contains a commit its
+//   files name. That last test keeps an RFC's directory alive between the commit that
+//   deletes its `rfc.md` and the merge: its slug is no branch's name, but its review
+//   marker is that branch's commit. Every gate run on a branch leaves one, and nothing
+//   else ever removed it. `--prune` deletes them: untracked, so no shared state is lost.
 // - a state file (`rfc.md`, `defect.md`) whose `**Branch**` is gone, or
 //   has landed on `base` (`landed.mjs`). The PR that ends the work deletes it now
 //   (`/rfc`, `/defect`); this points at the ones that predate that. It is committed,
@@ -24,6 +27,26 @@ import { landed } from './landed.mjs'
 const PRIVATE = new Set(['.latest_review', '.latest_mutate', 'review-context.md'])
 const STATE = ['rfc.md', 'defect.md']
 const BRANCH = /^[ \t]*-[ \t]*\*\*Branch\*\*:[ \t]*`?([^`\s]+)`?/m
+
+// The commits a gate file names: a marker holds a sha, the ticket cache says `at <sha>`.
+const SHAS = /\b[0-9a-f]{40}\b/g
+
+/** Does an unlanded local branch still contain a commit that `dir`'s gate files name? */
+function claimed(cwd, dir, files, base) {
+  const shas = new Set(files.flatMap((f) => {
+    try {
+      return readFileSync(join(dir, f), 'utf8').slice(0, 4096).match(SHAS) || []
+    } catch {
+      return []
+    }
+  }))
+  for (const sha of shas) {
+    const holders = (spawnSync('git', ['branch', '--format=%(refname:short)', '--contains', sha], { cwd, encoding: 'utf8' })
+      .stdout || '').split('\n').filter(Boolean)
+    if (holders.some((b) => landed(b, base, cwd) !== true)) return true
+  }
+  return false
+}
 
 const refs = (cwd, ...patterns) => (spawnSync('git', ['for-each-ref', '--format=%(refname:short)', ...patterns],
   { cwd, encoding: 'utf8' }).stdout || '').split('\n').filter(Boolean)
@@ -48,8 +71,8 @@ export function staleWork(cwd = '.', base = 'origin/main') {
     } catch {
       continue // unreadable: someone else's, and `just status` must never crash on it
     }
-    if (inside.every((e) => e.isFile() && PRIVATE.has(e.name)) && !live.has(name)) {
-      markerOnly.push(name)
+    if (inside.every((e) => e.isFile() && PRIVATE.has(e.name))) {
+      if (!live.has(name) && !claimed(cwd, join(root, name), inside.map((e) => e.name), base)) markerOnly.push(name)
       continue
     }
     for (const file of STATE.filter((f) => inside.some((e) => e.isFile() && e.name === f))) {

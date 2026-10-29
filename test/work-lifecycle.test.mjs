@@ -100,6 +100,23 @@ test('tree-rm: a squash-merged tree goes with its local and remote branch; a rem
       assert.ok(!existsSync(b))
       assert.match(kept.stderr, /holds commits this tree never had/)
       assert.ok(remoteHas('phase/b/1'), 'a commit pushed from elsewhere is never discarded')
+
+      // The remote is behind the landed tip (a last commit never pushed): nothing there
+      // that has not landed, so it goes.
+      const c = just('tree', 'c', 'phase/c/1').stdout.trim()
+      commit(c, 'c-1.txt', '1\n'); git(c, 'push', '-q', '-u', 'origin', 'phase/c/1'); commit(c, 'c-2.txt', '2\n')
+      git(work, 'merge', '-q', '--squash', 'phase/c/1'); git(work, 'commit', '-qm', 'c (#3)')
+      assert.equal(just('tree-rm', 'c').status, 0)
+      assert.ok(!remoteHas('phase/c/1'), 'a remote behind the landed tip holds nothing of its own')
+
+      // A branch cut from the remote trunk tracks the trunk: `main` is never this tree's to delete.
+      git(work, 'push', '-q', 'origin', 'main')
+      git(work, 'fetch', '-q', 'origin')
+      git(work, 'branch', '--track', 'fix/d', 'origin/main')
+      assert.equal(just('tree', 'd', 'fix/d').status, 0)
+      const d = just('tree-rm', 'd')
+      assert.equal(d.status, 0, d.stderr)
+      assert.ok(remoteHas('main'), 'the remote trunk survives a tree-rm of a branch that tracks it')
     })
   })
 
@@ -139,5 +156,20 @@ test('worktree-status: stale work is reported, and nothing is removed', () => {
     assert.match(r.stdout, /stale: \.work\/gone-branch\/ — gate markers only, `just work-prune`/)
     assert.match(r.stdout, /stale: \.work\/old\/rfc\.md — feat\/old: branch gone, delete it in a commit/)
     assert.ok(existsSync(join(dir, '.work/gone-branch/.latest_review')), 'status is read-only')
+  })
+})
+
+test('work-stale: an RFC directory whose rfc.md its own PR deleted stays until that branch lands', () => {
+  withTmpRepo((dir) => {
+    repo(dir)
+    git(dir, 'checkout', '-q', '-b', 'feat/57-x')
+    commit(dir, 'x.txt', 'x\n')
+    const reviewed = git(dir, 'rev-parse', 'HEAD')
+    write(dir, '.work/57-x/.latest_review', `${reviewed}\n`) // the slug is no branch's name
+    git(dir, 'checkout', '-q', 'main')
+    const stale = () => spawnSync(process.execPath, [join(KIT, 'work-stale.mjs'), 'main'], { cwd: dir, encoding: 'utf8' }).stdout
+    assert.doesNotMatch(stale(), /57-x/, 'its branch has not landed: the review marker is still in use')
+    git(dir, 'merge', '-q', '--squash', 'feat/57-x'); git(dir, 'commit', '-qm', 'x (#57)')
+    assert.match(stale(), /\.work\/57-x\//, 'landed: the markers are leftovers')
   })
 })
