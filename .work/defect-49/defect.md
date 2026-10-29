@@ -1,6 +1,6 @@
 # Bug — the React eslint overlay fails on a fresh install of current packages
 
-- **Status**: fixing
+- **Status**: done
 - **Autonomy**: L3
 - **Repository**: https://github.com/dohrm/claude-rules
 - **Base branch**: next
@@ -73,3 +73,5 @@ it at 9. The witness (`test/fixtures/ts-gate/package.json`, `^5.2.0`) hid both.
 
 - phase 1–3: both symptoms reproduced in a scratch app with current packages; the three
   hypotheses checked against installed 7.1.1 and the fixture lock.
+- phase 4: repro re-run on the base with the witness at react-hooks 7 → 5 TS gate failures, the reported error. Fix: both overlays read `configs.flat['recommended-latest']`; the ts-web README pins `eslint@9 @eslint/js@9 eslint-plugin-react-hooks@7 eslint-plugin-jsx-a11y@6`; the witness locks react-hooks 7.1.1 and declares `@eslint/js`; a test reads every pin from the README and compares it to the witness lock (README mutations `@^7`, `@7`→wrong major, `react@18` each fail it). `TS_GATES=1 PYTHON_GATES=1 GO_GATES=1 RUST_GATES=1 just check` → 556 pass, 0 fail, 7 skipped (Godot).
+- review rounds: (1) the CHANGELOG names react-hooks 7's new React Compiler rules — 14 of 17 at error on 7.1.1, checked on the installed package; (2–3) pin guard driven from the README, fails on an uncomparable spec. Last verdict "Ship it" at f0d43a3; two design notes left open (`npm install`/`npm add` forms, trailing comments) — the README uses neither.
