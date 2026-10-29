@@ -139,13 +139,15 @@ test('the shipped eslint configs name any / ! (and the React overlay names hooks
   assert.equal(tauri.includes('react-hooks'), true)
 })
 
-// The witness is only a proof for what the README installs (#49: it locked eslint 9
-// while the README installed 10 unpinned, so the breakage passed here).
-test('the React install block pins eslint to the major the witness lock tests', () => {
+// The witness is only a proof for what the README installs (#49: it locked react-hooks 5
+// and eslint 9 while the README installed 7 and 10 unpinned, so both breakages passed here).
+test('the React install block pins the majors the witness lock tests', () => {
   const readme = readFileSync(join(KIT.web, 'README.md'), 'utf8')
   const lock = JSON.parse(readFileSync(join(FIXTURE, 'package-lock.json'), 'utf8')).packages
-  const major = lock['node_modules/eslint'].version.split('.')[0]
-  assert.match(readme, new RegExp(`npm i -D eslint@${major} @eslint/js@${major} `), `eslint and @eslint/js pinned to ${major}`)
+  for (const name of ['eslint', '@eslint/js', 'eslint-plugin-react-hooks']) {
+    const major = lock[`node_modules/${name}`].version.split('.')[0]
+    assert.match(readme, new RegExp(`\\s${name.replace('/', '\\/')}@${major}\\s`), `${name} pinned to the witness major ${major}`)
+  }
 })
 
 describe('ts language floor', { concurrency: 1 }, () => {
