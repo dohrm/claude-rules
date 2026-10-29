@@ -12,9 +12,10 @@
 //   1. an explicit slug (the justfile's `work_slug`);
 //   2. the `.work/*/rfc.md` (or `/defect`'s `defect.md`) whose `**Branch**` header names the
 //      current branch;
-//   3. an L4 phase branch `phase/<slug>/<n>` whose `.work/<slug>/rfc.md` exists — the
-//      header names the integration branch `rfc/<slug>`, and git cannot nest a phase
-//      under it (rules/agent/autonomy.md § L4);
+//   3. an L4 phase branch `phase/<slug>/<n>` — `<slug>`, with or without its `rfc.md` in
+//      this tree: the header names the integration branch `rfc/<slug>`, git cannot nest a
+//      phase under it (rules/agent/autonomy.md § L4), and a fallback to the branch name
+//      left an orphan `.work/phase-<slug>-<n>/` behind every phase (#57);
 //   4. the branch name, sanitized into one path segment (the gates' original behavior).
 //
 // A module, not a command: `diff-since.mjs` and `review-context.mjs` import it, and its
@@ -93,9 +94,7 @@ export function resolveSlug({ slug = '', cwd = '.' } = {}) {
     return { slug: sanitize(branch), from: 'branch name', ambiguous: matches }
   }
   const phaseOf = branch.match(/^phase\/([^/]+)\/[^/]+$/)?.[1]
-  if (phaseOf && existsSync(join(cwd, '.work', phaseOf, 'rfc.md'))) {
-    return { slug: sanitize(phaseOf), from: `phase branch of .work/${phaseOf}/rfc.md` }
-  }
+  if (phaseOf) return { slug: sanitize(phaseOf), from: `phase branch of .work/${phaseOf}/` }
   return { slug: sanitize(branch), from: 'branch name' }
 }
 

@@ -157,6 +157,37 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Changed — finished work leaves nothing behind
+
+`.work/` and the work branches were never cleaned up
+([#57](https://github.com/dohrm/claude-rules/issues/57)):
+- state files stayed on the base branch with a stale status;
+- every branch a gate ran on left a directory of markers;
+- `tree-rm` refused every squash-merged branch.
+
+**What changes:**
+
+- **`/rfc` and `/defect` remove their own state.** The PR that ends the work deletes
+  `.work/<slug>/` in its last commit, and its description carries what is still worth
+  reading. No cleanup PR follows the merge.
+- **`just tree-rm` recognises a squash merge.** A branch whose cumulative diff matches a
+  commit on `base` by patch-id has landed. The recipe then deletes the local branch, and
+  the remote branch when the remote holds exactly the local tip. A remote branch with
+  commits the tree never had is kept, and the recipe says so.
+- **New `just work-prune`.** It deletes, in the current tree, the `.work/` directories
+  that hold only gate markers and match no local branch.
+- **`just status` gains a `stale:` line.** It lists those directories, and the committed
+  state files whose branch landed or is gone. It stays read-only.
+- **A phase branch always resolves to its RFC's slug.** `phase/<slug>/<n>` maps to
+  `.work/<slug>/` even when that tree has no `rfc.md`, so `.work/phase-<slug>-<n>/`
+  orphans no longer appear.
+
+**Hand-merge:**
+
+- `update` brings the recipes. If your justfile overrides `tree-rm`, port the new body.
+- Run `just status` once. Delete the listed state files in a commit, and run
+  `just work-prune` in each tree.
+
 ### Fixed — `remove <language>` takes that language's overlays with it
 
 `remove go` left `.claude/rules/hexagonal/go.md` (and the Cursor `.mdc`) installed and

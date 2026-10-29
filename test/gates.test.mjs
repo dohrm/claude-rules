@@ -729,10 +729,12 @@ test('diff-since: an L4 phase branch finds its RFC by name, the integration bran
     assert.ok(existsSync(join(dir, '.work/l4/.latest_review')),
       'a phase branch reviews against the RFC it belongs to')
 
-    // No RFC under that slug: the branch name, as before.
+    // No RFC under that slug in this tree (it lives in the integration tree): still the
+    // RFC's slug, never an orphan `.work/phase-ghost-1/` (#57).
     git(dir, 'checkout', '-q', '-b', 'phase/ghost/1')
     assert.equal(run(DIFF_SINCE, ['review', '--mark', head], dir).status, 0)
-    assert.ok(existsSync(join(dir, '.work/phase-ghost-1/.latest_review')))
+    assert.ok(existsSync(join(dir, '.work/ghost/.latest_review')))
+    assert.ok(!existsSync(join(dir, '.work/phase-ghost-1')))
   })
 })
 
@@ -1724,7 +1726,8 @@ test('tree / tree-rm: canonical path, and nothing is removed until the work has 
     git('add', '-A'); git('commit', '-qm', 'init')
 
     mkdirSync(join(dir, '.dev/kit/common'), { recursive: true })
-    writeFileSync(join(dir, '.dev/kit/common/gate.just'), readFileSync(join(REPO, 'kit/common/gate.just'), 'utf8'))
+    for (const f of ['gate.just', 'landed.mjs'])
+      writeFileSync(join(dir, '.dev/kit/common', f), readFileSync(join(REPO, 'kit/common', f), 'utf8'))
     writeFileSync(join(dir, 'justfile'),
       'set allow-duplicate-recipes := true\nset allow-duplicate-variables := true\n'
       + "import '.dev/kit/common/gate.just'\nbase := \"main\"\n")

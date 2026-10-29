@@ -173,8 +173,9 @@ resolves it in the executor's tree. In a phase tree, the executor writes nothing
 the integration tree.
 
 The tree dies with the work. `tree-rm` removes nothing unless the tree is clean and
-the branch is merged, so a forest of detached branches is something you have to
-build on purpose. `just status` reports every tree; it never gates.
+the branch is merged — a squash merge included — so a forest of detached branches is
+something you have to build on purpose. `just status` reports every tree, and the
+`.work/` left behind by work that is over; it never gates.
 
 The human is a writer too. When they edit the tree a loop or an RFC owns — legitimate, and
 declared as a `human:` line in `## Log` (`skills/loop-setup` or `skills/rfc`) — that line is a

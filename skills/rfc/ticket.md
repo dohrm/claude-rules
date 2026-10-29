@@ -116,7 +116,8 @@ other history. The final report is the `rfc/<slug>` PR's description, linked in 
 `.work/<slug>/rfc.md` is only a pointer, so the tree's tools still see the RFC: the
 header lines `Status`, `Autonomy`, `Repository`, `Base branch`, `Branch`, plus
 `**Ticket**: <URL>`, and `## Blocked on the human` while blocked. Mirror the status
-whenever it changes. Never copy the body there.
+whenever it changes. Never copy the body there. The PR that ends the RFC deletes it in
+its last commit (`SKILL.md` § 4); the ticket keeps the record.
 
 The reviewer is read-only and cannot follow that pointer. Before each phase's
 `just code-review`, cache the ticket for it in `.work/<slug>/review-context.md`: one
