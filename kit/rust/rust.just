@@ -141,8 +141,9 @@ mutate_args := ""
 #
 # An EMPTY `from` is refused, not run: `git diff ...HEAD` is the empty diff, which
 # mutates nothing and passes. In CI that is `base="$(just ci-base)"` after a failed
-# fetch, and a gate that goes green on its own setup error is fail-open.
+# fetch, and a gate that goes green on its own setup error is fail-open. It exits 1,
+# never 2 or 3: mutation-ci.yaml tolerates those as cargo-mutants' findings.
 rust-mutate from=base:
-    @[ -n {{quote(from)}} ] || { echo 'rust-mutate: the range start is empty (in CI: kit/common missing, or ci-base failed to fetch)' >&2; exit 2; }
+    @[ -n {{quote(from)}} ] || { echo 'rust-mutate: the range start is empty (in CI: kit/common missing, or ci-base failed to fetch)' >&2; exit 1; }
     cd {{rust_dir}} && git diff {{from}}...HEAD --relative -- . > pr.diff
     cd {{rust_dir}} && cargo mutants --in-diff pr.diff --no-shuffle -j {{mutate_jobs}} {{mutate_args}}

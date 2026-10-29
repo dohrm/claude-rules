@@ -15,10 +15,13 @@ name: Mutation (TS)
 # `--mutate` on the PR's changed files, which needs no prior state on a fresh
 # runner. Same verdict, different starting point.
 #
-# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose.
-# First establish a baseline, triage real gaps vs equivalent mutants, THEN set
-# `thresholds.break` in stryker.config.json to the measured baseline and remove
-# continue-on-error. Never a round number — see the ratchet rule.
+# CALIBRATION PHASE: this job is NON-BLOCKING ON ITS FINDINGS on purpose — with
+# `thresholds.break` unset (null, the default), Stryker exits 0 whatever survives,
+# and non-zero only when the run itself failed. First establish a baseline, triage
+# real gaps vs equivalent mutants, THEN set `thresholds.break` in
+# stryker.config.json to the measured baseline. Never a round number — see the
+# ratchet rule. Never `continue-on-error` on the job: it also greens a crash or a
+# cancelled run, which measured nothing.
 #
 # COPY to .gitea/workflows/mutation-ts.yaml (or .github/workflows/). The syntax
 # is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
@@ -51,7 +54,6 @@ jobs:
     if: ${{ !(startsWith(github.head_ref, 'rfc/') && github.base_ref == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest             # ADAPT to your runner label
     timeout-minutes: 120               # ADAPT once you know your numbers — bounded by default
-    continue-on-error: true            # ← remove once the baseline is ratcheted
     defaults:
       run:
         working-directory: .           # ADAPT to your ts_dir (e.g. apps/web)
@@ -81,8 +83,9 @@ jobs:
           BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
           base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          # exit 1 tolerated per grep: no match is no file, not a failure under pipefail (Gitea's default)
           FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
-                  | grep -E '\.(ts|tsx)$' | grep -v -E '(\.test\.|/generated/)' | paste -sd, -)
+                  | { grep -E '\.(ts|tsx)$' || [ $? -eq 1 ]; } | { grep -v -E '(\.test\.|/generated/)' || [ $? -eq 1 ]; } | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
 

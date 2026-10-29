@@ -11,7 +11,9 @@ name: Coverage ratchet (Go)
 # rules/testing/ratchet.md for why coverage is never a target.
 #
 # The ratchet: coverage of the changed packages must not drop below the committed
-# baseline. Only ever up; lowering the baseline is a reviewed decision.
+# baseline. Only ever up; lowering the baseline is a reviewed decision. Calibration
+# is the `0.0` baseline, which nothing drops below — never `continue-on-error` on
+# the job, which also greens failing tests or a cancelled run.
 #
 # COPY to .gitea/workflows/coverage-go.yaml (or .github/workflows/). The syntax is
 # the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
@@ -34,7 +36,6 @@ env:
 jobs:
   coverage:
     runs-on: ubuntu-latest             # ADAPT to your runner label
-    continue-on-error: true            # ← remove once the baseline is ratcheted
     defaults:
       run:
         working-directory: .           # ADAPT to your go_dir

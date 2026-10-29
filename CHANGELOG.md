@@ -157,6 +157,34 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Fixed — a Tier 4 job that measured nothing is no longer green
+
+A downstream Rust mutation job was killed by SIGTERM after its baseline, before its
+first mutant, and reported **success**. The four Tier 4 snippets set
+`continue-on-error: true` on the job, which made every outcome green, not only the
+findings that calibration is meant to tolerate.
+
+- **No snippet sets `continue-on-error` on the job.** A crash, a failed baseline or a
+  cancelled or timed-out run now shows red.
+- **The Rust mutation step tolerates cargo-mutants' findings, and nothing else.** Exit 2
+  (survivors) and 3 (timeouts) pass while calibrating, and the log says so. Every other
+  exit fails the step. The base is resolved on its own line, so a failed `ci-base`
+  fails the step.
+- **TS, Python and Go need no tolerance.** Stryker without `thresholds.break`,
+  `mutmut run`, and the Go ratchet at a `0.0` baseline all exit 0 on findings.
+- **The TS and Python changed-files steps pass when nothing matches.** Under
+  `pipefail` (Gitea's default shell), a PR with no source file failed on `grep`'s
+  exit 1. The key used to hide that.
+- **`rust-mutate`'s empty-range refusal exits 1, not 2.** 2 is the code the step
+  tolerates.
+- `testing/ratchet.md` § The ratchet: "non-blocking" now means non-blocking on findings.
+
+Hand-merge — in each copied workflow (`mutation*.yaml`, `coverage-go.yaml`):
+
+- Remove the job's `continue-on-error: true`.
+- Rust: replace the mutation step's `run:` with the snippet's block.
+- TS and Python: in the changed-files step, wrap each `grep` as `{ grep … || [ $? -eq 1 ]; }`.
+
 ### Fixed — mutation in CI measures the PR's own diff, in bounded time and disk
 
 Mutation in CI was measured failing on a downstream repo
@@ -178,7 +206,7 @@ ignored `N`.
   github.com and `@v3` elsewhere. It no longer suggests a `CARGO_TARGET_DIR` outside
   the workspace: the target dir stays in the workspace, and sccache is the persistent
   part. It has no `working-directory` any more: `rust-mutate` reads `rust_dir`.
-- **`rust-mutate` refuses an empty range.** `just base= rust-mutate` exits 2 instead of
+- **`rust-mutate` refuses an empty range.** `just base= rust-mutate` exits 1 instead of
   mutating the empty diff and passing, which is what a failed `ci-base` fetch produced.
 - **`kit/rust/mutants.toml` sets `timeout_multiplier = 3.0`**, so one hanging mutant
   cannot use up the job's time limit on its own.

@@ -1161,7 +1161,7 @@ test('mutate-diff hands base, mutate_jobs and mutate_args to the nested just', {
     // diff that mutates nothing and passes.
     rmSync(join(dir, 'args'))
     const empty = sh('just base= rust-mutate', { PATH: `${join(dir, 'stub')}:${process.env.PATH}`, RECORD: dir })
-    assert.notEqual(empty.status, 0)
+    assert.equal(empty.status, 1, 'never 2 or 3: the CI step tolerates those as findings')
     assert.match(empty.stderr, /range start is empty/)
     assert.ok(!existsSync(join(dir, 'args')), 'cargo must not run on an empty range')
   })
