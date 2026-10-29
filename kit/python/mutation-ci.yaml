@@ -79,9 +79,9 @@ jobs:
           BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
           base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
-          # `|| true` per grep: no match is no file, not a failure under pipefail (Gitea's default)
+          # exit 1 tolerated per grep: no match is no file, not a failure under pipefail (Gitea's default)
           FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
-                  | { grep -E '\.py$' || true; } | { grep -v -E '(^|/)(tests?|conftest)' || true; } | paste -sd, -)
+                  | { grep -E '\.py$' || [ $? -eq 1 ]; } | { grep -v -E '(^|/)(tests?|conftest)' || [ $? -eq 1 ]; } | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
 

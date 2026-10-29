@@ -183,7 +183,7 @@ Hand-merge — in each copied workflow (`mutation*.yaml`, `coverage-go.yaml`):
 
 - Remove the job's `continue-on-error: true`.
 - Rust: replace the mutation step's `run:` with the snippet's block.
-- TS and Python: in the changed-files step, wrap each `grep` as `{ grep … || true; }`.
+- TS and Python: in the changed-files step, wrap each `grep` as `{ grep … || [ $? -eq 1 ]; }`.
 
 ### Fixed — mutation in CI measures the PR's own diff, in bounded time and disk
 
