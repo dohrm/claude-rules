@@ -117,6 +117,17 @@ test('tree-rm: a squash-merged tree goes with its local and remote branch; a rem
       const d = just('tree-rm', 'd')
       assert.equal(d.status, 0, d.stderr)
       assert.ok(remoteHas('main'), 'the remote trunk survives a tree-rm of a branch that tracks it')
+
+      // The remote refuses the delete (a hook, a protection): said, never an error — the
+      // tree and the local branch are already gone by then.
+      const e = tree('e')
+      write(origin, 'hooks/pre-receive', '#!/bin/sh\necho protected >&2\nexit 1\n')
+      sh(dir, 'chmod', '+x', join(origin, 'hooks/pre-receive'))
+      const refused = just('tree-rm', 'e')
+      assert.equal(refused.status, 0, refused.stderr)
+      assert.ok(!existsSync(e))
+      assert.match(refused.stderr, /could not delete origin\/phase\/e\/1/)
+      assert.ok(remoteHas('phase/e/1'))
     })
   })
 

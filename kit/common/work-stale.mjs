@@ -29,7 +29,7 @@ import { landed } from './landed.mjs'
 
 const PRIVATE = new Set(['.latest_review', '.latest_mutate', 'review-context.md'])
 const STATE = ['rfc.md', 'defect.md']
-const STATUS = /^[ \t]*-[ \t]*\*\*Status\*\*:[ \t]*(\w+)/m
+const STATUS = /^[ \t]*-[ \t]*\*\*Status\*\*:[ \t]*([\w-]+)/m
 const BRANCH = /^[ \t]*-[ \t]*\*\*Branch\*\*:[ \t]*`?([^`\s]+)`?/m
 
 // The commits a gate file names: a marker holds a sha, the ticket cache says `at <sha>`.
@@ -67,7 +67,7 @@ export function staleWork(cwd = '.', base = 'origin/main') {
   const local = refs(cwd, 'refs/heads')
   const live = new Set(local.flatMap((b) => [sanitize(b), b.match(/^phase\/([^/]+)\/[^/]+$/)?.[1]]).filter(Boolean))
   // A branch name → the ref to judge it by: the local one, else a remote's.
-  const known = new Map(refs(cwd, 'refs/remotes').map((r) => [r.replace(/^[^/]+\//, ''), r]))
+  const known = new Map(refs(cwd, 'refs/remotes').filter((r) => r.includes('/')).map((r) => [r.replace(/^[^/]+\//, ''), r]))
   for (const b of local) known.set(b, b)
   const markerOnly = [], landedState = []
   for (const { name } of entries) {
@@ -89,7 +89,7 @@ export function staleWork(cwd = '.', base = 'origin/main') {
         continue
       }
       // An RFC not started yet carries no branch name — a placeholder, `—`: nothing to judge.
-      const branch = head.match(BRANCH)?.[1], status = head.match(STATUS)?.[1]?.toLowerCase() ?? '?'
+      const branch = head.match(BRANCH)?.[1], status = head.match(STATUS)?.[1]?.toLowerCase()
       if (!branch || !/^[\w./-]+$/.test(branch)) continue
       const why = !known.has(branch) ? 'branch gone' : landed(known.get(branch), base, cwd) ? `landed on ${base}` : null
       if (why) landedState.push({ file: `.work/${name}/${file}`, branch, why, status })
@@ -101,7 +101,7 @@ export function staleWork(cwd = '.', base = 'origin/main') {
 /** What to do with a state file whose branch is over: certain only once it says `done`. */
 export const advice = (s) => s.status === 'done'
   ? 'delete it in a commit'
-  : `still ${s.status}: delete it in a commit once the work is over, else point **Branch** at the live one`
+  : `${s.status ? `still ${s.status}` : 'status unknown'}: delete it in a commit once the work is over, else point **Branch** at the live one`
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)

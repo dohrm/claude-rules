@@ -28,9 +28,11 @@ const RAW = ['--binary', '--no-ext-diff', '--no-color', '--no-textconv']
 const patchIds = (cwd, patch) => new Set((git(cwd, ['patch-id', '--stable'], patch) || '')
   .split('\n').map((l) => l.split(' ')[0]).filter(Boolean))
 
+// Per process: `claimed()` in work-stale asks once per sha and holding branch. Refs are
+// assumed not to move while one run reads them.
+const seen = new Map()
 /** true when `branch` is an ancestor of `base`, or its cumulative diff is a commit on
  *  `base` (a squash). null when either ref does not resolve. */
-const seen = new Map()
 export function landed(branch, base, cwd = '.') {
   const key = `${cwd}\0${branch}\0${base}`
   if (!seen.has(key)) seen.set(key, judge(branch, base, cwd))
