@@ -1,6 +1,6 @@
 # Bug — `remove <stack>` leaves the stack's overlays in other profiles (hexagonal/go.md)
 
-- **Status**: diagnosed
+- **Status**: done
 - **Autonomy**: L3
 - **Repository**: https://github.com/dohrm/claude-rules
 - **Base branch**: next
@@ -63,3 +63,5 @@ language filter (`isLanguageDead` against the remaining language profiles) runs 
 
 - phase 1–3: reproduced on `baedc1b` (claude + cursor leftovers, codex clean); `update`
   removes them; the kept record still lists the file.
+- phase 4: re-ran the repro on the base (fails as recorded). Fix in `remove()`: a kept record's Claude/Cursor rule whose globs (read from the file: `paths:`/`globs:`) are dead for the remaining languages leaves the record, and the deletion plan is every recorded file minus the kept ones. Regression tests: the overlay goes (claude, cursor, codex) and the kept language's stays; an edited overlay is refused unless `--force`; a non-regular kept rule is refused. `TS_GATES=1 PYTHON_GATES=1 GO_GATES=1 RUST_GATES=1 just check` → exit 0, 559 pass, 0 fail, 7 skipped (Godot).
+- review rounds: (1) lstat before reading, readable glob pick, edited-overlay test; (2) a non-regular kept rule refused, not kept silently; (3) the refusal in the CHANGELOG → CLEAN.
