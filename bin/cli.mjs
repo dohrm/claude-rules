@@ -525,10 +525,13 @@ function remove(profilesArg) {
   // A Claude or Cursor rule of a kept profile goes too once its language is: install
   // would not emit it (`isLanguageDead`). The lock holds no globs, so they are read from
   // the file on disk (Claude `paths:`, Cursor `globs:`); an edited one is then refused by
-  // the tree check below, and anything but a regular file is left to that check.
+  // the tree check below. One that is not a regular file cannot be judged: refused.
   const remainingLangs = remaining.filter(p => LANG_EXT[p])
   const deadRule = path => {
-    if (!/^\.(claude|cursor)\/rules\/.+\.mdc?$/.test(path) || !existsSync(path) || !lstatSync(path).isFile()) return false
+    if (!/^\.(claude|cursor)\/rules\/.+\.mdc?$/.test(path)) return false
+    const st = lstatSync(path, { throwIfNoEntry: false })
+    if (!st) return false
+    if (!st.isFile()) throw new Error(`Not a regular file: ${path}; update --force before removing profiles`)
     const { fm } = splitFm(readFileSync(path, 'utf8'))
     return isLanguageDead(fm.paths ?? fm.globs, remainingLangs)
   }

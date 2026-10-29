@@ -300,6 +300,20 @@ test('remove <stack> refuses an edited overlay of that language unless --force',
   })
 })
 
+test('remove <stack> refuses a kept rule that is no longer a regular file', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude'], dir))
+    const overlay = '.claude/rules/hexagonal/go.md'
+    const lock = read(dir, '.claude-rules.lock')
+    rmSync(join(dir, overlay)); mkdirSync(join(dir, overlay))
+
+    const r = runCliBare(['remove', 'go'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /Not a regular file: \.claude\/rules\/hexagonal\/go\.md/)
+    assert.equal(read(dir, '.claude-rules.lock'), lock, 'nothing removed, the lock untouched')
+  })
+})
+
 test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
