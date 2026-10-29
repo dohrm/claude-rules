@@ -168,6 +168,9 @@ locked — exactly what `add` and `update` would not emit. Codex was already rig
 - **Nothing to hand-merge.** A repo that hit this: `update` removes the leftover, or
   delete it and its lock entry by hand. An overlay you edited is refused like any edited
   file (`--force` deletes it).
+- **New refusal.** A kept Claude or Cursor rule that is no longer a regular file (a
+  directory, a symlink) stops `remove`, even under `--force`: its globs cannot be read.
+  Restore it with `update --force` first.
 
 ### Fixed — the React eslint overlay works on current packages
 
