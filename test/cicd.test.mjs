@@ -338,6 +338,11 @@ test('the TS and Python changed-files steps pass on a PR with no source file, un
       }
       assert.deepEqual(step('README.md docs/x.md'), { status: 0, files: 'files=\n' }, `${file}: nothing to mutate is not a failure`)
       assert.deepEqual(step(`README.md ${source}`), { status: 0, files: `files=${source}\n` }, file)
+      // No match (exit 1) is tolerated; grep failing (exit 2) is not.
+      writeFileSync(join(dir, 'grep'), '#!/bin/sh\nexit 2\n')
+      chmodSync(join(dir, 'grep'), 0o755)
+      assert.notEqual(step(`README.md ${source}`).status, 0, `${file}: a failed grep fails the step`)
+      rmSync(join(dir, 'grep'))
     }
   } finally {
     rmSync(dir, { recursive: true, force: true })
