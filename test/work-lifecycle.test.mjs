@@ -126,6 +126,7 @@ test('tree-rm: a squash-merged tree goes with its local and remote branch; a rem
       const refused = just('tree-rm', 'e')
       assert.equal(refused.status, 0, refused.stderr)
       assert.ok(!existsSync(e))
+      assert.equal(spawnSync('git', ['rev-parse', '--verify', '--quiet', 'phase/e/1'], { cwd: work }).status, 1)
       assert.match(refused.stderr, /could not delete origin\/phase\/e\/1/)
       assert.ok(remoteHas('phase/e/1'))
     })
@@ -144,6 +145,8 @@ test('work-stale: marker-only directories of no branch are pruned, everything el
     write(dir, '.work/draft/rfc.md', '# RFC\n\n- **Status**: draft\n- **Branch**: — set at implementation\n')
     write(dir, '.work/old/rfc.md', '# RFC\n\n- **Status**: implementing\n- **Branch**: feat/old\n')
     write(dir, '.work/merged/defect.md', '# Bug\n\n- **Status**: done\n- **Branch**: work\n')
+    write(dir, '.work/hy/rfc.md', '# RFC\n\n- **Status**: in-progress\n- **Branch**: feat/hy\n')
+    write(dir, '.work/nostatus/rfc.md', '# RFC\n\n- **Branch**: feat/nostatus\n')
     squash(dir)
 
     const r = spawnSync(process.execPath, [join(KIT, 'work-stale.mjs'), '--prune', 'main'], { cwd: dir, encoding: 'utf8' })
@@ -155,6 +158,8 @@ test('work-stale: marker-only directories of no branch are pruned, everything el
       'not `done`: a multi-phase RFC sits on base between its phases, so the reader judges')
     assert.match(r.stdout, /\.work\/merged\/defect\.md {2}\(work: landed on main\) — delete it in a commit$/m)
     assert.doesNotMatch(r.stdout, /draft/, 'an RFC not started has no branch to be stale against')
+    assert.match(r.stdout, /\.work\/hy\/rfc\.md .* — still in-progress: /, 'a hyphenated status is read whole')
+    assert.match(r.stdout, /\.work\/nostatus\/rfc\.md .* — status unknown: /)
   })
 })
 
@@ -191,9 +196,12 @@ test('work-stale: a state file whose branch exists only on the remote is judged 
     repo(dir)
     // A fresh clone: `work` is only `origin/work`.
     git(dir, 'update-ref', 'refs/remotes/origin/work', 'work'); git(dir, 'branch', '-D', 'work')
+    git(dir, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/work')
     write(dir, '.work/w/defect.md', '# Bug\n\n- **Status**: done\n- **Branch**: work\n')
+    write(dir, '.work/o/defect.md', '# Bug\n\n- **Status**: done\n- **Branch**: origin\n')
     const stale = () => spawnSync(process.execPath, [join(KIT, 'work-stale.mjs'), 'main'], { cwd: dir, encoding: 'utf8' }).stdout
     assert.doesNotMatch(stale(), /\.work\/w\//, 'origin/work has not landed')
+    assert.match(stale(), /\.work\/o\/defect\.md {2}\(origin: branch gone\)/, '`origin/HEAD` is no branch named `origin`')
     git(dir, 'merge', '-q', '--squash', 'origin/work'); git(dir, 'commit', '-qm', 'work (#1)')
     assert.match(stale(), /\.work\/w\/defect\.md {2}\(work: landed on main\)/)
   })
