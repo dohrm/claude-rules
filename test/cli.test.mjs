@@ -287,6 +287,19 @@ test('remove <stack> also removes that language\'s overlays in the kept profiles
   })
 })
 
+test('remove <stack> refuses an edited overlay of that language unless --force', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude'], dir))
+    const overlay = '.claude/rules/hexagonal/go.md'
+    writeFileSync(join(dir, overlay), read(dir, overlay) + '\nmine\n')
+
+    assert.equal(runCliBare(['remove', 'go'], dir).status, 1)
+    assert.ok(has(dir, overlay), 'an edit is never deleted silently')
+    ok(runCliBare(['remove', 'go', '--force'], dir))
+    assert.ok(!has(dir, overlay))
+  })
+})
+
 test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')

@@ -54,8 +54,8 @@ language filter (`isLanguageDead` against the remaining language profiles) runs 
 ## Assumptions
 
 - Autonomy L3 — passed at launch.
-- The globs are read from the installed file on disk, refused on a hash mismatch like the
-  Codex branch does — the lock holds no globs, and an edited rule has no installed text to judge.
+- The globs are read from the file on disk (the lock holds none); a dead one that was edited
+  is refused by the tree check like any edited file, `--force` deletes it. Unlike Codex, which refuses any edited kept rule up front (it must rescope it), an edit that keeps a live glob is kept.
 
 ## Blocked on the human
 

@@ -524,10 +524,14 @@ function remove(profilesArg) {
   // The kept records follow: a rewritten file gets its new hash, a dropped one goes.
   // A Claude or Cursor rule of a kept profile goes too once its language is: install
   // would not emit it (`isLanguageDead`). The lock holds no globs, so they are read from
-  // the installed file; an edited one is then refused by the tree check below.
+  // the file on disk (Claude `paths:`, Cursor `globs:`); an edited one is then refused by
+  // the tree check below, and anything but a regular file is left to that check.
   const remainingLangs = remaining.filter(p => LANG_EXT[p])
-  const deadRule = path => /^\.(claude|cursor)\/rules\/.+\.mdc?$/.test(path) && existsSync(path)
-    && isLanguageDead((({ paths, globs }) => paths ?? globs)(splitFm(readFileSync(path, 'utf8')).fm), remainingLangs)
+  const deadRule = path => {
+    if (!/^\.(claude|cursor)\/rules\/.+\.mdc?$/.test(path) || !existsSync(path) || !lstatSync(path).isFile()) return false
+    const { fm } = splitFm(readFileSync(path, 'utf8'))
+    return isLanguageDead(fm.paths ?? fm.globs, remainingLangs)
+  }
   for (const record of keptInstalled) for (const path of Object.keys(record.files)) {
     if (codexDropped.includes(path) || (record.kind === 'rule' && deadRule(path))) delete record.files[path]
     else if (writes.has(path)) record.files[path] = hash(writes.get(path))
