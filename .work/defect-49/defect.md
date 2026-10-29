@@ -1,6 +1,6 @@
 # Bug — the React eslint overlay fails on a fresh install of current packages
 
-- **Status**: diagnosed
+- **Status**: fixing
 - **Autonomy**: L3
 - **Repository**: https://github.com/dohrm/claude-rules
 - **Base branch**: next

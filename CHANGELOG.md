@@ -157,6 +157,27 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Fixed — the React eslint overlay works on current packages
+
+([#49](https://github.com/dohrm/claude-rules/issues/49)) The `kit/ts-web` install block,
+followed by copying `eslint.react.js`, failed twice on a fresh app. npm refused eslint 10
+(the peer range of `eslint-plugin-jsx-a11y` 6.10 stops at 9). Then
+`eslint-plugin-react-hooks` 7 rejected the overlay: `configs['recommended-latest']` is
+its legacy config since v7. The kit's own TS gate tested react-hooks 5, so it passed.
+
+- **Both `eslint.react.js` copies (ts-web, ts-tauri) read
+  `reactHooks.configs.flat['recommended-latest']`.**
+- **The ts-web install block pins `eslint@9 @eslint/js@9`**, until jsx-a11y supports 10.
+  The ts-tauri README points to it.
+- The TS gate's witness tests react-hooks 7, and a test keeps the README's eslint pin on
+  the major that witness tests.
+
+Hand-merge — `eslint.config.js` is a copy:
+
+- Replace `reactHooks.configs['recommended-latest']` with
+  `reactHooks.configs.flat['recommended-latest']` (react-hooks 7+).
+- If npm resolved eslint 10, `npm i -D eslint@9 @eslint/js@9`.
+
 ### Fixed — a Tier 4 job that measured nothing is no longer green
 
 A downstream Rust mutation job was killed by SIGTERM after its baseline, before its
