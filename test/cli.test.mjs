@@ -271,6 +271,49 @@ test('remove <profile> deletes only that profile and updates the lock', () => {
   })
 })
 
+// #48: a kept profile's overlay for the removed language is one install would not emit.
+test('remove <stack> also removes that language\'s overlays in the kept profiles', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude,cursor,codex'], dir))
+    const overlays = ['.claude/rules/hexagonal/go.md', '.cursor/rules/hexagonal/go.mdc', '.agents/rules/hexagonal/go.md']
+    for (const path of overlays) assert.ok(has(dir, path), `${path} installed`)
+
+    ok(runCliBare(['remove', 'go'], dir))
+    for (const path of overlays) assert.ok(!has(dir, path), `${path} removed with go`)
+    const owned = lockOf(dir).installed.flatMap(i => Object.keys(i.files))
+    assert.deepEqual(owned.filter(path => overlays.includes(path)), [], 'the lock no longer owns them')
+    assert.ok(has(dir, '.claude/rules/hexagonal/rust.md') && has(dir, '.cursor/rules/hexagonal/rust.mdc'), 'the kept language\'s overlay stays')
+    assert.ok(has(dir, '.claude/rules/hexagonal/principle.md'), 'a language-free rule stays')
+  })
+})
+
+test('remove <stack> refuses an edited overlay of that language unless --force', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude'], dir))
+    const overlay = '.claude/rules/hexagonal/go.md'
+    writeFileSync(join(dir, overlay), read(dir, overlay) + '\nmine\n')
+
+    assert.equal(runCliBare(['remove', 'go'], dir).status, 1)
+    assert.ok(has(dir, overlay), 'an edit is never deleted silently')
+    ok(runCliBare(['remove', 'go', '--force'], dir))
+    assert.ok(!has(dir, overlay))
+  })
+})
+
+test('remove <stack> refuses a kept rule that is no longer a regular file', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', 'go', 'hexagonal', '--agent', 'claude'], dir))
+    const overlay = '.claude/rules/hexagonal/go.md'
+    const lock = read(dir, '.claude-rules.lock')
+    rmSync(join(dir, overlay)); mkdirSync(join(dir, overlay))
+
+    const r = runCliBare(['remove', 'go'], dir)
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /Not a regular file: \.claude\/rules\/hexagonal\/go\.md/)
+    assert.equal(read(dir, '.claude-rules.lock'), lock, 'nothing removed, the lock untouched')
+  })
+})
+
 test('adoption purges leftover trees from retired agent targets', () => {
   withTmpRepo(dir => {
     writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify({ repo: 'dohrm/claude-rules', ref: 'main', profiles: ['rust'], agents: ['claude'], levels: { rust: 'gates' } }) + '\n')
