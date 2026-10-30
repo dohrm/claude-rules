@@ -24,6 +24,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { advice, staleWork } from './work-stale.mjs'
 
 const base = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'origin/main'
 
@@ -179,6 +180,7 @@ const rows = trees.map((tree) => {
     worklist: worklist.label,
     review: reviewState(tree),
     blocked: worklist.blocked,
+    stale: staleWork(tree.path, base),
   }
 })
 
@@ -196,6 +198,9 @@ for (const r of rows) {
     `${pad(r.ahead, wAhead)}  ${pad(r.dirty, wDirty)}  ${pad(r.worklist, wWorklist)}  ${r.review}`,
   )
   for (const line of r.blocked) console.log(`    BLOCKED: ${line.replace(/^[-*]\s*/, '')}`)
+  if (r.stale.markerOnly.length)
+    console.log(`    stale: ${r.stale.markerOnly.map((d) => `.work/${d}/`).join(' ')} — gate markers only, \`just work-prune\``)
+  for (const s of r.stale.landedState) console.log(`    stale: ${s.file} — ${s.branch}: ${s.why}, ${advice(s)}`)
 }
 
 const waiting = rows.filter((r) => r.blocked.length).length

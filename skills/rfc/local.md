@@ -2,8 +2,9 @@
 
 The RFC is **one file, `.work/<slug>/rfc.md`**: its current state *and* its whole
 audit trail. Nothing else records what happened, so the file keeps it all. Committed
-working memory (`product/documents.md`); deleted once the PR merges, with the local
-decisions that matter copied into the PR description.
+working memory (`product/documents.md`), deleted by the last commit of the PR that ends
+the RFC, with the local decisions that matter copied into its description (`SKILL.md`
+§ 4).
 
 ## The file
 
@@ -42,7 +43,7 @@ line is the state; `just status` and `just publish-summary` read this file.
 
 At L4, `## Log` also takes the `ODD:` lines (or `dropped to L3: <why>`), the dependency
 graph before any parallel phases, and each delegated decision with its proof. The final
-report is the `rfc/<slug>` PR's description, because this file is deleted at the merge.
+report is the `rfc/<slug>` PR's description, because that PR deletes this file.
 
 ## `ready` and escalation
 

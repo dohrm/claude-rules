@@ -452,8 +452,18 @@ tree slug branch="":
 # forest this exists to prevent. Found by running it, not by reading it.
 #
 # "Merged" is measured against `{{base}}`, the same trunk every other gate here
-# measures against. A `base` that does not resolve (no remote fetched yet) fails
+# measures against, by `landed.mjs`: an ancestor, or a squash merge recognised by its
+# patch-id (a squash is never an ancestor, and `branch -d` would refuse it — hence
+# `-D`, after the check). A `base` that does not resolve (no remote fetched yet) fails
 # CLOSED: unproven is not the same as merged.
+#
+# The remote branch goes too, only when it is the branch's OWN upstream — same name —
+# and never `base`: a branch cut from `origin/next` tracks `next`, and `next` is not
+# this tree's to delete. It goes when the remote holds the local tip or an ancestor of
+# it (nothing there that has not landed); a commit pushed from elsewhere is never
+# discarded. A forge that already deleted it on merge leaves nothing to do. An
+# unreachable remote, or a push the pre-push hook or the forge refuses, is said, never
+# an error: the tree and the local branch are already gone by then.
 tree-rm slug:
     #!/usr/bin/env sh
     set -eu
@@ -467,11 +477,27 @@ tree-rm slug:
     if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null; then
         printf 'cannot resolve {{base}}, so "merged" is unprovable — nothing removed. Fetch it, or pass base=<ref>.\n' >&2; exit 2
     fi
-    if ! git merge-base --is-ancestor "$branch" {{quote(base)}}; then
+    if ! node {{kit}}/landed.mjs "$branch" {{quote(base)}}; then
         printf '%s is not merged into {{base}} — nothing removed. Merge it, or discard it by hand.\n' "$branch" >&2; exit 2
     fi
+    tip=$(git rev-parse "$branch")
+    remote=$(git config "branch.$branch.remote" || true)
+    upstream=$(git config "branch.$branch.merge" || true)
     git worktree remove "$path"
-    git branch -d "$branch"
+    git branch -D "$branch"
+    [ -n "$remote" ] && [ "$remote" != . ] && [ "$upstream" = "refs/heads/$branch" ] || exit 0
+    case "$(git rev-parse --abbrev-ref {{quote(base)}} 2>/dev/null)" in "$branch"|"$remote/$branch") exit 0 ;; esac
+    if ! live=$(git ls-remote --heads "$remote" "$upstream"); then
+        printf '%s unreachable — remote branch %s left as it is.\n' "$remote" "$branch" >&2; exit 0
+    fi
+    live=${live%%[[:space:]]*}
+    if [ -z "$live" ]; then exit 0; fi
+    if [ "$live" = "$tip" ] || { git cat-file -e "$live^{commit}" 2>/dev/null && git merge-base --is-ancestor "$live" "$tip"; }; then
+        git push --quiet "$remote" --delete "$branch" \
+            || printf 'could not delete %s/%s (pre-push hook, protection or permission) — left as it is.\n' "$remote" "$branch" >&2
+    else
+        printf '%s/%s holds commits this tree never had — left as it is.\n' "$remote" "$branch" >&2
+    fi
 
 # One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the
 # tree it runs in: two sessions in one checkout share one verdict, and A's CLEAN
@@ -483,6 +509,13 @@ tree-rm slug:
 # Rename the recipe if your justfile already has a `status`.
 status:
     node {{kit}}/worktree-status.mjs {{base}}
+
+# `.work/` keeps a directory per branch a gate ever ran on, holding only gitignored
+# markers — nothing removed them once the branch was gone (#57). This deletes, in THIS
+# tree, the ones no local branch resolves to (work-stale.mjs), and lists the committed
+# state files whose branch landed or is gone: those leave in a commit, not here.
+work-prune:
+    node {{kit}}/work-stale.mjs --prune {{base}}
 
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
 # The per-loop counterpart to `just status`: that one is read-only across every

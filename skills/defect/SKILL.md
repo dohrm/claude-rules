@@ -51,7 +51,8 @@ else `git switch -c fix/<slug> <base>` — and write it into `**Branch**`. With 
 the slug is `defect-<ticket number>`, so any run finds the branch from the ticket alone.
 Commit `defect.md` at the end of each phase. When a run stops before the fix, push the
 branch: `/defect fix`, maybe another run in another checkout, resumes from it. The fix
-lands on the same branch, and the file is deleted once its PR merges
+lands on the same branch, and the fix PR's last commit deletes `.work/<slug>/` once its
+description carries the diagnosis, so the file never reaches the base branch
 (`product/documents.md`).
 
 <defect-body>
@@ -146,7 +147,8 @@ one. Remove every `[DEBUG-xxxx]` log, then close the loop of `agent/autonomy.md`
 reproduction passes, `just check` green, `just code-review` before the push. The commit
 message explains the root cause, not the symptom. Open the PR: it references the ticket,
 and its description carries the diagnosis — expected behavior and its source, root cause,
-reproduction. Set `done` when the PR is open; the human merges it.
+reproduction. Set `done` when the PR is open, then delete `.work/<slug>/` in its last
+commit; the human merges it.
 
 ## Escalate to `/rfc`
 
