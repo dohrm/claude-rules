@@ -22,10 +22,10 @@
 // It also WARNS on a DANGLING reference — `ADR-NNNN`, or a link to `adr/NNNN-*.md`, in a
 // tracked file when no such record exists: what a deleted record leaves behind (git is the
 // archive; a comment pointing at a missing file is not). Same contract — `--strict` fails.
-// Scanned: `git ls-files` minus `.work/`, `CHANGELOG.md` (release history names the
-// records of its day), installed agent assets (`.claude/`, `.agents/`, `.cursor/`,
-// `.dev/`), any directory holding its own `docs/adr/` (a vendored corpus numbers its own
-// records), and the repo's `adr.referenceExclude` prefixes. A reference qualified by one
+// Scanned: tracked text files (`git grep`) minus `.work/`, `CHANGELOG.md` (release
+// history names the records of its day), installed agent assets (`.claude/`, `.agents/`,
+// `.cursor/`, `.dev/`), any directory holding its own `docs/adr/` (a vendored corpus
+// numbers its own records), and the repo's `adr.referenceExclude` prefixes. A reference qualified by one
 // of `adr.externalPrefixes` (`shared ADR-NNNN`) names another repository's record.
 //
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
@@ -35,7 +35,7 @@
 //         (defaults: docs/adr, .docs-budgets.json)
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const KNOWN_STATUSES = ['Proposed', 'Accepted', 'Rejected', 'Superseded', 'Deprecated']
@@ -167,7 +167,11 @@ function reportBudget(oversized, invented, strict) {
 /** Runs git, returning its stdout, or null when it exits non-zero. */
 function git(...args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    return execFileSync('git', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 256 * 1024 * 1024,
+    })
   } catch {
     return null
   }
@@ -201,33 +205,35 @@ const DANGLING_SHOWN = 50
 
 const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
 
-/** Tracked text files that can reference this corpus; [] outside a git repository. */
-function referencingFiles(corpusDir) {
-  const listed = git('ls-files', '-z')
-  if (listed === null) return []
-  const tracked = listed.split('\0').filter(Boolean)
+/** Path prefixes whose ADR numbers are not references to this corpus. */
+function unscannedPrefixes(corpusDir) {
+  const listed = git('ls-files', '-z') ?? ''
   // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
   const vendored = new Set()
-  for (const file of tracked) {
+  for (const file of listed.split('\0')) {
     const at = file.indexOf('/docs/adr/')
     if (at > 0 && !under(file, corpusDir)) vendored.add(file.slice(0, at))
   }
-  const skipped = [...NEVER_SCANNED, ...vendored, ...config.referenceExclude]
-  return tracked.filter(
-    (file) =>
-      path.posix.basename(file) !== 'CHANGELOG.md' && !skipped.some((p) => under(file, p)),
-  )
+  return [...NEVER_SCANNED, ...vendored, ...config.referenceExclude]
 }
 
-/** Regular, non-binary file content, or null. */
-function readText(file) {
-  try {
-    if (!lstatSync(file).isFile()) return null
-    const text = readFileSync(file, 'utf8')
-    return text.includes('\0') ? null : text
-  } catch {
-    return null
-  }
+/** Tracked, non-binary lines that mention a record, as { file, line, text }. */
+function candidateLines(corpusDir) {
+  // git grep reads only what can match; exit 1 (no match) and 128 (no repo) both mean none.
+  // The skipped paths go to git as pathspecs, so their matches never reach Node.
+  const excluded = [
+    ':(exclude,glob)**/CHANGELOG.md',
+    ...unscannedPrefixes(corpusDir).map((p) => `:(exclude,literal)${p}`),
+  ]
+  const out = git('grep', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded)
+  if (out === null) return []
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((row) => {
+      const [file, line, ...text] = row.split('\0')
+      return { file, line, text: text.join('\0') }
+    })
 }
 
 /** True when the match is qualified by an external prefix: `shared ADR-NNNN`. */
@@ -244,18 +250,14 @@ function danglingReferences(files) {
   const names = new Set(files.map((f) => path.basename(f)))
   const ids = new Set([...names].map((n) => n.match(/^(\d{4})-/)?.[1]).filter(Boolean))
   const found = []
-  for (const file of referencingFiles(corpusDir)) {
-    const text = readText(file)
-    if (text === null || !/ADR-\d|adr\/\d/.test(text)) continue
-    text.split('\n').forEach((line, i) => {
-      for (const m of line.matchAll(ADR_ID))
-        if (!ids.has(m[1]) && !isExternal(line, m.index)) found.push(`${file}:${i + 1} — ADR-${m[1]}`)
-      for (const m of line.matchAll(ADR_LINK)) {
-        // A URL points at another repository's corpus.
-        const token = line.slice(0, m.index).split(/[\s(<"'`[]/).pop()
-        if (!names.has(m[1]) && !token.includes('://')) found.push(`${file}:${i + 1} — adr/${m[1]}`)
-      }
-    })
+  for (const { file, line, text } of candidateLines(corpusDir)) {
+    for (const m of text.matchAll(ADR_ID))
+      if (!ids.has(m[1]) && !isExternal(text, m.index)) found.push(`${file}:${line} — ADR-${m[1]}`)
+    for (const m of text.matchAll(ADR_LINK)) {
+      // A URL points at another repository's corpus.
+      const token = text.slice(0, m.index).split(/[\s(<"'`[]/).pop()
+      if (!names.has(m[1]) && !token.includes('://')) found.push(`${file}:${line} — adr/${m[1]}`)
+    }
   }
   return found
 }
@@ -273,12 +275,6 @@ function reportDangling(found, strict) {
       ` Not a reference: add the path to adr.referenceExclude in ${configPath}.` +
       (strict ? '' : ' Advisory here — pass --strict to enforce.'),
   )
-}
-
-/** Records, words, and the tokens they cost an agent that loads them all. */
-function corpusTotals(files) {
-  const count = files.reduce((sum, f) => sum + words(readFileSync(f, 'utf8')), 0)
-  return `${files.length} record(s), ${count} words, ≈${Math.round(count * 1.35)} tokens`
 }
 
 function main() {
@@ -299,10 +295,12 @@ function main() {
   const problems = []
   const oversized = []
   const invented = []
+  let corpusWords = 0
 
   for (const file of files) {
     const text = readFileSync(file, 'utf8')
     const count = words(text)
+    corpusWords += count
     if (count > WORD_CEILING) oversized.push({ file, count })
     const headings = oddSections(text)
     if (headings.length > 0) invented.push({ file, headings })
@@ -350,17 +348,23 @@ function main() {
   if (budgetCount > 0) reportBudget(oversized, invented, strict)
   const dangling = danglingReferences(files)
   if (dangling.length > 0) reportDangling(dangling, strict)
-  console.log(`adr-check: corpus — ${corpusTotals(files)}.`)
+  // What an agent pays to load the whole log: the before/after number a triage reports.
+  console.log(
+    `adr-check: corpus — ${files.length} record(s), ${corpusWords} words, ≈${Math.round(corpusWords * 1.35)} tokens.`,
+  )
 
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem)
     console.error(`\nSee rules/agent/decisions.md for the lifecycle.`)
     return 1
   }
-  const warnings = budgetCount + (dangling.length > 0 ? 1 : 0)
-  if (strict && warnings > 0) return 1
+  if (strict && (budgetCount > 0 || dangling.length > 0)) return 1
 
-  const note = warnings > 0 ? ` (${warnings} advisory warning(s) above)` : ''
+  const advisories = [
+    budgetCount > 0 ? `${budgetCount} budget` : '',
+    dangling.length > 0 ? `${dangling.length} reference` : '',
+  ].filter(Boolean)
+  const note = advisories.length > 0 ? ` (${advisories.join(', ')} warning(s) above)` : ''
   console.log(`adr-check: ${files.length} decision record(s) in order.${note}${budgetNote}`)
   return 0
 }

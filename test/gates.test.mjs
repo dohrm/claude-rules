@@ -1083,6 +1083,19 @@ test('adr-check: a reference to a missing record is dangling, and --strict fails
   })
 })
 
+test('adr-check: a long list of dangling references is cut, never the count', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/many.md', Array.from({ length: 51 }, (_, i) => `ADR-${String(i + 100).padStart(4, '0')}`).join('\n'))
+    commitBase(dir)
+    const r = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.match(r.out, /51 dangling reference/)
+    assert.match(r.out, /src\/many\.md:50 — ADR-0149/)
+    assert.doesNotMatch(r.out, /src\/many\.md:51 —/)
+    assert.match(r.out, /… and 1 more/)
+  })
+})
+
 test('adr-check: an existing record, a shared one and an unscanned path are not dangling', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
@@ -1105,6 +1118,13 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     const replaced = run(ADR_CHECK, ['docs/adr'], dir)
     assert.match(replaced.out, /2 dangling reference/)
     assert.match(replaced.out, /src\/a\.ts:2 — ADR-0042/)
+
+    // A prefix is literal text, not a pattern.
+    write(dir, 'src/a.ts', '// org.x ADR-0042, orgYx ADR-0043\n')
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["fixtures"], "externalPrefixes": ["org.x"] } }')
+    const literal = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.match(literal.out, /1 dangling reference/)
+    assert.match(literal.out, /src\/a\.ts:1 — ADR-0043/)
 
     write(dir, '.docs-budgets.json', '{ "adr": { "externalPrefixes": "shared" } }')
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
