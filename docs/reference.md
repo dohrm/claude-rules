@@ -38,7 +38,7 @@ flowchart LR
 | **Frame** | `/interview` → `/prd` | `.work/<slug>/intent.md` (what is still open), then `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
 | **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per arbitration that earns one | agent writes `Proposed`, **human accepts** |
 | **Explore solutions** | `/solution-exploration` | independent options first, then ADR impacts; `Proposed` ADR only if a replacement is chosen for proposal | human decides whether to adopt it |
-| **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
+| **Review decisions** | `/adr-review` | triage table (one verdict per record), gate candidates, before/after size | human changes ADR statuses and merges deletions |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
 | **Engineer one change** | `/rfc` | the RFC — `.work/<slug>/rfc.md` or a ticket in the project's tracker: the whole request in phases and holds, local decisions, steps with proofs; iterated, then implemented to the end | **human marks it `ready`** |
