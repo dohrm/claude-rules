@@ -200,6 +200,10 @@ const forGit = (file) => file.split(path.sep).join('/')
 // `ADR-NNNN`, and a link to a record's file (`docs/adr/NNNN-slug.md`, `../adr/NNNN-slug.md`).
 const ADR_ID = /\bADR-(\d{4})\b/g
 const ADR_LINK = /\badr\/(\d{4}-[\w.-]*\.md)\b/g
+// Inside the corpus, a record links its sibling by bare file name: `[x](0003-y.md)`.
+const SIBLING_LINK = /\]\((?:\.\/)?(\d{4}-[\w.-]*\.md)\b/g
+// What git grep selects: a line that can hold any of the three forms above (ERE).
+const REFERENCE_LINE = 'ADR-[0-9]{4}|adr/[0-9]{4}-|\\]\\((\\./)?[0-9]{4}-'
 // Installed copies of agent assets: a copied skill's template record is not a reference.
 const NEVER_SCANNED = ['.work', '.claude', '.agents', '.cursor', '.dev']
 const DANGLING_SHOWN = 50
@@ -258,7 +262,7 @@ function candidateLines(corpusDir) {
   const out = scanGit(
     // --no-color: a colour-forcing config (color.ui=always) would wrap every match in
     // escape codes the regexes cannot see through — a false clean.
-    ['grep', '--no-color', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded],
+    ['grep', '--no-color', '-z', '-n', '-I', '-E', REFERENCE_LINE, '--', '.', ...excluded],
     [0, 1],
   )
   return out
@@ -272,7 +276,7 @@ function candidateLines(corpusDir) {
 
 /** True when the match is qualified by an external prefix: `shared ADR-NNNN`. */
 const EXTERNAL = config.externalPrefixes.map(
-  (p) => new RegExp(`(?:^|[^\\w])${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:-]*$`),
+  (p) => new RegExp(`(?:^|[^\\w])${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:(\\[-]*$`),
 )
 function isExternal(line, index) {
   const before = line.slice(0, index).toLowerCase()
@@ -297,6 +301,9 @@ function danglingReferences(files) {
       const token = text.slice(0, m.index).split(/[\s(<"'`[]/).pop()
       if (!names.has(m[1]) && !token.includes('://')) found.push(`${file}:${line} — adr/${m[1]}`)
     }
+    if (path.posix.dirname(file) === corpusDir)
+      for (const m of text.matchAll(SIBLING_LINK))
+        if (!names.has(m[1])) found.push(`${file}:${line} — ${m[1]}`)
   }
   return found
 }

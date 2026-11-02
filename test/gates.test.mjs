@@ -1069,18 +1069,23 @@ const RECORD = '# ADR-0001: x\n\n- **Status**: Proposed\n\n## Context\n\nshort.\
 test('adr-check: a reference to a missing record is dangling, and --strict fails on it', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
-    write(dir, 'src/main.rs', '// keep writes owned (ADR-0002)\nfn main() {}\n')
+    write(dir, 'src/main.rs', '// keep writes owned (ADR-0009)\nfn main() {}\n')
     write(dir, 'docs/guide.md', 'See [the record](adr/0003-gone.md).\n')
+    // A record links its sibling by bare file name; elsewhere the same text is not a record link.
+    write(dir, 'docs/adr/0002-y.md', RECORD.replace('ADR-0001: x', 'y') + 'Replaces [the old one](0004-gone.md).\n')
+    write(dir, 'docs/other.md', '[a note](0004-gone.md)\n')
     commitBase(dir)
     const warn = run(ADR_CHECK, ['docs/adr'], dir)
     assert.equal(warn.status, 0, warn.out)
-    assert.match(warn.out, /2 dangling reference/)
-    assert.match(warn.out, /src\/main\.rs:1 — ADR-0002/)
+    assert.match(warn.out, /3 dangling reference/)
+    assert.match(warn.out, /docs\/adr\/0002-y\.md:\d+ — 0004-gone\.md/)
+    assert.doesNotMatch(warn.out, /docs\/other\.md/)
+    assert.match(warn.out, /src\/main\.rs:1 — ADR-0009/)
     assert.match(warn.out, /docs\/guide\.md:1 — adr\/0003-gone\.md/)
-    assert.match(warn.out, /in order\. \(2 advisory warning\(s\) above\)/)
+    assert.match(warn.out, /in order\. \(3 advisory warning\(s\) above\)/)
     const strict = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(strict.status, 1, strict.out)
-    assert.match(strict.out, /adr-check error: 2 dangling/)
+    assert.match(strict.out, /adr-check error: 3 dangling/)
   })
 })
 
@@ -1115,13 +1120,21 @@ test('adr-check: a colour-forcing git config does not hide a reference', () => {
 test('adr-check: outside a git repository the skipped scan says so', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
-    const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    // Hermetic: no enclosing repository and no GIT_DIR from the caller's environment.
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: join(dir, '..') }
+    delete env.GIT_DIR
+    delete env.GIT_WORK_TREE
+    const nonRepo = (args) => {
+      const r = spawnSync(process.execPath, [ADR_CHECK, ...args], { cwd: dir, encoding: 'utf8', env })
+      return { status: r.status, out: r.stdout + r.stderr }
+    }
+    const r = nonRepo(['docs/adr', '--strict'])
     assert.equal(r.status, 0, r.out)
     assert.match(r.out, /not a git repository — reference scan skipped/)
 
     // A repository git cannot open is not "outside a repository".
     write(dir, '.git', 'gitdir: /nonexistent/claude-rules-test\n')
-    const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    const broken = nonRepo(['docs/adr', '--strict'])
     assert.equal(broken.status, 2, broken.out)
     assert.match(broken.out, /reference scan failed \(git rev-parse\)/)
   })
@@ -1161,7 +1174,7 @@ test('adr-check: a git killed by a signal is named, never a clean scan', { skip:
 test('adr-check: an existing record, a shared one and an unscanned path are not dangling', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
-    write(dir, 'src/a.ts', '// ADR-0001 holds; see docs/adr/0001-x.md\n// per shared ADR-0042, enterprise: ADR-0043\n')
+    write(dir, 'src/a.ts', '// ADR-0001 holds; see docs/adr/0001-x.md\n// per shared ADR-0042, enterprise: ADR-0043, shared [ADR-0044](https://example.invalid)\n')
     write(dir, 'docs/b.md', '[upstream](https://example.invalid/org/d/blob/main/docs/adr/0009-y.md)\n')
     write(dir, 'CHANGELOG.md', '- ADR-0005 deleted.\n')
     write(dir, '.claude/skills/architect/SKILL.md', 'Template: ADR-0001, ADR-0009.\n')
@@ -1178,7 +1191,7 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     // The prefix list is the repo's: replacing it drops the defaults.
     write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["fixtures"], "externalPrefixes": ["org"] } }')
     const replaced = run(ADR_CHECK, ['docs/adr'], dir)
-    assert.match(replaced.out, /2 dangling reference/)
+    assert.match(replaced.out, /3 dangling reference/)
     assert.match(replaced.out, /src\/a\.ts:2 — ADR-0042/)
 
     // A prefix is literal text, not a pattern.

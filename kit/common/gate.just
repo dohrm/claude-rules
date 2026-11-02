@@ -566,7 +566,8 @@ dup-check:
 # An agent proposes a decision, a human accepts it — and accepting means committing
 # the status line, which is the one signal an agent does not produce on its own.
 # Doctrine: rules/agent/decisions.md. Node (>=18) rather than bash, so `just check`
-# stays cross-platform; the script is a no-op when there are no ADRs and no reference to one.
+# stays cross-platform; the script is a no-op when there are no ADRs and no reference to one
+# (the reference scan needs git — exit 2 when git cannot run inside a repository).
 adr-check:
     node {{kit}}/adr-check.mjs
     # Size/section budgets are advisory above. Enforce them with:
