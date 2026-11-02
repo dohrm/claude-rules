@@ -172,11 +172,7 @@ function reportBudget(oversized, invented, strict) {
 /** Runs git, returning its stdout, or null when it exits non-zero. */
 function git(...args) {
   try {
-    return execFileSync('git', args, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 256 * 1024 * 1024,
-    })
+    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
   } catch {
     return null
   }
@@ -283,7 +279,11 @@ function isExternal(line, index) {
   return EXTERNAL.some((re) => re.test(before))
 }
 
-/** Every reference to a record absent from `files`, as `path:line — what`. */
+/**
+ * Every reference to a record absent from `files`, as `path:line — what`. The records
+ * themselves are scanned: a successor's "Supersedes ADR-NNNN" dangles once that record
+ * is deleted, and is rewritten in the same diff as any other reference.
+ */
 function danglingReferences(files) {
   const corpusDir = forGit(path.normalize(adrDir)).replace(/\/+$/, '')
   const names = new Set(files.map((f) => path.basename(f)))

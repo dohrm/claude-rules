@@ -56,10 +56,11 @@ enforce) when a record blows the one-screen budget or invents a section — the 
 ways a decision log becomes something nobody reads — and on a **dangling reference**:
 `ADR-NNNN`, or a link to `adr/NNNN-*.md`, in a tracked file when no such record exists,
 which is what deleting a record leaves behind. The scan still runs once the last
-record is gone. Not scanned: `.work/`, `CHANGELOG.md`, installed agent assets at the
-root (`.claude/`, `.agents/`, `.cursor/`, `.dev/`), any directory holding its own
-`docs/adr/` (a package with its own corpus is never checked against the root one), and
-the directories or files listed in `adr.referenceExclude` (whole path components:
+record is gone, and covers the records too (a successor citing a deleted record).
+Not scanned: `.work/`, `CHANGELOG.md`, installed agent assets at the root (`.claude/`,
+`.agents/`, `.cursor/`, `.dev/`), any directory holding its own `docs/adr/` (a package
+with its own corpus is never checked against the root one), and the directories or
+files listed in `adr.referenceExclude` (whole path components:
 `test/fix` does not exclude `test/fixtures/`). A reference qualified by one of
 `adr.externalPrefixes` (default `["shared", "enterprise"]`, as in `shared ADR-NNNN`)
 names another repository's record and is ignored. Every run with records prints the
