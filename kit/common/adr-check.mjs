@@ -100,9 +100,11 @@ function loadConfig(file) {
     ...defaults,
     externalPrefixes: stringList(file, 'externalPrefixes', adr.externalPrefixes, DEFAULT_EXTERNAL_PREFIXES),
     referenceExclude: stringList(file, 'referenceExclude', adr.referenceExclude, []).map((p) => {
-      if (path.posix.isAbsolute(p) || path.win32.isAbsolute(p) || p.split(/[\\/]/).includes('..'))
-        bail(`${file}: "adr.referenceExclude" entries are repo-relative path prefixes — got "${p}".`)
-      return p.replace(/\/+$/, '')
+      // `.` would exclude the whole repository: the scan off, without a word.
+      const n = path.posix.normalize(p.replace(/\\/g, '/')).replace(/\/+$/, '')
+      if (path.posix.isAbsolute(n) || path.win32.isAbsolute(p) || n === '.' || n.split('/').includes('..'))
+        bail(`${file}: "adr.referenceExclude" entries are repo-relative path prefixes below the root — got "${p}".`)
+      return n
     }),
   }
   const v = adr.unitCeiling
@@ -209,7 +211,8 @@ const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
 
 /** Path prefixes whose ADR numbers are not references to this corpus. */
 function unscannedPrefixes(corpusDir) {
-  const listed = git('ls-files', '-z', '--', ':(glob)**/docs/adr/**') ?? ''
+  const listed = git('ls-files', '-z', '--', ':(glob)**/docs/adr/**')
+  if (listed === null) bail('the reference scan failed (git ls-files).')
   // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
   const vendored = new Set()
   for (const file of listed.split('\0')) {
@@ -222,6 +225,7 @@ function unscannedPrefixes(corpusDir) {
 /** Tracked, non-binary lines that mention a record, as { file, line, text }. */
 function candidateLines(corpusDir) {
   // git grep reads only the lines that can match.
+  if (git('rev-parse', '--git-dir') === null) return [] // not a repository: nothing tracked
   // The skipped paths go to git as pathspecs, so their matches never reach Node.
   const excluded = [
     ':(exclude,glob)**/CHANGELOG.md',
@@ -234,7 +238,6 @@ function candidateLines(corpusDir) {
   )
   if (r.status === 1) return [] // no match
   if (r.status !== 0 || r.error) {
-    if (git('rev-parse', '--git-dir') === null) return [] // not a repository: nothing tracked
     // A scan that did not run must not read as a clean one.
     bail(`the reference scan failed (git grep) — ${(r.error?.message ?? r.stderr).trim()}`)
   }
