@@ -34,27 +34,28 @@ Every record gets exactly one verdict from this closed set, with its evidence:
 
 | Verdict | When | Destination |
 |---|---|---|
-| `keep` | A cross-cutting, hard-to-reverse arbitration that refused real alternatives | stays |
+| `keep` | A cross-cutting, hard-to-reverse arbitration that refused real alternatives; or a record whose fate waits on a human (`Proposed`, or a successor not yet `Accepted`) | stays |
 | `move → <home>` | Product, design or domain content; a stack convention | PRD, `DESIGN.md`, `EXPERIENCE.md`, a domain document (`CONTEXT.md`, `DATA-MODEL.md`); the installed rules |
 | `gate` | An absolute rule a check or test can hold | a check the project builds; the record may stay as its reason |
 | `shared` | Enterprise policy (security, secrets, identity, data protection, deployment) | a PR on the shared decision repository, then a pointer |
 | `delete` | Obsolete, `Deprecated`, or a feature-local choice its PR already holds; nothing worth moving | git history |
-| `collapse` | Superseded, or `Rejected` while its refusal still prevents a recurring proposal | deleted; the in-force record absorbs the one line it still needs |
+| `collapse` | Superseded, or `Rejected` while its refusal still prevents a recurring proposal | deleted; the one line it still needs goes to the record in force, else its topic's home |
 
-The homes follow `agent/decisions.md` § Which choices need an ADR — invent none. For `gate`, state the rule in one line and the evidence that it is
-forgotten while coding: review reports, review comments, fix commits
+The homes follow `agent/decisions.md` § Which choices need an ADR — invent none.
+For `gate`, state the rule in one line and the evidence that it is forgotten while
+coding: review reports, review comments, fix commits
 (`git log -S`, `git log --grep`). A rule nobody forgets is not a gate candidate.
 List gates as candidates; building them is the project's own work. For `shared`,
 prepare the shared-repository PR as a `Proposed` record and ask before opening it.
 
-For `collapse`, the in-force record gains at most one line under
-`Alternatives considered` — the refused option and the trade-off that killed it.
-That record is the successor of a superseded one, or, for a `Rejected` one, the
-`Accepted` record whose scope the refused option would have changed. Collapse only
-into an `Accepted` record; with none to absorb a refusal still needed, propose
-`keep` or `delete` to the human. One `Proposed` record may consolidate
-several `keep` records only when they express one coherent decision; choices that
-can be accepted independently stay separate.
+For `collapse`, the refusal still needed becomes one line — the refused option and
+the trade-off that killed it — under `Alternatives considered` of an `Accepted`
+record: the successor of a superseded one, or, for a `Rejected` one, the record
+whose scope the refused option would have changed. With no such record, the line
+goes to its topic's home (the table above); with none, git holds it.
+
+One `Proposed` record may consolidate several `keep` records only when they express
+one coherent decision; choices that can be accepted independently stay separate.
 
 ## 3. Move then delete
 
@@ -64,13 +65,14 @@ exists at its destination.
 
 - **Execute** only deletions whose fate is mechanical: the successor named by
   `Superseded by` is `Accepted` on disk, or the status `Deprecated` or `Rejected`
-  was already committed by a human. A `Rejected` record whose refusal still
-  matters is not mechanical: choosing its absorber is a judgment, so propose it.
+  was already committed by a human. Never a `Proposed` or `Accepted` record. For
+  each executed `Rejected` deletion, the triage PR's description says where its
+  refusal went, or why it no longer matters: the diff only shows a file leaving.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
   execute it once the human answers.
 - **Refuse**: deleting a `Proposed` record (a human withdraws it to `Rejected`
-  first); deleting a record whose successor is not `Accepted` (it is `keep` until
-  then); collapsing into a record that is not `Accepted`.
+  first); deleting a superseded record whose successor is not `Accepted` (it is
+  `keep` until then); collapsing into a record that is not `Accepted`.
 
 Update the decision index in the same diff: a deleted record leaves the index.
 
@@ -92,8 +94,8 @@ Never leave a bare number to a missing file. With the kit installed,
 Return, in order:
 
 1. **Triage table** — record, status, verdict, evidence, destination, executed or
-   awaiting the human. An executed `Rejected` deletion says why its refusal no
-   longer matters.
+   awaiting the human. It goes in the triage PR's description, with the reason for
+   each executed `Rejected` deletion.
 2. **Gate candidates** — rule, evidence it is forgotten, where a check could hold it.
 3. **Decisions in force** — a compact, source-linked summary readers load instead
    of the whole corpus; never copy whole records.
