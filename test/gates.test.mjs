@@ -1118,6 +1118,12 @@ test('adr-check: outside a git repository the skipped scan says so', () => {
     const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(r.status, 0, r.out)
     assert.match(r.out, /not a git repository — reference scan skipped/)
+
+    // A repository git cannot open is not "outside a repository".
+    write(dir, '.git', 'gitdir: /nonexistent/claude-rules-test\n')
+    const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(broken.status, 2, broken.out)
+    assert.match(broken.out, /reference scan failed \(git rev-parse\)/)
   })
 })
 

@@ -25,8 +25,9 @@
 // Scanned: tracked text files (`git grep`) minus `.work/`, `CHANGELOG.md` (release
 // history names the records of its day), installed agent assets (`.claude/`, `.agents/`,
 // `.cursor/`, `.dev/`), any directory holding its own `docs/adr/` (a vendored corpus
-// numbers its own records), and the repo's `adr.referenceExclude` prefixes. A reference qualified by one
-// of `adr.externalPrefixes` (`shared ADR-NNNN`) names another repository's record.
+// numbers its own records), and the repo's `adr.referenceExclude` paths. A reference
+// qualified by one of `adr.externalPrefixes` (`shared ADR-NNNN`) names another
+// repository's record.
 //
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
@@ -240,8 +241,15 @@ function unscannedPrefixes(corpusDir) {
 function candidateLines(corpusDir) {
   // Outside a repository nothing is tracked. Probed first: scanGit fails hard there. A
   // missing git binary is not "outside a repository" — scanGit reports it.
-  const probe = spawnSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' })
+  const probe = spawnSync('git', ['rev-parse', '--git-dir'], {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', LANGUAGE: '' }, // the message below is matched
+  })
   if (!probe.error && probe.status !== 0) {
+    // Only git's own "not a repository" skips: dubious ownership or a broken .git is a
+    // scan that cannot run, not a clean one.
+    if (!/not a git repository \(or any/i.test(probe.stderr))
+      bail(`the reference scan failed (git rev-parse) — ${probe.stderr.trim() || `exit ${probe.status}`}`)
     console.log('adr-check: not a git repository — reference scan skipped.')
     return []
   }
@@ -267,11 +275,12 @@ function candidateLines(corpusDir) {
 }
 
 /** True when the match is qualified by an external prefix: `shared ADR-NNNN`. */
+const EXTERNAL = config.externalPrefixes.map(
+  (p) => new RegExp(`(?:^|[^\\w])${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:-]*$`),
+)
 function isExternal(line, index) {
   const before = line.slice(0, index).toLowerCase()
-  return config.externalPrefixes.some((p) =>
-    new RegExp(`(?:^|[^\\w])${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:-]*$`).test(before),
-  )
+  return EXTERNAL.some((re) => re.test(before))
 }
 
 /** Every reference to a record absent from `files`, as `path:line — what`. */
