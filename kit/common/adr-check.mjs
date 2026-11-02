@@ -19,6 +19,15 @@
 // long" is a judgment a human makes and a gate should not fake; `--strict` promotes them to
 // failures for a repo that wants the budget enforced.
 //
+// It also WARNS on a DANGLING reference — `ADR-NNNN`, or a link to `adr/NNNN-*.md`, in a
+// tracked file when no such record exists: what a deleted record leaves behind (git is the
+// archive; a comment pointing at a missing file is not). Same contract — `--strict` fails.
+// Scanned: `git ls-files` minus `.work/`, `CHANGELOG.md` (release history names the
+// records of its day), installed agent assets (`.claude/`, `.agents/`, `.cursor/`,
+// `.dev/`), any directory holding its own `docs/adr/` (a vendored corpus numbers its own
+// records), and the repo's `adr.referenceExclude` prefixes. A reference qualified by one
+// of `adr.externalPrefixes` (`shared ADR-NNNN`) names another repository's record.
+//
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
 //
@@ -26,7 +35,7 @@
 //         (defaults: docs/adr, .docs-budgets.json)
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const KNOWN_STATUSES = ['Proposed', 'Accepted', 'Rejected', 'Superseded', 'Deprecated']
@@ -48,41 +57,67 @@ const adrDir = args.find((a) => !a.startsWith('--')) ?? 'docs/adr'
 // reset it. The loader is duplicated in both gates on purpose: each stays a single file you
 // can drop into scripts/ on its own. The canonical section list is doctrine, not a setting.
 const DEFAULT_WORD_CEILING = 600
+const DEFAULT_EXTERNAL_PREFIXES = ['shared', 'enterprise']
+const ADR_KEYS = ['unitCeiling', 'externalPrefixes', 'referenceExclude']
 
-/** The ADR word ceiling, plus a note when the repo moved it. */
-function loadCeiling(file) {
-  if (!existsSync(file)) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
+function bail(message) {
+  console.error(`adr-check: ${message}`)
+  process.exit(2)
+}
+
+/** A list of non-empty strings, or the default when absent. */
+function stringList(file, key, v, fallback) {
+  if (v === undefined) return fallback
+  if (!Array.isArray(v) || v.some((s) => typeof s !== 'string' || s.trim() === ''))
+    bail(`${file}: "adr.${key}" must be a list of non-empty strings — got ${JSON.stringify(v)}`)
+  return v
+}
+
+/** The repo's `adr` settings, plus a note when the repo moved the ceiling. */
+function loadConfig(file) {
+  const defaults = {
+    ceiling: DEFAULT_WORD_CEILING,
+    note: '',
+    externalPrefixes: DEFAULT_EXTERNAL_PREFIXES,
+    referenceExclude: [],
+  }
+  if (!existsSync(file)) return defaults
   let raw
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'))
   } catch (e) {
-    console.error(`adr-check: ${file} is not valid JSON — ${e.message}`)
-    process.exit(2)
+    bail(`${file} is not valid JSON — ${e.message}`)
   }
   const adr = raw.adr
-  if (adr === undefined) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
-  if (adr === null || typeof adr !== 'object' || Array.isArray(adr)) {
-    console.error(`adr-check: ${file}: "adr" must be an object, e.g. { "unitCeiling": 900 }.`)
-    process.exit(2)
-  }
+  if (adr === undefined) return defaults
+  if (adr === null || typeof adr !== 'object' || Array.isArray(adr))
+    bail(`${file}: "adr" must be an object, e.g. { "unitCeiling": 900 }.`)
   // A typo must not silently disable the budget.
   for (const key of Object.keys(adr))
-    if (!key.startsWith('$') && key !== 'unitCeiling') {
-      console.error(`adr-check: ${file}: unknown key "adr.${key}" — expected unitCeiling.`)
-      process.exit(2)
-    }
-  const v = adr.unitCeiling
-  if (v === undefined) return { ceiling: DEFAULT_WORD_CEILING, note: '' }
-  if (v !== null && (!Number.isInteger(v) || v <= 0)) {
-    console.error(
-      `adr-check: ${file}: "adr.unitCeiling" must be a positive integer, or null for no ceiling — got ${JSON.stringify(v)}`,
-    )
-    process.exit(2)
+    if (!key.startsWith('$') && !ADR_KEYS.includes(key))
+      bail(`${file}: unknown key "adr.${key}" — expected ${ADR_KEYS.join(', ')}.`)
+  const out = {
+    ...defaults,
+    externalPrefixes: stringList(file, 'externalPrefixes', adr.externalPrefixes, DEFAULT_EXTERNAL_PREFIXES),
+    referenceExclude: stringList(file, 'referenceExclude', adr.referenceExclude, []).map((p) =>
+      p.replace(/\/+$/, ''),
+    ),
   }
-  return { ceiling: v === null ? Infinity : v, note: ` Overridden in ${file}: adr.unitCeiling=${v}.` }
+  const v = adr.unitCeiling
+  if (v === undefined) return out
+  if (v !== null && (!Number.isInteger(v) || v <= 0))
+    bail(
+      `${file}: "adr.unitCeiling" must be a positive integer, or null for no ceiling — got ${JSON.stringify(v)}`,
+    )
+  return {
+    ...out,
+    ceiling: v === null ? Infinity : v,
+    note: ` Overridden in ${file}: adr.unitCeiling=${v}.`,
+  }
 }
 
-const { ceiling: WORD_CEILING, note: budgetNote } = loadCeiling(configPath)
+const config = loadConfig(configPath)
+const { ceiling: WORD_CEILING, note: budgetNote } = config
 
 // A heading is canonical when it names one of these. Anything else is an overflow valve.
 const SECTION_KEYWORDS = ['context', 'decision', 'consequence', 'alternative', 'implement']
@@ -156,6 +191,96 @@ function adrFiles(dir) {
 // git wants forward slashes even on Windows.
 const forGit = (file) => file.split(path.sep).join('/')
 
+// ------------------------------------------------------------ references
+// `ADR-NNNN`, and a link to a record's file (`docs/adr/NNNN-slug.md`, `../adr/NNNN-slug.md`).
+const ADR_ID = /\bADR-(\d{4})\b/g
+const ADR_LINK = /\badr\/(\d{4}-[\w.-]*\.md)\b/g
+// Installed copies of agent assets: a copied skill's template record is not a reference.
+const NEVER_SCANNED = ['.work', '.claude', '.agents', '.cursor', '.dev']
+const DANGLING_SHOWN = 50
+
+const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
+
+/** Tracked text files that can reference this corpus; [] outside a git repository. */
+function referencingFiles(corpusDir) {
+  const listed = git('ls-files', '-z')
+  if (listed === null) return []
+  const tracked = listed.split('\0').filter(Boolean)
+  // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
+  const vendored = new Set()
+  for (const file of tracked) {
+    const at = file.indexOf('/docs/adr/')
+    if (at > 0 && !under(file, corpusDir)) vendored.add(file.slice(0, at))
+  }
+  const skipped = [...NEVER_SCANNED, ...vendored, ...config.referenceExclude]
+  return tracked.filter(
+    (file) =>
+      path.posix.basename(file) !== 'CHANGELOG.md' && !skipped.some((p) => under(file, p)),
+  )
+}
+
+/** Regular, non-binary file content, or null. */
+function readText(file) {
+  try {
+    if (!lstatSync(file).isFile()) return null
+    const text = readFileSync(file, 'utf8')
+    return text.includes('\0') ? null : text
+  } catch {
+    return null
+  }
+}
+
+/** True when the match is qualified by an external prefix: `shared ADR-NNNN`. */
+function isExternal(line, index) {
+  const before = line.slice(0, index).toLowerCase()
+  return config.externalPrefixes.some((p) =>
+    new RegExp(`(?:^|[^\\w])${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s:-]*$`).test(before),
+  )
+}
+
+/** Every reference to a record absent from `files`, as `path:line — what`. */
+function danglingReferences(files) {
+  const corpusDir = forGit(path.normalize(adrDir)).replace(/\/+$/, '')
+  const names = new Set(files.map((f) => path.basename(f)))
+  const ids = new Set([...names].map((n) => n.match(/^(\d{4})-/)?.[1]).filter(Boolean))
+  const found = []
+  for (const file of referencingFiles(corpusDir)) {
+    const text = readText(file)
+    if (text === null || !/ADR-\d|adr\/\d/.test(text)) continue
+    text.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(ADR_ID))
+        if (!ids.has(m[1]) && !isExternal(line, m.index)) found.push(`${file}:${i + 1} — ADR-${m[1]}`)
+      for (const m of line.matchAll(ADR_LINK)) {
+        // A URL points at another repository's corpus.
+        const token = line.slice(0, m.index).split(/[\s(<"'`[]/).pop()
+        if (!names.has(m[1]) && !token.includes('://')) found.push(`${file}:${i + 1} — adr/${m[1]}`)
+      }
+    })
+  }
+  return found
+}
+
+function reportDangling(found, strict) {
+  console.error(
+    `adr-check ${strict ? 'error' : 'warning'}: ${found.length} dangling reference(s) to a record not in ${adrDir}/:`,
+  )
+  for (const ref of found.slice(0, DANGLING_SHOWN)) console.error(`  ${ref}`)
+  if (found.length > DANGLING_SHOWN) console.error(`  … and ${found.length - DANGLING_SHOWN} more`)
+  console.error(
+    `  A deleted record lives in git history, not in the tree. State the invariant the` +
+      ` reference protects, or point to the record's new home.` +
+      ` Another repository's record: qualify it (${config.externalPrefixes.map((p) => `"${p} ADR-NNNN"`).join(', ')}).` +
+      ` Not a reference: add the path to adr.referenceExclude in ${configPath}.` +
+      (strict ? '' : ' Advisory here — pass --strict to enforce.'),
+  )
+}
+
+/** Records, words, and the tokens they cost an agent that loads them all. */
+function corpusTotals(files) {
+  const count = files.reduce((sum, f) => sum + words(readFileSync(f, 'utf8')), 0)
+  return `${files.length} record(s), ${count} words, ≈${Math.round(count * 1.35)} tokens`
+}
+
 function main() {
   // A repo with no decision records is not a failing repo — the gate can be wired before the
   // first ADR exists, and stay wired after the last one is removed.
@@ -223,15 +348,19 @@ function main() {
 
   const budgetCount = oversized.length + invented.length
   if (budgetCount > 0) reportBudget(oversized, invented, strict)
+  const dangling = danglingReferences(files)
+  if (dangling.length > 0) reportDangling(dangling, strict)
+  console.log(`adr-check: corpus — ${corpusTotals(files)}.`)
 
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem)
     console.error(`\nSee rules/agent/decisions.md for the lifecycle.`)
     return 1
   }
-  if (strict && budgetCount > 0) return 1
+  const warnings = budgetCount + (dangling.length > 0 ? 1 : 0)
+  if (strict && warnings > 0) return 1
 
-  const note = budgetCount > 0 ? ` (${budgetCount} advisory warning(s) above)` : ''
+  const note = warnings > 0 ? ` (${warnings} advisory warning(s) above)` : ''
   console.log(`adr-check: ${files.length} decision record(s) in order.${note}${budgetNote}`)
   return 0
 }

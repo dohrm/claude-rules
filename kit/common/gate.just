@@ -573,6 +573,8 @@ adr-check:
     #   node {{kit}}/adr-check.mjs docs/adr --strict
     # Move the ceiling for THIS repo in .docs-budgets.json (never in the script — an
     # update overwrites it):  { "adr": { "unitCeiling": 900 } }
+    # Paths whose ADR numbers are not references to docs/adr/ (fixtures, templates):
+    #   { "adr": { "referenceExclude": ["test/fixtures/"] } }
 
 # ── Living documents ───────────────────────────────────────────────────────
 # Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.

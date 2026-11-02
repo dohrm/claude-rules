@@ -1,0 +1,6 @@
+{
+  "adr": {
+    "$referenceExclude": "Not references to docs/adr/: eval/adr-bench quotes its vendored snapshot's numbering, test/ holds fixture corpora, skills/architect carries the template ADR every consumer installs.",
+    "referenceExclude": ["eval/adr-bench/", "test/", "skills/architect/"]
+  }
+}
