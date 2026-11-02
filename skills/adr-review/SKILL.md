@@ -17,8 +17,8 @@ still apply with a product-only install.
 
 List `docs/adr/` and its index (usually the decision log in
 `docs/ARCHITECTURE.md`). Record the **corpus totals** — records, words, ≈ tokens
-at 1.35 per word. `adr-check` prints them when the kit is installed; otherwise
-count with `wc -w`. They are the "before" column of the final table.
+at 1.35 per word. `adr-check` prints them when the installed kit has them;
+otherwise count with `wc -w`. They are the "before" column of the final table.
 
 Read every record: explicit status line (never infer status from a title or a
 date), decision, successor, references. Read the corpus's own status words (`Rejeté`,
@@ -38,7 +38,7 @@ Every record gets exactly one verdict from this closed set, with its evidence:
 | `move → <home>` | Product, design or domain content; a stack convention | PRD, `DESIGN.md`, `EXPERIENCE.md`, a domain document (`CONTEXT.md`, `DATA-MODEL.md`); the installed rules |
 | `gate` | An absolute rule a check or test can hold | a check the project builds; the record may stay as its reason |
 | `shared` | Enterprise policy (security, secrets, identity, data protection, deployment) | a PR on the shared decision repository, then a pointer |
-| `delete` | Obsolete, `Deprecated`, or a feature-local choice its PR already holds; nothing worth moving | git history |
+| `delete` | Obsolete, `Deprecated`, `Rejected` with a refusal that no longer recurs, or a feature-local choice its PR already holds; nothing worth moving | git history |
 | `collapse` | Superseded, or `Rejected` while its refusal still prevents a recurring proposal | deleted; the one line it still needs goes to the record in force, else its topic's home |
 
 The homes follow `agent/decisions.md` § Which choices need an ADR — invent none.
@@ -63,9 +63,10 @@ Content moves **in the same diff** that removes its record; the human's merge of
 that PR is the act. Never delete a record before what it holds worth keeping
 exists at its destination.
 
-- **Execute** only deletions whose fate is mechanical: the successor named by
-  `Superseded by` is `Accepted` on disk, or the status `Deprecated` or `Rejected`
-  was already committed by a human. Never a `Proposed` or `Accepted` record. For
+- **Execute** only deletions whose fate is mechanical: the record's own status
+  line, committed by a human (check with `git log -p` on that line), reads
+  `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX` with ADR-XXXX `Accepted`
+  on disk. Never a `Proposed` or `Accepted` record. For
   each executed `Rejected` deletion, the triage PR's description says where its
   refusal went, or why it no longer matters: the diff only shows a file leaving.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
@@ -86,8 +87,9 @@ references qualified as another namespace (`shared ADR-NNNN`). Rewrite each one:
 - a code comment states the **invariant it protects**, in words;
 - a document points to the record's new home, or to the record that absorbed it.
 
-Never leave a bare number to a missing file. With the kit installed,
-`adr-check --strict` reports no dangling reference once the triage PR is ready.
+Never leave a bare number to a missing file. When the installed `adr-check` has
+the dangling check, `--strict` reports none once the triage PR is ready; otherwise
+re-run the search above and find nothing.
 
 ## 5. Hand back
 
