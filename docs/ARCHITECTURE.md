@@ -38,7 +38,7 @@ sources merged into one staged tree before emitting.
 |-------|--------|--------------|-----|
 | Installer runtime | Node.js ≥ 18, ESM, no build step | runs through `npx` with nothing to compile | — |
 | Installer dependencies | none — sources are fetched with the `git` on PATH | a dumb, data-driven CLI with no dependency tree | ADR-0008 |
-| Emission targets | Claude Code and Codex by default, Cursor optional | one authored source, explicit routing limits | ADR-0003 (supersedes the scope of ADR-0001) |
+| Emission targets | Claude Code and Codex by default, Cursor optional | one authored source, explicit routing limits | ADR-0003 |
 | Assets | Markdown with YAML frontmatter; kit in shell, Node and `just` | read by agents as is; copied, owned, pinned | — |
 | Quality gates (shipped) | `just` recipes + `lefthook`; mutation as a PR gate | one gate entry point per repo | ADR-0002 |
 | Tests | `node:test`, no dependency, no network; toolchain jalons gated by env | every PR runs the suite offline | — |
@@ -82,13 +82,11 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 
 ## Decision log
 
-- [ADR-0001](./adr/0001-emission-targets-claude-and-cursor.md) — Emission targets are Claude Code and Cursor (Superseded by ADR-0003)
 - [ADR-0002](./adr/0002-mutation-is-a-pr-gate.md) — Mutation testing is a PR gate
 - [ADR-0003](./adr/0003-claude-codex-sharing.md) — Share source assets across Claude Code and Codex
 - [ADR-0004](./adr/0004-autonomy-levels.md) — Per-run autonomy levels, defaulting to guided
 - [ADR-0005](./adr/0005-adr-scope-and-decision-homes.md) — ADRs for cross-feature arbitrations only
-- [ADR-0006](./adr/0006-feature-rfc-execution-path.md) — Iterated feature RFC (Superseded by ADR-0007)
 - [ADR-0007](./adr/0007-rfc-only-execution-path.md) — The feature RFC is the only execution path
 - [ADR-0008](./adr/0008-layered-sources.md) — Install from layered sources, last path wins
 - [ADR-0009](./adr/0009-l4-delegated-checkpoints.md) — L4 delegates named checkpoints inside a verified domain
-- [ADR-0010](./adr/0010-installer-refuses-unexplained-tree.md) — The installer writes only over what it owns, and refuses a tree it cannot explain (Proposed)
+- [ADR-0010](./adr/0010-installer-refuses-unexplained-tree.md) — The installer writes only over what it owns, and refuses a tree it cannot explain

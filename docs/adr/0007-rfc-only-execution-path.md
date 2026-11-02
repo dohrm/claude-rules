@@ -5,7 +5,7 @@
 
 ## Context
 
-ADR-0006 added `/rfc` next to `/plan` → `/tasks` → `/goal-setup` or `/loop-setup`,
+An earlier record added `/rfc` next to `/plan` → `/tasks` → `/goal-setup` or `/loop-setup`,
 and refused to retire the chain until both paths were measured. The maintainer
 chose a breaking `next` line instead: two execution paths double the skills to
 maintain (about 590 lines for the three framing skills) and the vocabulary agents
@@ -42,6 +42,7 @@ prose, not in a dedicated document.
 
 ## Alternatives considered
 
-- Keep both paths (ADR-0006): two vocabularies and twice the skills, for a comparison nobody schedules.
+- Keep both paths: two vocabularies and twice the skills, for a comparison nobody schedules.
 - Keep `/plan` above `/rfc`: a second framing document for what the verdict already lists.
+- Extend `/solution-exploration` instead of adding `/rfc`: it compares options for one problem and has no execution steps.
 - Drop `/loop-setup` too: repeated chores (lint sweeps, migrations) are not features.
