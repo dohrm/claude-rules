@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase } from './helpers.mjs'
 
 const DOCS_CHECK = join(REPO, 'kit', 'common', 'docs-check.mjs')
 const ADR_CHECK = join(REPO, 'kit', 'common', 'adr-check.mjs')
@@ -1059,6 +1059,165 @@ test('adr-check: a conforming record is silent', () => {
     const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(r.status, 0, r.out)
     assert.doesNotMatch(r.out, /warning|error/)
+  })
+})
+
+// A dangling reference is what deleting a record leaves behind: git keeps the record,
+// the tree keeps a pointer to nothing. Tracked files only, so these fixtures commit.
+const RECORD = '# ADR-0001: x\n\n- **Status**: Proposed\n\n## Context\n\nshort.\n'
+
+test('adr-check: a reference to a missing record is dangling, and --strict fails on it', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/main.rs', '// keep writes owned (ADR-0009)\nfn main() {}\n')
+    write(dir, 'docs/guide.md', 'See [the record](adr/0003-gone.md).\n')
+    // A record links its sibling by bare file name; elsewhere the same text is not a record link.
+    write(dir, 'docs/adr/0002-y.md', RECORD.replace('ADR-0001: x', 'y') + 'Replaces [the old one](0004-gone.md).\n')
+    write(dir, 'docs/other.md', '[a note](0004-gone.md)\n')
+    commitBase(dir)
+    const warn = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.equal(warn.status, 0, warn.out)
+    assert.match(warn.out, /3 dangling reference/)
+    assert.match(warn.out, /docs\/adr\/0002-y\.md:\d+ — 0004-gone\.md/)
+    assert.doesNotMatch(warn.out, /docs\/other\.md/)
+    assert.match(warn.out, /src\/main\.rs:1 — ADR-0009/)
+    assert.match(warn.out, /docs\/guide\.md:1 — adr\/0003-gone\.md/)
+    assert.match(warn.out, /in order\. \(3 advisory warning\(s\) above\)/)
+    const strict = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(strict.status, 1, strict.out)
+    assert.match(strict.out, /adr-check error: 3 dangling/)
+  })
+})
+
+test('adr-check: once the last record is deleted, every reference left dangles', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'src/x.rs', '// owned writes (ADR-0001)\n')
+    commitBase(dir)
+    const strict = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(strict.status, 1, strict.out)
+    assert.match(strict.out, /src\/x\.rs:1 — ADR-0001/)
+    assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 0)
+
+    write(dir, 'src/x.rs', '// owned writes\n')
+    const clean = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(clean.status, 0, clean.out)
+    assert.match(clean.out, /no docs\/adr\/ directory — nothing to check/)
+  })
+})
+
+test('adr-check: a colour-forcing git config does not hide a reference', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/main.rs', '// ADR-0002\n')
+    commitBase(dir)
+    spawnSync('git', ['config', 'color.ui', 'always'], { cwd: dir })
+    const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(r.status, 1, r.out)
+    assert.match(r.out, /src\/main\.rs:1 — ADR-0002/)
+  })
+})
+
+test('adr-check: outside a git repository the skipped scan says so', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    // Hermetic: no enclosing repository and no GIT_DIR from the caller's environment.
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: join(dir, '..') }
+    delete env.GIT_DIR
+    delete env.GIT_WORK_TREE
+    const nonRepo = (args) => {
+      const r = spawnSync(process.execPath, [ADR_CHECK, ...args], { cwd: dir, encoding: 'utf8', env })
+      return { status: r.status, out: r.stdout + r.stderr }
+    }
+    const r = nonRepo(['docs/adr', '--strict'])
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /not a git repository — reference scan skipped/)
+
+    // A repository git cannot open is not "outside a repository".
+    write(dir, '.git', 'gitdir: /nonexistent/claude-rules-test\n')
+    const broken = nonRepo(['docs/adr', '--strict'])
+    assert.equal(broken.status, 2, broken.out)
+    assert.match(broken.out, /reference scan failed \(git rev-parse\)/)
+  })
+})
+
+test('adr-check: a long list of dangling references is cut, never the count', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/many.md', Array.from({ length: 51 }, (_, i) => `ADR-${String(i + 100).padStart(4, '0')}`).join('\n'))
+    commitBase(dir)
+    const r = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.match(r.out, /51 dangling reference/)
+    assert.match(r.out, /src\/many\.md:50 — ADR-0149/)
+    assert.doesNotMatch(r.out, /src\/many\.md:51 —/)
+    assert.match(r.out, /… and 1 more/)
+  })
+})
+
+test('adr-check: a git killed by a signal is named, never a clean scan', { skip: process.platform === 'win32' }, () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    commitBase(dir)
+    // A git that dies on `grep` and is the real one otherwise.
+    const real = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
+    write(dir, 'bin/git', `#!/bin/sh\n[ "$1" = grep ] && kill -KILL $$\nexec "${real}" "$@"\n`)
+    chmodSync(join(dir, 'bin/git'), 0o755)
+    const r = spawnSync(process.execPath, [ADR_CHECK, 'docs/adr', '--strict'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` },
+    })
+    assert.equal(r.status, 2, r.stdout + r.stderr)
+    assert.match(r.stderr, /reference scan failed \(git grep\) — killed by SIGKILL/)
+  })
+})
+
+test('adr-check: an existing record, a shared one and an unscanned path are not dangling', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/a.ts', '// ADR-0001 holds; see docs/adr/0001-x.md\n// per shared ADR-0042, enterprise: ADR-0043, shared [ADR-0044](https://example.invalid)\n')
+    write(dir, 'docs/b.md', '[upstream](https://example.invalid/org/d/blob/main/docs/adr/0009-y.md)\n')
+    write(dir, 'CHANGELOG.md', '- ADR-0005 deleted.\n')
+    write(dir, '.claude/skills/architect/SKILL.md', 'Template: ADR-0001, ADR-0009.\n')
+    write(dir, 'vendor/snap/docs/adr/0007-own.md', RECORD)
+    write(dir, 'vendor/snap/notes.md', 'ADR-0007 is theirs.\n')
+    write(dir, 'fixtures/case.md', 'ADR-0099\n')
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["./fixtures/"] } }')
+    commitBase(dir)
+    const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.doesNotMatch(r.out, /dangling/i)
+    assert.match(r.out, /corpus — 1 record\(s\), \d+ words, ≈\d+ tokens/)
+
+    // The prefix list is the repo's: replacing it drops the defaults.
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["fixtures"], "externalPrefixes": ["org"] } }')
+    const replaced = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.match(replaced.out, /3 dangling reference/)
+    assert.match(replaced.out, /src\/a\.ts:2 — ADR-0042/)
+
+    // A prefix is literal text, not a pattern.
+    write(dir, 'src/a.ts', '// org.x ADR-0042, orgYx ADR-0043\n')
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["fixtures"], "externalPrefixes": ["org.x"] } }')
+    const literal = run(ADR_CHECK, ['docs/adr'], dir)
+    assert.match(literal.out, /1 dangling reference/)
+    assert.match(literal.out, /src\/a\.ts:1 — ADR-0043/)
+
+    write(dir, '.docs-budgets.json', '{ "adr": { "externalPrefixes": "shared" } }')
+    assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": [""] } }')
+    assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
+    for (const outside of ['../elsewhere', '..\\elsewhere', 'fixtures/..', '.', './', '/abs']) {
+      write(dir, '.docs-budgets.json', JSON.stringify({ adr: { referenceExclude: [outside] } }))
+      const r = run(ADR_CHECK, ['docs/adr'], dir)
+      assert.equal(r.status, 2, `${outside}: ${r.out}`)
+      assert.match(r.out, /repo-relative path prefixes/)
+    }
+
+    // A scan that cannot run is an error, never a clean result.
+    rmSync(join(dir, '.docs-budgets.json'))
+    writeFileSync(join(dir, '.git', 'index'), 'not an index')
+    const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(broken.status, 2, broken.out)
+    assert.match(broken.out, /reference scan failed \(git ls-files\)/)
   })
 })
 
