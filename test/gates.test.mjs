@@ -1084,6 +1084,43 @@ test('adr-check: a reference to a missing record is dangling, and --strict fails
   })
 })
 
+test('adr-check: once the last record is deleted, every reference left dangles', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'src/x.rs', '// owned writes (ADR-0001)\n')
+    commitBase(dir)
+    const strict = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(strict.status, 1, strict.out)
+    assert.match(strict.out, /src\/x\.rs:1 — ADR-0001/)
+    assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 0)
+
+    write(dir, 'src/x.rs', '// owned writes\n')
+    const clean = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(clean.status, 0, clean.out)
+    assert.match(clean.out, /no docs\/adr\/ directory — nothing to check/)
+  })
+})
+
+test('adr-check: a colour-forcing git config does not hide a reference', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    write(dir, 'src/main.rs', '// ADR-0002\n')
+    commitBase(dir)
+    spawnSync('git', ['config', 'color.ui', 'always'], { cwd: dir })
+    const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(r.status, 1, r.out)
+    assert.match(r.out, /src\/main\.rs:1 — ADR-0002/)
+  })
+})
+
+test('adr-check: outside a git repository the skipped scan says so', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /not a git repository — reference scan skipped/)
+  })
+})
+
 test('adr-check: a long list of dangling references is cut, never the count', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)

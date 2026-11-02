@@ -566,14 +566,14 @@ dup-check:
 # An agent proposes a decision, a human accepts it — and accepting means committing
 # the status line, which is the one signal an agent does not produce on its own.
 # Doctrine: rules/agent/decisions.md. Node (>=18) rather than bash, so `just check`
-# stays cross-platform; the script is a no-op when there are no ADRs.
+# stays cross-platform; the script is a no-op when there are no ADRs and no reference to one.
 adr-check:
     node {{kit}}/adr-check.mjs
     # Size/section budgets are advisory above. Enforce them with:
     #   node {{kit}}/adr-check.mjs docs/adr --strict
     # Move the ceiling for THIS repo in .docs-budgets.json (never in the script — an
     # update overwrites it):  { "adr": { "unitCeiling": 900 } }
-    # Paths whose ADR numbers are not references to docs/adr/ (fixtures, templates):
+    # Directories or files whose ADR numbers are not references to docs/adr/ (fixtures, templates):
     #   { "adr": { "referenceExclude": ["test/fixtures/"] } }
 
 # ── Living documents ───────────────────────────────────────────────────────

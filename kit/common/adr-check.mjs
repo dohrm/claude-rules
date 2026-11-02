@@ -238,8 +238,13 @@ function unscannedPrefixes(corpusDir) {
 
 /** Tracked, non-binary lines that mention a record, as { file, line, text }. */
 function candidateLines(corpusDir) {
-  // Outside a repository nothing is tracked. Probed first: scanGit fails hard there.
-  if (git('rev-parse', '--git-dir') === null) return []
+  // Outside a repository nothing is tracked. Probed first: scanGit fails hard there. A
+  // missing git binary is not "outside a repository" — scanGit reports it.
+  const probe = spawnSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' })
+  if (!probe.error && probe.status !== 0) {
+    console.log('adr-check: not a git repository — reference scan skipped.')
+    return []
+  }
   // The skipped paths go to git as pathspecs, so their matches never reach Node; git grep
   // reads only the lines that can match. Exit 1 is git grep's "no match".
   const excluded = [
@@ -247,7 +252,9 @@ function candidateLines(corpusDir) {
     ...unscannedPrefixes(corpusDir).map((p) => `:(exclude,literal)${p}`),
   ]
   const out = scanGit(
-    ['grep', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded],
+    // --no-color: a colour-forcing config (color.ui=always) would wrap every match in
+    // escape codes the regexes cannot see through — a false clean.
+    ['grep', '--no-color', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded],
     [0, 1],
   )
   return out
@@ -302,15 +309,17 @@ function reportDangling(found, strict) {
 
 function main() {
   // A repo with no decision records is not a failing repo — the gate can be wired before the
-  // first ADR exists, and stay wired after the last one is removed.
-  if (!isDirectory(adrDir)) {
-    console.log(`adr-check: no ${adrDir}/ directory — nothing to check.`)
-    return 0
-  }
-
-  const files = adrFiles(adrDir)
+  // first ADR exists, and stay wired after the last one is removed. Then every reference
+  // left in the tree dangles, so the scan still runs.
+  const files = isDirectory(adrDir) ? adrFiles(adrDir) : []
   if (files.length === 0) {
-    console.log(`adr-check: no decision records in ${adrDir}/ — nothing to check.`)
+    const dangling = danglingReferences(files)
+    if (dangling.length > 0) {
+      reportDangling(dangling, strict)
+      return strict ? 1 : 0
+    }
+    const where = isDirectory(adrDir) ? `no decision records in ${adrDir}/` : `no ${adrDir}/ directory`
+    console.log(`adr-check: ${where} — nothing to check.`)
     return 0
   }
 
