@@ -186,7 +186,7 @@ pointing at nothing.
   (default `["shared", "enterprise"]`): a reference qualified this way, such as
   `shared ADR-0001`, names another repository's record. It also gains
   `adr.referenceExclude`: path prefixes that are not references (templates, fixtures,
-  vendored corpora). Every run prints the corpus totals: records, words, ≈ tokens.
+  vendored corpora). Every run with records prints the corpus totals: records, words, ≈ tokens.
 - **A bare ADR number is no longer a comment's reason** (`agent/guardrails.md`). The
   comment states the invariant it protects. The number is only a pointer.
 
@@ -194,9 +194,10 @@ pointing at nothing.
 
 - A repo that runs `adr-check --strict` in its gate now fails on a reference to a
   missing record. Rewrite the reference, or add the path to `adr.referenceExclude`.
-- `adr-check` now needs a working git inside a repository, even without `--strict`:
-  a git that cannot open the checkout (`safe.directory` in a CI container, a broken
-  `.git`) exits 2. Fix the checkout; do not drop the gate.
+- `adr-check` now needs git, even without `--strict`: a missing git binary, or one
+  that cannot open the checkout (`safe.directory` in a CI container, a broken `.git`),
+  exits 2. Outside a repository, with git installed, the scan is skipped. Fix the
+  checkout or the image; do not drop the gate.
 - Run `/adr-review` when convenient. It deletes only records whose status a human
   already set; the rest waits for your answer in the PR.
 
