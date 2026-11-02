@@ -20,8 +20,9 @@ List `docs/adr/` and its index (usually the decision log in
 at 1.35 per word. `adr-check` prints them when the kit is installed; otherwise
 count with `wc -w`. They are the "before" column of the final table.
 
-Read every record: explicit status line (`Rejected`, `Rejeté` or `Refusé` where
-used; never infer status from a title or a date), decision, successor, references.
+Read every record: explicit status line (never infer status from a title or a
+date), decision, successor, references. Read the corpus's own status words (`Rejeté`,
+`Refusé`, `Remplacé par`, …) as their English equivalents everywhere below.
 Read the shared decision repository named in `docs/ARCHITECTURE.md` (ask for it
 if absent; `none` is an answer). Use code, product documents and history
 selectively to check whether an apparent conflict or obsolete premise is real;
@@ -34,7 +35,7 @@ Every record gets exactly one verdict from this closed set, with its evidence:
 | Verdict | When | Destination |
 |---|---|---|
 | `keep` | A cross-cutting, hard-to-reverse arbitration that refused real alternatives | stays |
-| `move → <home>` | Product, design or domain content; a stack convention | `docs/PRD.md`, `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a domain document (`CONTEXT.md`, `docs/DATA-MODEL.md`); the installed rules for a convention |
+| `move → <home>` | Product, design or domain content; a stack convention | PRD, `DESIGN.md`, `EXPERIENCE.md`, a domain document (`CONTEXT.md`, `DATA-MODEL.md`); the installed rules |
 | `gate` | An absolute rule a check or test can hold | a check the project builds; the record may stay as its reason |
 | `shared` | Enterprise policy (security, secrets, identity, data protection, deployment) | a PR on the shared decision repository, then a pointer |
 | `delete` | Obsolete, `Deprecated`, or a feature-local choice its PR already holds; nothing worth moving | git history |
@@ -50,8 +51,8 @@ For `collapse`, the in-force record gains at most one line under
 `Alternatives considered` — the refused option and the trade-off that killed it.
 That record is the successor of a superseded one, or, for a `Rejected` one, the
 `Accepted` record whose scope the refused option would have changed. Collapse only
-into an `Accepted` record; with none to absorb a refusal still needed, the verdict
-is `keep`. One `Proposed` record may consolidate
+into an `Accepted` record; with none to absorb a refusal still needed, propose
+the record's fate to the human. One `Proposed` record may consolidate
 several `keep` records only when they express one coherent decision; choices that
 can be accepted independently stay separate.
 
@@ -63,9 +64,8 @@ exists at its destination.
 
 - **Execute** only deletions whose fate is mechanical: the successor named by
   `Superseded by` is `Accepted` on disk, or the status `Deprecated` or `Rejected`
-  was already committed by a human — or the corpus's equivalent status
-  (`Remplacé par`, `Rejeté`). A `Rejected` record whose refusal still matters is
-  mechanical only once its absorbing record is identified.
+  was already committed by a human. A `Rejected` record whose refusal still
+  matters is not mechanical: choosing its absorber is a judgment, so propose it.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
   execute it once the human answers.
 - **Refuse**: deleting a `Proposed` record (a human withdraws it to `Rejected`
