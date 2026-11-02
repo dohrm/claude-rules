@@ -1107,7 +1107,7 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     write(dir, 'vendor/snap/docs/adr/0007-own.md', RECORD)
     write(dir, 'vendor/snap/notes.md', 'ADR-0007 is theirs.\n')
     write(dir, 'fixtures/case.md', 'ADR-0099\n')
-    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["fixtures/"] } }')
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["./fixtures/"] } }')
     commitBase(dir)
     const r = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(r.status, 0, r.out)
@@ -1131,7 +1131,7 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
     write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": [""] } }')
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
-    for (const outside of ['../elsewhere', '.', './', '/abs']) {
+    for (const outside of ['../elsewhere', '..\\elsewhere', 'fixtures/..', '.', './', '/abs']) {
       write(dir, '.docs-budgets.json', JSON.stringify({ adr: { referenceExclude: [outside] } }))
       const r = run(ADR_CHECK, ['docs/adr'], dir)
       assert.equal(r.status, 2, `${outside}: ${r.out}`)
@@ -1143,7 +1143,7 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     writeFileSync(join(dir, '.git', 'index'), 'not an index')
     const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(broken.status, 2, broken.out)
-    assert.match(broken.out, /reference scan failed/)
+    assert.match(broken.out, /reference scan failed \(git ls-files\)/)
   })
 })
 

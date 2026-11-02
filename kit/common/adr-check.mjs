@@ -209,10 +209,20 @@ const DANGLING_SHOWN = 50
 
 const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
 
+/**
+ * git's stdout for the reference scan. Inside a repository a failure is fatal: a scan that
+ * did not run must not read as a clean one. `ok` lists the exit codes that are answers.
+ */
+function scanGit(args, ok = [0]) {
+  const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+  if (r.error || !ok.includes(r.status))
+    bail(`the reference scan failed (git ${args[0]}) — ${(r.error?.message ?? r.stderr).trim()}`)
+  return r.stdout
+}
+
 /** Path prefixes whose ADR numbers are not references to this corpus. */
 function unscannedPrefixes(corpusDir) {
-  const listed = git('ls-files', '-z', '--', ':(glob)**/docs/adr/**')
-  if (listed === null) bail('the reference scan failed (git ls-files).')
+  const listed = scanGit(['ls-files', '-z', '--', ':(glob)**/docs/adr/**'])
   // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
   const vendored = new Set()
   for (const file of listed.split('\0')) {
@@ -224,24 +234,19 @@ function unscannedPrefixes(corpusDir) {
 
 /** Tracked, non-binary lines that mention a record, as { file, line, text }. */
 function candidateLines(corpusDir) {
-  // git grep reads only the lines that can match.
-  if (git('rev-parse', '--git-dir') === null) return [] // not a repository: nothing tracked
-  // The skipped paths go to git as pathspecs, so their matches never reach Node.
+  // Outside a repository nothing is tracked. Probed first: scanGit fails hard there.
+  if (git('rev-parse', '--git-dir') === null) return []
+  // The skipped paths go to git as pathspecs, so their matches never reach Node; git grep
+  // reads only the lines that can match. Exit 1 is git grep's "no match".
   const excluded = [
     ':(exclude,glob)**/CHANGELOG.md',
     ...unscannedPrefixes(corpusDir).map((p) => `:(exclude,literal)${p}`),
   ]
-  const r = spawnSync(
-    'git',
+  const out = scanGit(
     ['grep', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded],
-    { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
+    [0, 1],
   )
-  if (r.status === 1) return [] // no match
-  if (r.status !== 0 || r.error) {
-    // A scan that did not run must not read as a clean one.
-    bail(`the reference scan failed (git grep) — ${(r.error?.message ?? r.stderr).trim()}`)
-  }
-  return r.stdout
+  return out
     .split('\n')
     .filter(Boolean)
     .map((row) => {
