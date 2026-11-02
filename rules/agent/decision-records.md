@@ -38,14 +38,16 @@ breeds status-line bookkeeping and gets cited as if it still bound.
 
 - **Move, then delete, in one diff.** Content still worth keeping goes to its home
   first (§ Size). A refusal that still prevents a recurring proposal becomes one
-  line under `Alternatives considered` of the record in force.
+  line under `Alternatives considered` of the record in force; when no record in
+  force covers its topic, git is its only home.
 - **No reference dangles.** A comment or document that cited the deleted record
   now states the invariant it protects, or points to the content's new home —
   never a bare number to a missing file.
-- **An agent deletes only a mechanical fate**: `Rejected` or `Deprecated` already
-  set by a human, or a record that an `Accepted` successor on disk names as
-  replaced. Never a `Proposed` record (a human withdraws it to `Rejected` first).
-  Any other deletion is a proposal (`/adr-review`); the human's merge is the act.
+- **An agent deletes only a mechanical fate**: a status line, set by a human, that
+  reads `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX` with ADR-XXXX
+  `Accepted` on disk. Never a `Proposed` record (a human withdraws it to
+  `Rejected` first), never an `Accepted` one. Any other deletion is a proposal
+  (`/adr-review`); the human's merge is the act.
 
 ## One record, one decision
 
@@ -120,8 +122,9 @@ and an agent may write it on its own. If implementing revealed the decision was
 Amending an accepted record's prose is allowed (a reason that turned out false, a
 consequence learnt in practice). An amendment is a **dated note of five lines or
 fewer**, appended under the section it corrects. Anything longer is a new decision
-wearing an amendment's clothes: write the new ADR. Once it is `Accepted`, the old
-record is deleted, not re-statused (§ Statuses).
+wearing an amendment's clothes: write the new ADR. When the human accepts it, the
+old record goes — deleted in that commit, or marked `Superseded by` it and deleted
+at the next triage; never kept as history (§ Statuses).
 
 ## Accepting one
 
