@@ -64,9 +64,12 @@ that PR is the act. Never delete a record before what it holds worth keeping
 exists at its destination.
 
 - **Execute** only deletions whose fate is mechanical: the record's own status
-  line, committed by a human (check with `git log -p` on that line), reads
-  `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX` with ADR-XXXX `Accepted`
-  on disk. Never a `Proposed` or `Accepted` record. For
+  line, set by a human, reads `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX`
+  with ADR-XXXX `Accepted` on disk. Never a `Proposed` or `Accepted` record.
+  `git log -L '/Status/,+1:<file>'` shows the commit that set the line; git
+  authorship does not prove a human (agents often commit under the human's
+  identity), so when that commit's message or context cannot rule out an agent,
+  propose the deletion instead. For
   each executed `Rejected` deletion, the triage PR's description says where its
   refusal went, or why it no longer matters: the diff only shows a file leaving.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
