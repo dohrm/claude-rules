@@ -1097,6 +1097,24 @@ test('adr-check: a long list of dangling references is cut, never the count', ()
   })
 })
 
+test('adr-check: a git killed by a signal is named, never a clean scan', { skip: process.platform === 'win32' }, () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    commitBase(dir)
+    // A git that dies on `grep` and is the real one otherwise.
+    const real = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim()
+    write(dir, 'bin/git', `#!/bin/sh\n[ "$1" = grep ] && kill -KILL $$\nexec "${real}" "$@"\n`)
+    chmodSync(join(dir, 'bin/git'), 0o755)
+    const r = spawnSync(process.execPath, [ADR_CHECK, 'docs/adr', '--strict'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` },
+    })
+    assert.equal(r.status, 2, r.stdout + r.stderr)
+    assert.match(r.stderr, /reference scan failed \(git grep\) — killed by SIGKILL/)
+  })
+})
+
 test('adr-check: an existing record, a shared one and an unscanned path are not dangling', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)

@@ -215,8 +215,12 @@ const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
  */
 function scanGit(args, ok = [0]) {
   const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
-  if (r.error || !ok.includes(r.status))
-    bail(`the reference scan failed (git ${args[0]}) — ${(r.error?.message ?? r.stderr).trim()}`)
+  if (r.error || !ok.includes(r.status)) {
+    // A killed git says nothing on stderr: the signal is the cause.
+    const why =
+      r.error?.message ?? (r.stderr.trim() || (r.signal ? `killed by ${r.signal}` : `exit ${r.status}`))
+    bail(`the reference scan failed (git ${args[0]}) — ${why}`)
+  }
   return r.stdout
 }
 
