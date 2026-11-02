@@ -34,7 +34,7 @@
 // Usage:  just adr-check   (directly: node .dev/kit/common/adr-check.mjs [adr-dir] [--strict] [--config=<file>])
 //         (defaults: docs/adr, .docs-budgets.json)
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
@@ -167,11 +167,7 @@ function reportBudget(oversized, invented, strict) {
 /** Runs git, returning its stdout, or null when it exits non-zero. */
 function git(...args) {
   try {
-    return execFileSync('git', args, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 256 * 1024 * 1024,
-    })
+    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
   } catch {
     return null
   }
@@ -207,7 +203,7 @@ const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
 
 /** Path prefixes whose ADR numbers are not references to this corpus. */
 function unscannedPrefixes(corpusDir) {
-  const listed = git('ls-files', '-z') ?? ''
+  const listed = git('ls-files', '-z', '--', ':(glob)**/docs/adr/**') ?? ''
   // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
   const vendored = new Set()
   for (const file of listed.split('\0')) {
@@ -219,15 +215,24 @@ function unscannedPrefixes(corpusDir) {
 
 /** Tracked, non-binary lines that mention a record, as { file, line, text }. */
 function candidateLines(corpusDir) {
-  // git grep reads only what can match; exit 1 (no match) and 128 (no repo) both mean none.
+  // git grep reads only the lines that can match.
   // The skipped paths go to git as pathspecs, so their matches never reach Node.
   const excluded = [
     ':(exclude,glob)**/CHANGELOG.md',
     ...unscannedPrefixes(corpusDir).map((p) => `:(exclude,literal)${p}`),
   ]
-  const out = git('grep', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded)
-  if (out === null) return []
-  return out
+  const r = spawnSync(
+    'git',
+    ['grep', '-z', '-n', '-I', '-E', 'ADR-[0-9]{4}|adr/[0-9]{4}-', '--', '.', ...excluded],
+    { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
+  )
+  if (r.status === 1) return [] // no match
+  if (r.status !== 0 || r.error) {
+    if (git('rev-parse', '--git-dir') === null) return [] // not a repository: nothing tracked
+    // A scan that did not run must not read as a clean one.
+    bail(`the reference scan failed (git grep) — ${(r.error?.message ?? r.stderr).trim()}`)
+  }
+  return r.stdout
     .split('\n')
     .filter(Boolean)
     .map((row) => {
@@ -360,11 +365,8 @@ function main() {
   }
   if (strict && (budgetCount > 0 || dangling.length > 0)) return 1
 
-  const advisories = [
-    budgetCount > 0 ? `${budgetCount} budget` : '',
-    dangling.length > 0 ? `${dangling.length} reference` : '',
-  ].filter(Boolean)
-  const note = advisories.length > 0 ? ` (${advisories.join(', ')} warning(s) above)` : ''
+  const warnings = budgetCount + dangling.length
+  const note = warnings > 0 ? ` (${warnings} advisory warning(s) above)` : ''
   console.log(`adr-check: ${files.length} decision record(s) in order.${note}${budgetNote}`)
   return 0
 }

@@ -1077,6 +1077,7 @@ test('adr-check: a reference to a missing record is dangling, and --strict fails
     assert.match(warn.out, /2 dangling reference/)
     assert.match(warn.out, /src\/main\.rs:1 — ADR-0002/)
     assert.match(warn.out, /docs\/guide\.md:1 — adr\/0003-gone\.md/)
+    assert.match(warn.out, /in order\. \(2 advisory warning\(s\) above\)/)
     const strict = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(strict.status, 1, strict.out)
     assert.match(strict.out, /adr-check error: 2 dangling/)
@@ -1130,6 +1131,11 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
     write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": [""] } }')
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
+    // A scan that cannot run is an error, never a clean result.
+    write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["../elsewhere"] } }')
+    const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
+    assert.equal(broken.status, 2, broken.out)
+    assert.match(broken.out, /reference scan failed/)
   })
 })
 
