@@ -65,13 +65,11 @@ exists at its destination.
 
 - **Execute** only deletions whose fate is mechanical: the record's own status
   line, set by a human, reads `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX`
-  with ADR-XXXX `Accepted` on disk. Never a `Proposed` or `Accepted` record.
-  `git log -L '/Status/,+1:<file>'` shows the commit that set the line; git
-  authorship does not prove a human (agents often commit under the human's
-  identity), so when that commit's message or context cannot rule out an agent,
-  propose the deletion instead. For
-  each executed `Rejected` deletion, the triage PR's description says where its
-  refusal went, or why it no longer matters: the diff only shows a file leaving.
+  with ADR-XXXX `Accepted` on disk. Never a `Proposed` or `Accepted` record, and
+  never a status line written in this triage. Git cannot tell an agent's commit
+  from a human's, so the triage PR's description lists every executed deletion
+  with its status line — and, for a `Rejected` one, where its refusal went or why
+  it no longer matters. The human's merge is the confirmation.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
   execute it once the human answers.
 - **Refuse**: deleting a `Proposed` record (a human withdraws it to `Rejected`
