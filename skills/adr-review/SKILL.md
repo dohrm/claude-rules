@@ -52,7 +52,7 @@ For `collapse`, the in-force record gains at most one line under
 That record is the successor of a superseded one, or, for a `Rejected` one, the
 `Accepted` record whose scope the refused option would have changed. Collapse only
 into an `Accepted` record; with none to absorb a refusal still needed, propose
-the record's fate to the human. One `Proposed` record may consolidate
+`keep` or `delete` to the human. One `Proposed` record may consolidate
 several `keep` records only when they express one coherent decision; choices that
 can be accepted independently stay separate.
 
@@ -69,8 +69,8 @@ exists at its destination.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
   execute it once the human answers.
 - **Refuse**: deleting a `Proposed` record (a human withdraws it to `Rejected`
-  first); deleting a record whose successor is not `Accepted`; collapsing into a
-  record that is not `Accepted`.
+  first); deleting a record whose successor is not `Accepted` (it is `keep` until
+  then); collapsing into a record that is not `Accepted`.
 
 Update the decision index in the same diff: a deleted record leaves the index.
 
@@ -92,7 +92,8 @@ Never leave a bare number to a missing file. With the kit installed,
 Return, in order:
 
 1. **Triage table** — record, status, verdict, evidence, destination, executed or
-   awaiting the human.
+   awaiting the human. An executed `Rejected` deletion says why its refusal no
+   longer matters.
 2. **Gate candidates** — rule, evidence it is forgotten, where a check could hold it.
 3. **Decisions in force** — a compact, source-linked summary readers load instead
    of the whole corpus; never copy whole records.
