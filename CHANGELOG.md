@@ -194,6 +194,9 @@ pointing at nothing.
 
 - A repo that runs `adr-check --strict` in its gate now fails on a reference to a
   missing record. Rewrite the reference, or add the path to `adr.referenceExclude`.
+- `adr-check` now needs a working git inside a repository, even without `--strict`:
+  a git that cannot open the checkout (`safe.directory` in a CI container, a broken
+  `.git`) exits 2. Fix the checkout; do not drop the gate.
 - Run `/adr-review` when convenient. It deletes only records whose status a human
   already set; the rest waits for your answer in the PR.
 

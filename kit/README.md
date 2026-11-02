@@ -63,7 +63,8 @@ with its own corpus is never checked against the root one), and the directories 
 files listed in `adr.referenceExclude` (whole path components:
 `test/fix` does not exclude `test/fixtures/`). A reference qualified by one of
 `adr.externalPrefixes` (default `["shared", "enterprise"]`, as in `shared ADR-NNNN`)
-names another repository's record and is ignored. The scan needs git: outside a
+names another repository's record and is ignored; the prefix qualifies an ID, not a
+file link — a link counts as external only when it is a URL. The scan needs git: outside a
 repository it is skipped and says so; a git that cannot run is an error (exit 2), never
 a clean result. Every run with records prints the corpus totals — records, words,
 ≈ tokens. Doctrine:
