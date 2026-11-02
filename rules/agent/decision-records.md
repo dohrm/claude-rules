@@ -25,12 +25,27 @@ or whether overflow went to the right home.
 |--------|---------|----------------|
 | `Proposed` | Written and argued, not yet decided. | **Agent or human** |
 | `Accepted` | Decided. Binding on the code, cited as settled. | **Human only** |
-| `Rejected` | Considered and refused. Kept, because the reasoning is worth keeping. | **Human only** |
-| `Superseded by ADR-XXXX` | Replaced by a later decision. | **Human only** |
-| `Deprecated` | No longer applies, with nothing replacing it. | **Human only** |
+| `Rejected` | Considered and refused. Deleted at the human's merge. | **Human only** |
+| `Superseded by ADR-XXXX` | Replaced by a later decision. Deleted once ADR-XXXX is `Accepted`. | **Human only** |
+| `Deprecated` | No longer applies, with nothing replacing it. Deleted at the human's merge. | **Human only** |
 
 A status may carry a qualifier after the first word — `Accepted — provisional,
 review scheduled` — as long as the first word is one of the five.
+
+**Only a decision in force stays on disk; git is the archive.** The last three
+statuses are a record's way out, not a place to live: a kept `Superseded` record
+breeds status-line bookkeeping and gets cited as if it still bound.
+
+- **Move, then delete, in one diff.** Content still worth keeping goes to its home
+  first (§ Size). A refusal that still prevents a recurring proposal becomes one
+  line under `Alternatives considered` of the record in force.
+- **No reference dangles.** A comment or document that cited the deleted record
+  now states the invariant it protects, or points to the content's new home —
+  never a bare number to a missing file.
+- **An agent deletes only a mechanical fate**: `Rejected` or `Deprecated` already
+  set by a human, or a record that an `Accepted` successor on disk names as
+  replaced. Never a `Proposed` record (a human withdraws it to `Rejected` first).
+  Any other deletion is a proposal (`/adr-review`); the human's merge is the act.
 
 ## One record, one decision
 
@@ -105,7 +120,8 @@ and an agent may write it on its own. If implementing revealed the decision was
 Amending an accepted record's prose is allowed (a reason that turned out false, a
 consequence learnt in practice). An amendment is a **dated note of five lines or
 fewer**, appended under the section it corrects. Anything longer is a new decision
-wearing an amendment's clothes: write the new ADR and let it supersede.
+wearing an amendment's clothes: write the new ADR. Once it is `Accepted`, the old
+record is deleted, not re-statused (§ Statuses).
 
 ## Accepting one
 

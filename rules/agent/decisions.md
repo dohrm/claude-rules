@@ -16,6 +16,9 @@ never for a **decision**.
   is already written and green, not because the human discussed it at length in the
   conversation. Discussing is not accepting, and nothing in the repository
   distinguishes the two afterwards.
+- **A decision no longer in force leaves the disk** — `Rejected`, `Deprecated`, or
+  superseded by an `Accepted` record: deleted at the human's merge, git is the
+  archive (`agent/decision-records.md` § Statuses).
 - **Say it in the hand-back**: what is proposed, what the alternatives were, and
   what changes if the answer is no. An ADR that lands silently has skipped the
   boundary even if its status line is honest.
