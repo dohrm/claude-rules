@@ -26,7 +26,7 @@ or whether overflow went to the right home.
 | `Proposed` | Written and argued, not yet decided. | **Agent or human** |
 | `Accepted` | Decided. Binding on the code, cited as settled. | **Human only** |
 | `Rejected` | Considered and refused. Deleted at the human's merge. | **Human only** |
-| `Superseded by ADR-XXXX` | Replaced by a later decision. Deleted once ADR-XXXX is `Accepted`. | **Human only** |
+| `Superseded by ADR-XXXX` | Replaced by a later decision, the record not deleted with its successor's acceptance (missed, or an older corpus). Deleted once ADR-XXXX is `Accepted`. | **Human only** |
 | `Deprecated` | No longer applies, with nothing replacing it. Deleted at the human's merge. | **Human only** |
 
 A status may carry a qualifier after the first word — `Accepted — provisional,
