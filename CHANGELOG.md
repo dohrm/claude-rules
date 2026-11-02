@@ -157,6 +157,46 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Changed — `/adr-review` shrinks the decision corpus
+
+A decision log grew by keeping every record it ever held
+([#81](https://github.com/dohrm/claude-rules/issues/81)). Superseded records stayed on
+disk, their status lines became review work, and agents cited them as if they still
+bound. Code cites ADR numbers heavily, so deleting a record left those references
+pointing at nothing.
+
+**What changes:**
+
+- **Only a decision in force stays on disk; git is the archive.** A `Rejected`,
+  `Deprecated` or `Superseded by` record is deleted at the human's merge, not kept
+  (`agent/decision-records.md` § Statuses). Content still worth keeping moves to its
+  home in the same diff. A refusal that still prevents a recurring proposal becomes one
+  line under `Alternatives considered` of the record in force. An agent deletes only a
+  mechanical fate: a human-set `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX`
+  status line with ADR-XXXX `Accepted` on disk. It never deletes a `Proposed` or
+  `Accepted` record.
+- **`/adr-review` triages instead of mapping.** Every record gets one verdict from a
+  closed set: `keep`, `move → <home>`, `gate`, `shared`, `delete` or `collapse`, each
+  with its evidence. The skill executes the mechanical deletions and proposes the rest.
+  It rewrites every reference to a deleted record, lists gate candidates (absolute rules
+  agents forget while coding), and reports the corpus size before and after.
+- **`adr-check` warns on dangling references.** It flags `ADR-NNNN`, or a link to
+  `adr/NNNN-*.md`, in a tracked file when no such record exists. The warning is advisory,
+  and `--strict` fails on it. `.docs-budgets.json` gains `adr.externalPrefixes`
+  (default `["shared", "enterprise"]`): a reference qualified this way, such as
+  `shared ADR-0001`, names another repository's record. It also gains
+  `adr.referenceExclude`: path prefixes that are not references (templates, fixtures,
+  vendored corpora). Every run prints the corpus totals: records, words, ≈ tokens.
+- **A bare ADR number is no longer a comment's reason** (`agent/guardrails.md`). The
+  comment states the invariant it protects. The number is only a pointer.
+
+**Hand-merge:**
+
+- A repo that runs `adr-check --strict` in its gate now fails on a reference to a
+  missing record. Rewrite the reference, or add the path to `adr.referenceExclude`.
+- Run `/adr-review` when convenient. It deletes only records whose status a human
+  already set; the rest waits for your answer in the PR.
+
 ### Changed — finished work leaves nothing behind
 
 `.work/` and the work branches were never cleaned up
