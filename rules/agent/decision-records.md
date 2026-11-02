@@ -38,8 +38,8 @@ breeds status-line bookkeeping and gets cited as if it still bound.
 
 - **Move, then delete, in one diff.** Content still worth keeping goes to its home
   first (§ Size). A refusal that still prevents a recurring proposal becomes one
-  line under `Alternatives considered` of the record in force; when no record in
-  force covers its topic, git is its only home.
+  line under `Alternatives considered` of the record in force — else in its
+  topic's home (`agent/decisions.md` § Which choices need an ADR), else git.
 - **No reference dangles.** A comment or document that cited the deleted record
   now states the invariant it protects, or points to the content's new home —
   never a bare number to a missing file.
@@ -123,8 +123,7 @@ Amending an accepted record's prose is allowed (a reason that turned out false, 
 consequence learnt in practice). An amendment is a **dated note of five lines or
 fewer**, appended under the section it corrects. Anything longer is a new decision
 wearing an amendment's clothes: write the new ADR. When the human accepts it, the
-old record goes — deleted in that commit, or marked `Superseded by` it and deleted
-at the next triage; never kept as history (§ Statuses).
+old record is deleted in that commit, not re-statused (§ Statuses).
 
 ## Accepting one
 
