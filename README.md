@@ -74,7 +74,7 @@ slash-command notation.
 | Clarify a product or capability | `/prd`; `/interview` if the intent is still unclear |
 | Define the initial architecture and write ADRs | `/architect` |
 | Explore a proposed solution or architectural limit | `/solution-exploration`: assess options before reading affected ADRs |
-| Untangle a large ADR corpus | `/adr-review`: map active decisions, conflicts and consolidation options |
+| Shrink a large ADR corpus | `/adr-review`: one verdict per record, move then delete, references rewritten, size before and after |
 | Engineer a change, then let the agent build it | `/rfc`: iterate on one document until you mark it ready; a large change is decomposed into phases and holds inside it, then run to the end at L3, or orchestrated at L4 within a delegation board |
 | Run a repeated chore to a measurable end | `/loop-setup` |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
@@ -84,9 +84,9 @@ slash-command notation.
 
 Use `/solution-exploration` to assess a problem and its options before reading
 the relevant ADRs; it then follows dependent decisions where needed. Use `/adr-review`
-to audit the whole corpus for decisions in force, duplication, contradictions and
-consolidation opportunities. `/architect` remains the entry point for initial
-architecture and ADR writing. Accepted decisions stay in force during exploration;
+to triage the whole corpus down to the decisions in force: superseded records are
+deleted (git is the archive), product rules move to their documents. `/architect`
+remains the entry point for initial architecture and ADR writing. Accepted decisions stay in force during exploration;
 only you can change and commit their status.
 
 Ordinary authorized adjustments update the affected product documents in place.
