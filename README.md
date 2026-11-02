@@ -86,8 +86,9 @@ Use `/solution-exploration` to assess a problem and its options before reading
 the relevant ADRs; it then follows dependent decisions where needed. Use `/adr-review`
 to triage the whole corpus down to the decisions in force: superseded records are
 deleted (git is the archive), product rules move to their documents. `/architect`
-remains the entry point for initial architecture and ADR writing. Accepted decisions stay in force during exploration;
-only you can change and commit their status.
+remains the entry point for initial architecture and ADR writing. Accepted
+decisions stay in force during exploration; only you can change and commit their
+status.
 
 Ordinary authorized adjustments update the affected product documents in place.
 

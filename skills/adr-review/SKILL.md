@@ -34,14 +34,13 @@ Every record gets exactly one verdict from this closed set, with its evidence:
 | Verdict | When | Destination |
 |---|---|---|
 | `keep` | A cross-cutting, hard-to-reverse arbitration that refused real alternatives | stays |
-| `move → <home>` | Product, experience, data-shape or vocabulary content | `docs/PRD.md`, `docs/EXPERIENCE.md`, `docs/DATA-MODEL.md`, `CONTEXT.md` or the domain document |
+| `move → <home>` | Product, design or domain content; a stack convention | `docs/PRD.md`, `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a domain document (`CONTEXT.md`, `docs/DATA-MODEL.md`); the installed rules for a convention |
 | `gate` | An absolute rule a check or test can hold | a check the project builds; the record may stay as its reason |
 | `shared` | Enterprise policy (security, secrets, identity, data protection, deployment) | a PR on the shared decision repository, then a pointer |
-| `delete` | Obsolete or `Deprecated`; nothing worth moving | git history |
+| `delete` | Obsolete, `Deprecated`, or a feature-local choice its PR already holds; nothing worth moving | git history |
 | `collapse` | Superseded, or `Rejected` while its refusal still prevents a recurring proposal | deleted; the in-force record absorbs the one line it still needs |
 
-The homes are those of `agent/decisions.md` § Which choices need an ADR — invent
-none. For `gate`, state the rule in one line and the evidence that it is
+The homes follow `agent/decisions.md` § Which choices need an ADR — invent none. For `gate`, state the rule in one line and the evidence that it is
 forgotten while coding: review reports, review comments, fix commits
 (`git log -S`, `git log --grep`). A rule nobody forgets is not a gate candidate.
 List gates as candidates; building them is the project's own work. For `shared`,
@@ -49,7 +48,10 @@ prepare the shared-repository PR as a `Proposed` record and ask before opening i
 
 For `collapse`, the in-force record gains at most one line under
 `Alternatives considered` — the refused option and the trade-off that killed it.
-Collapse only into an `Accepted` record. One `Proposed` record may consolidate
+That record is the successor of a superseded one, or, for a `Rejected` one, the
+`Accepted` record whose scope the refused option would have changed. Collapse only
+into an `Accepted` record; with none to absorb a refusal still needed, the verdict
+is `keep`. One `Proposed` record may consolidate
 several `keep` records only when they express one coherent decision; choices that
 can be accepted independently stay separate.
 
@@ -61,7 +63,9 @@ exists at its destination.
 
 - **Execute** only deletions whose fate is mechanical: the successor named by
   `Superseded by` is `Accepted` on disk, or the status `Deprecated` or `Rejected`
-  was already committed by a human.
+  was already committed by a human — or the corpus's equivalent status
+  (`Remplacé par`, `Rejeté`). A `Rejected` record whose refusal still matters is
+  mechanical only once its absorbing record is identified.
 - **Propose** every other `delete`, `move` or `collapse` in the triage table and
   execute it once the human answers.
 - **Refuse**: deleting a `Proposed` record (a human withdraws it to `Rejected`
