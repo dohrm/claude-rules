@@ -1131,8 +1131,12 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
     write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": [""] } }')
     assert.equal(run(ADR_CHECK, ['docs/adr'], dir).status, 2)
-    // A scan that cannot run is an error, never a clean result.
     write(dir, '.docs-budgets.json', '{ "adr": { "referenceExclude": ["../elsewhere"] } }')
+    assert.match(run(ADR_CHECK, ['docs/adr'], dir).out, /repo-relative path prefixes/)
+
+    // A scan that cannot run is an error, never a clean result.
+    rmSync(join(dir, '.docs-budgets.json'))
+    writeFileSync(join(dir, '.git', 'index'), 'not an index')
     const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(broken.status, 2, broken.out)
     assert.match(broken.out, /reference scan failed/)

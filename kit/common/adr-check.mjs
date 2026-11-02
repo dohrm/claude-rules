@@ -99,9 +99,11 @@ function loadConfig(file) {
   const out = {
     ...defaults,
     externalPrefixes: stringList(file, 'externalPrefixes', adr.externalPrefixes, DEFAULT_EXTERNAL_PREFIXES),
-    referenceExclude: stringList(file, 'referenceExclude', adr.referenceExclude, []).map((p) =>
-      p.replace(/\/+$/, ''),
-    ),
+    referenceExclude: stringList(file, 'referenceExclude', adr.referenceExclude, []).map((p) => {
+      if (path.posix.isAbsolute(p) || path.win32.isAbsolute(p) || p.split(/[\\/]/).includes('..'))
+        bail(`${file}: "adr.referenceExclude" entries are repo-relative path prefixes — got "${p}".`)
+      return p.replace(/\/+$/, '')
+    }),
   }
   const v = adr.unitCeiling
   if (v === undefined) return out
@@ -167,7 +169,11 @@ function reportBudget(oversized, invented, strict) {
 /** Runs git, returning its stdout, or null when it exits non-zero. */
 function git(...args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    return execFileSync('git', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 256 * 1024 * 1024,
+    })
   } catch {
     return null
   }
