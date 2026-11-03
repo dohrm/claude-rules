@@ -41,7 +41,7 @@
 //         (defaults: docs/adr, .docs-budgets.json)
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const KNOWN_STATUSES = ['Proposed', 'Accepted', 'Rejected', 'Superseded', 'Deprecated']
@@ -356,10 +356,10 @@ const READING_RETIRED = 'reading retired records'
 function retiredRecords(corpusDir, files) {
   const onDisk = new Set(files.map((f) => path.basename(f).match(RECORD_NAME)?.[1]).filter(Boolean))
   // --no-renames: a renamed record reads as deleted, then the number filter keeps it out,
-  // whatever the caller's diff.renames. --relative: paths as the corpus dir spells them.
+  // whatever the caller's diff.renames. `corpusDir` is repo-root-relative, like git's output.
   const log = scanGit([
-    '-c', 'core.quotePath=false', 'log', '--no-renames', '--relative', '--diff-filter=D',
-    '--name-only', '--date=short', '--format=%x01%h%x09%ad%x09%s', '--', corpusDir,
+    '-c', 'core.quotePath=false', 'log', '--no-renames', '--diff-filter=D',
+    '--name-only', '--date=short', '--format=%x01%h%x09%ad%x09%s', '--', `:(top,literal)${corpusDir}`,
   ], [0], READING_RETIRED)
   const byId = new Map()
   for (const block of log.split('\x01').slice(1)) {
@@ -369,7 +369,7 @@ function retiredRecords(corpusDir, files) {
       const id = path.posix.basename(file).match(RECORD_NAME)?.[1]
       if (!id || path.posix.dirname(file) !== corpusDir || onDisk.has(id) || byId.has(id)) continue
       // The version the deleting commit removed: the record's last words.
-      const text = scanGit(['show', `${commit}^:./${file}`], [0], READING_RETIRED)
+      const text = scanGit(['show', `${commit}^:${file}`], [0], READING_RETIRED)
       byId.set(id, { id, file, commit, date, subject: subject.join('\t'), text })
     }
   }
@@ -377,11 +377,16 @@ function retiredRecords(corpusDir, files) {
 }
 
 function showRetired(files) {
-  const corpusDir = forGit(path.normalize(adrDir)).replace(/\/+$/, '')
   if (outsideRepository(READING_RETIRED)) {
     console.log('adr-check: not a git repository — no history to read retired records from.')
     return 0
   }
+  // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
+  // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths.
+  const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
+  const corpusDir = forGit(path.relative(realpathSync(top), path.resolve(realpathSync('.'), adrDir)))
+  if (corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir))
+    bail(`--retired: ${adrDir} is not a directory inside this repository.`)
   // Through scanGit: a git that cannot run is an error here too, never "no commit yet".
   if (scanGit(['rev-parse', '--quiet', '--verify', 'HEAD'], [0, 1], READING_RETIRED) === '') {
     console.log('adr-check: no commit yet — no record has been retired.')

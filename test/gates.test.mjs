@@ -1223,11 +1223,13 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
 
 // A retired record is one deleted from the corpus dir: git is the archive, and
 // `--retired` reads it back. Read-only — never a gate, never a failing exit for "none".
+const fixtureGit = (dir, ...args) => {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' })
+  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`)
+}
 const retire = (dir, file, message) => {
-  for (const args of [['rm', '-q', file], ['commit', '-q', '-m', message]]) {
-    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' })
-    assert.equal(r.status, 0, r.stderr)
-  }
+  fixtureGit(dir, 'rm', '-q', file)
+  fixtureGit(dir, 'commit', '-q', '-m', message)
 }
 
 test('adr-check: --retired lists a deleted record with its last status line, and prints it by number', () => {
@@ -1238,10 +1240,11 @@ test('adr-check: --retired lists a deleted record with its last status line, and
     commitBase(dir)
     retire(dir, 'docs/adr/0001-old.md', 'retire the old way')
     // A renamed record keeps its number: not retired.
-    spawnSync('git', ['mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md'], { cwd: dir })
+    fixtureGit(dir, 'mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md')
+    // Deleted, then restored: in history as a deletion, on disk again — not retired.
     retire(dir, 'docs/adr/0002-new.md', 'scratch')
-    spawnSync('git', ['checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md'], { cwd: dir })
-    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-am', 'restore 0002'], { cwd: dir })
+    fixtureGit(dir, 'checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md')
+    fixtureGit(dir, 'commit', '-q', '-m', 'restore 0002')
 
     const list = run(ADR_CHECK, ['--retired'], dir)
     assert.equal(list.status, 0, list.out)
@@ -1255,6 +1258,14 @@ test('adr-check: --retired lists a deleted record with its last status line, and
     assert.match(one.out, /- \*\*Status\*\*: Superseded by ADR-0002\n\n## Context\n\nthe refusal\.\n$/)
     // The id after the flag is never read as the corpus dir.
     assert.equal(run(ADR_CHECK, ['docs/adr', '--retired', 'ADR-0001'], dir).out, one.out)
+
+    // From a subdirectory, the corpus dir as the caller spells it.
+    mkdirSync(join(dir, 'src'))
+    const nested = run(ADR_CHECK, ['../docs/adr', '--retired'], join(dir, 'src'))
+    assert.equal(nested.status, 0, nested.out)
+    assert.match(nested.out, /1 retired record\(s\) — deleted from docs\/adr\//)
+    assert.equal(run(ADR_CHECK, ['docs', '--retired'], dir).out, 'adr-check: no record has been retired from docs/.\n')
+    assert.equal(run(ADR_CHECK, ['..', '--retired'], dir).status, 2)
 
     const live = run(ADR_CHECK, ['--retired', '0002'], dir)
     assert.equal(live.status, 0, live.out)
