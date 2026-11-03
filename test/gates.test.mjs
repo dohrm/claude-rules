@@ -1283,6 +1283,20 @@ test('adr-check: --retired lists a deleted record with its last status line, and
   })
 })
 
+test('adr-check: --retired still reads the archive once the last record, and its dir, are gone', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    commitBase(dir)
+    retire(dir, 'docs/adr/0001-x.md', 'retire the last one')
+    assert.ok(!existsSync(join(dir, 'docs/adr')))
+    for (const spelling of ['docs/adr', join(dir, 'docs/adr')]) {
+      const r = run(ADR_CHECK, [spelling, '--retired'], dir)
+      assert.equal(r.status, 0, `${spelling}: ${r.out}`)
+      assert.match(r.out, /1 retired record\(s\) — deleted from docs\/adr\/, kept in git history:\n {2}ADR-0001 {2}x\n/)
+    }
+  })
+})
+
 test('adr-check: --retired with nothing retired says so and exits 0', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
