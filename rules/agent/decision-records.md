@@ -126,7 +126,9 @@ Amending an accepted record's prose is allowed (a reason that turned out false, 
 consequence learnt in practice). An amendment is a **dated note of five lines or
 fewer**, appended under the section it corrects. Anything longer is a new decision
 wearing an amendment's clothes: write the new ADR. When the human accepts it, the
-old record is deleted in that commit, not re-statused (§ Statuses).
+old record is deleted in that commit, not re-statused (§ Statuses). Two edits are not
+amendments and go in place: rewriting a reference to a deleted record, and folding a
+deleted record's refusal into `Alternatives considered` (`/adr-review`).
 
 ## Accepting one
 

@@ -1089,6 +1089,20 @@ test('adr-check: a reference to a missing record is dangling, and --strict fails
   })
 })
 
+test('adr-check: run from a subdirectory, the dangling scan still covers the whole repository', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD + 'Replaces [the old one](0004-gone.md).\n')
+    write(dir, 'docs/guide.md', 'Keep writes owned (ADR-0009).\n')
+    write(dir, 'src/main.rs', 'fn main() {}\n')
+    commitBase(dir)
+    const strict = run(ADR_CHECK, ['../docs/adr', '--strict'], join(dir, 'src'))
+    assert.equal(strict.status, 1, strict.out)
+    assert.match(strict.out, /adr-check error: 2 dangling/)
+    assert.match(strict.out, /docs\/guide\.md:1 — ADR-0009/)
+    assert.match(strict.out, /docs\/adr\/0001-x\.md:\d+ — 0004-gone\.md/)
+  })
+})
+
 test('adr-check: once the last record is deleted, every reference left dangles', () => {
   withTmpRepo((dir) => {
     write(dir, 'src/x.rs', '// owned writes (ADR-0001)\n')

@@ -231,8 +231,8 @@ const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
  * git's stdout for a read that must run (the reference scan, retired records). Inside a
  * repository a failure is fatal: a scan that did not run must not read as a clean one. `ok` lists the exit codes that are answers.
  */
-function scanGit(args, ok = [0], what = 'the reference scan') {
-  const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+function scanGit(args, ok = [0], what = 'the reference scan', cwd = undefined) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   if (r.error || !ok.includes(r.status)) {
     // A killed git says nothing on stderr: the signal is the cause.
     const why =
@@ -243,8 +243,8 @@ function scanGit(args, ok = [0], what = 'the reference scan') {
 }
 
 /** Path prefixes whose ADR numbers are not references to this corpus. */
-function unscannedPrefixes(corpusDir) {
-  const listed = scanGit(['ls-files', '-z', '--', ':(glob)**/docs/adr/**'])
+function unscannedPrefixes(top, corpusDir) {
+  const listed = scanGit(['ls-files', '-z', '--', ':(glob)**/docs/adr/**'], [0], undefined, top)
   // A directory holding its own docs/adr/ is a vendored corpus with its own numbering.
   const vendored = new Set()
   for (const file of listed.split('\0')) {
@@ -271,31 +271,56 @@ function outsideRepository(what) {
   return true
 }
 
-/** Tracked, non-binary lines that mention a record, as { file, line, text }. */
-function candidateLines(corpusDir) {
+/**
+ * The repository root and the corpus dir relative to it, as git prints paths, whatever cwd
+ * and spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths,
+ * the dir up to its nearest existing ancestor: it is gone once its last record is.
+ */
+function repoCorpus(what) {
+  const top = scanGit(['rev-parse', '--show-toplevel'], [0], what).trim()
+  let head = path.resolve(adrDir)
+  let tail = ''
+  while (!existsSync(head)) {
+    tail = path.join(path.basename(head), tail)
+    head = path.dirname(head)
+  }
+  const real = path.join(realpathSync(head), tail)
+  return { top, corpusDir: forGit(path.relative(realpathSync(top), real)) }
+}
+
+/**
+ * Tracked, non-binary lines that mention a record, as { file, line, text }, with
+ * repo-root-relative paths. The scan runs from the root: from a subdirectory it would
+ * cover only that subdirectory, and read as clean.
+ */
+function candidateLines() {
   if (outsideRepository('the reference scan')) {
     console.log('adr-check: not a git repository — reference scan skipped.')
-    return []
+    return { corpusDir: null, lines: [] }
   }
+  const { top, corpusDir } = repoCorpus('the reference scan')
   // The skipped paths go to git as pathspecs, so their matches never reach Node; git grep
   // reads only the lines that can match. Exit 1 is git grep's "no match".
   const excluded = [
     ':(exclude,glob)**/CHANGELOG.md',
-    ...unscannedPrefixes(corpusDir).map((p) => `:(exclude,literal)${p}`),
+    ...unscannedPrefixes(top, corpusDir).map((p) => `:(exclude,literal)${p}`),
   ]
   const out = scanGit(
     // --no-color: a colour-forcing config (color.ui=always) would wrap every match in
     // escape codes the regexes cannot see through — a false clean.
     ['grep', '--no-color', '-z', '-n', '-I', '-E', REFERENCE_LINE, '--', '.', ...excluded],
     [0, 1],
+    undefined,
+    top,
   )
-  return out
+  const lines = out
     .split('\n')
     .filter(Boolean)
     .map((row) => {
       const [file, line, ...text] = row.split('\0')
       return { file, line, text: text.join('\0') }
     })
+  return { corpusDir, lines }
 }
 
 /** True when the match is qualified by an external prefix: `shared ADR-NNNN`. */
@@ -313,11 +338,11 @@ function isExternal(line, index) {
  * is deleted, and is rewritten in the same diff as any other reference.
  */
 function danglingReferences(files) {
-  const corpusDir = forGit(path.normalize(adrDir)).replace(/\/+$/, '')
   const names = new Set(files.map((f) => path.basename(f)))
   const ids = new Set([...names].map((n) => n.match(/^(\d{4})-/)?.[1]).filter(Boolean))
   const found = []
-  for (const { file, line, text } of candidateLines(corpusDir)) {
+  const { corpusDir, lines } = candidateLines()
+  for (const { file, line, text } of lines) {
     for (const m of text.matchAll(ADR_ID))
       if (!ids.has(m[1]) && !isExternal(text, m.index)) found.push(`${file}:${line} — ADR-${m[1]}`)
     for (const m of text.matchAll(ADR_LINK)) {
@@ -383,18 +408,8 @@ function showRetired(files) {
     console.log('adr-check: not a git repository — no history to read retired records from.')
     return 0
   }
-  // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
-  // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths, the
-  // dir up to its nearest existing ancestor: it is gone once its last record is.
-  const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
-  let head = path.resolve(adrDir)
-  let tail = ''
-  while (!existsSync(head)) {
-    tail = path.join(path.basename(head), tail)
-    head = path.dirname(head)
-  }
-  const real = path.join(realpathSync(head), tail)
-  const corpusDir = forGit(path.relative(realpathSync(top), real))
+  // git log prints repo-root-relative paths: resolve the dir the same way.
+  const { corpusDir } = repoCorpus(READING_RETIRED)
   const outside = corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir)
   if (outside || (existsSync(adrDir) && !isDirectory(adrDir)))
     bail(`--retired: ${adrDir} is not a directory inside this repository.`)
