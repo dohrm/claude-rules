@@ -581,7 +581,7 @@ adr-check:
 # record deleted from docs/adr/ lives in git history; this reads it back.
 # Retired ADRs: `just adr-retired` lists them, `just adr-retired NNNN` prints one.
 adr-retired id="":
-    @node {{kit}}/adr-check.mjs --retired {{id}}
+    @node {{kit}}/adr-check.mjs --retired {{quote(id)}}
 
 # ── Living documents ───────────────────────────────────────────────────────
 # Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.

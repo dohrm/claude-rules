@@ -59,7 +59,8 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
   (`CLAUDE.md`). Every file the installer writes, on every target, carries its hash
   in the lock (`installed[].files`; Codex's `codex.files`). A path edited since the
   install, or not written by it, stops the run before any write; `--force`
-  overwrites it (ADR-0010, `bin/ownership.mjs`).
+  overwrites it, except an edited Codex rule that `remove` would rescope, which
+  needs `update --force` first (ADR-0010, `bin/ownership.mjs`).
 - **Safety**: every write goes through `safePath` (no escape, no symlinked destination).
 - **Decisions**: ADRs only for cross-feature arbitrations (ADR-0005).
 

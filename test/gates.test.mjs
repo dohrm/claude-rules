@@ -1244,6 +1244,8 @@ test('adr-check: --retired lists a deleted record with its last status line, and
 
     const list = run(ADR_CHECK, ['--retired'], dir)
     assert.equal(list.status, 0, list.out)
+    // `just adr-retired` with no id passes an empty, quoted argument.
+    assert.equal(run(ADR_CHECK, ['--retired', ''], dir).out, list.out)
     assert.match(list.out, /1 retired record\(s\)/)
     assert.match(list.out, /ADR-0001 {2}Old way\n {4}status: Superseded by ADR-0002\n {4}deleted: [0-9a-f]{7,} \d{4}-\d{2}-\d{2} — retire the old way/)
     assert.doesNotMatch(list.out, /ADR-0002 |ADR-0003/)

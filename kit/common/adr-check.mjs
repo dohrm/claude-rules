@@ -49,7 +49,8 @@ const STATUS_LINE = /^-\s*\*\*Status\*\*:\s*(\S+)/m
 // A status line in a unified diff, added or removed.
 const STATUS_IN_DIFF = /^[+-]-\s*\*\*Status\*\*:/m
 
-const args = process.argv.slice(2)
+// An empty argument (`just adr-retired` passes `''`) is no argument.
+const args = process.argv.slice(2).filter((a) => a !== '')
 const strict = args.includes('--strict')
 const configArg = args.find((a) => a.startsWith('--config='))
 const configPath = configArg ? configArg.slice('--config='.length) : '.docs-budgets.json'
