@@ -382,7 +382,8 @@ function showRetired(files) {
     return 0
   }
   // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
-  // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths.
+  // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths, the
+  // dir up to its nearest existing ancestor.
   const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
   // The dir is gone once its last record is: resolve the nearest existing ancestor.
   let head = path.resolve(adrDir)
