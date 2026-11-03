@@ -384,7 +384,9 @@ function showRetired(files) {
   // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
   // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths.
   const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
-  const corpusDir = forGit(path.relative(realpathSync(top), path.resolve(realpathSync('.'), adrDir)))
+  const dir = path.resolve(adrDir)
+  const real = existsSync(dir) ? realpathSync(dir) : path.resolve(realpathSync('.'), adrDir)
+  const corpusDir = forGit(path.relative(realpathSync(top), real))
   if (corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir))
     bail(`--retired: ${adrDir} is not a directory inside this repository.`)
   // Through scanGit: a git that cannot run is an error here too, never "no commit yet".

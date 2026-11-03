@@ -1264,6 +1264,10 @@ test('adr-check: --retired lists a deleted record with its last status line, and
     const nested = run(ADR_CHECK, ['../docs/adr', '--retired'], join(dir, 'src'))
     assert.equal(nested.status, 0, nested.out)
     assert.match(nested.out, /1 retired record\(s\) — deleted from docs\/adr\//)
+    // An absolute dir, spelled through any symlink in the temp path (macOS: /var → /private/var).
+    const absolute = run(ADR_CHECK, [join(dir, 'docs/adr'), '--retired'], join(dir, 'src'))
+    assert.equal(absolute.status, 0, absolute.out)
+    assert.match(absolute.out, /1 retired record\(s\) — deleted from docs\/adr\//)
     assert.equal(run(ADR_CHECK, ['docs', '--retired'], dir).out, 'adr-check: no record has been retired from docs/.\n')
     assert.equal(run(ADR_CHECK, ['..', '--retired'], dir).status, 2)
 
