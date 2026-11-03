@@ -10,7 +10,7 @@ The captured skill and rule files are retained for the 2026-10-01 live results. 
 
 This harness does not yet test a realistic single invocation with ADR files present from the start. It therefore cannot establish that a model would make its provisional recommendation observable before its first ADR read when both are available. That ordering needs a separate tool-event study; the two-invocation result only establishes behavior under enforced separation.
 
-`adr-review` receives the entire corpus and both discrepancy fixtures at once. Its prompt asks for a status/dependency map, stale guidance, a prioritized action table, and a judgment on whether consolidation clarifies a coherent decision. Neither test authorizes changing ADR statuses or writing to the fixture.
+`adr-review` receives the entire corpus and both discrepancy fixtures at once. Its prompt asks for the skill's triage output: one verdict per record with its evidence and destination, gate candidates, a summary of the decisions in force, and before/after totals. Moves, deletions and reference rewrites are proposed, never executed. Neither test authorizes changing ADR statuses or writing to the fixture. Results recorded before 2026-11 used the earlier map-and-action-table prompt and do not compare with later runs.
 
 ```bash
 node eval/adr-bench/skill-study/run.mjs --runner codex --skill solution-exploration --case transport --setup-only

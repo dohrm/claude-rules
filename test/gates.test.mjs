@@ -1221,6 +1221,79 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
   })
 })
 
+// A retired record is one deleted from the corpus dir: git is the archive, and
+// `--retired` reads it back. Read-only — never a gate, never a failing exit for "none".
+const retire = (dir, file, message) => {
+  for (const args of [['rm', '-q', file], ['commit', '-q', '-m', message]]) {
+    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' })
+    assert.equal(r.status, 0, r.stderr)
+  }
+}
+
+test('adr-check: --retired lists a deleted record with its last status line, and prints it by number', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-old.md', '# ADR-0001: Old way\n\n- **Status**: Superseded by ADR-0002\n\n## Context\n\nthe refusal.\n')
+    write(dir, 'docs/adr/0002-new.md', RECORD.replace('ADR-0001: x', 'ADR-0002: New way'))
+    write(dir, 'docs/adr/0003-moved.md', RECORD.replace('ADR-0001: x', 'ADR-0003: Moved'))
+    commitBase(dir)
+    retire(dir, 'docs/adr/0001-old.md', 'retire the old way')
+    // A renamed record keeps its number: not retired.
+    spawnSync('git', ['mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md'], { cwd: dir })
+    retire(dir, 'docs/adr/0002-new.md', 'scratch')
+    spawnSync('git', ['checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md'], { cwd: dir })
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-am', 'restore 0002'], { cwd: dir })
+
+    const list = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(list.status, 0, list.out)
+    assert.match(list.out, /1 retired record\(s\)/)
+    assert.match(list.out, /ADR-0001 {2}Old way\n {4}status: Superseded by ADR-0002\n {4}deleted: [0-9a-f]{7,} \d{4}-\d{2}-\d{2} — retire the old way/)
+    assert.doesNotMatch(list.out, /ADR-0002 |ADR-0003/)
+
+    const one = run(ADR_CHECK, ['--retired', '1'], dir)
+    assert.equal(one.status, 0, one.out)
+    assert.match(one.out, /docs\/adr\/0001-old\.md — deleted in [0-9a-f]{7,} on /)
+    assert.match(one.out, /- \*\*Status\*\*: Superseded by ADR-0002\n\n## Context\n\nthe refusal\.\n$/)
+    // The id after the flag is never read as the corpus dir.
+    assert.equal(run(ADR_CHECK, ['docs/adr', '--retired', 'ADR-0001'], dir).out, one.out)
+
+    const live = run(ADR_CHECK, ['--retired', '0002'], dir)
+    assert.equal(live.status, 0, live.out)
+    assert.match(live.out, /ADR-0002 is not retired — read docs\/adr\/0002-new\.md/)
+    const unknown = run(ADR_CHECK, ['--retired', '0042'], dir)
+    assert.equal(unknown.status, 1, unknown.out)
+    assert.match(unknown.out, /no record ADR-0042 was ever deleted/)
+    const typo = run(ADR_CHECK, ['--retired', 'id=0001'], dir)
+    assert.equal(typo.status, 2, typo.out)
+    assert.match(typo.out, /--retired takes a record number/)
+  })
+})
+
+test('adr-check: --retired with nothing retired says so and exits 0', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    spawnSync('git', ['init', '-q'], { cwd: dir })
+    const unborn = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(unborn.status, 0, unborn.out)
+    assert.match(unborn.out, /no commit yet — no record has been retired/)
+    commitBase(dir)
+    const r = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /no record has been retired from docs\/adr\//)
+  })
+})
+
+test('adr-check: --retired outside a git repository says so', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: join(dir, '..') }
+    delete env.GIT_DIR
+    delete env.GIT_WORK_TREE
+    const r = spawnSync(process.execPath, [ADR_CHECK, '--retired'], { cwd: dir, encoding: 'utf8', env })
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.match(r.stdout, /not a git repository — no history to read retired records from/)
+  })
+})
+
 // ── review-guard ───────────────────────────────────────────────────────────
 // One test per line of the contract table (kit/common/review-guard.mjs). The
 // review itself is an LLM's judgment; THIS is the part a machine can settle, so

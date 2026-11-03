@@ -70,6 +70,13 @@ a clean result. Every run with records prints the corpus totals — records, wor
 ≈ tokens. Doctrine:
 `../rules/agent/decisions.md`.
 
+A deleted record is not lost — git is the archive — and `just adr-retired` reads it
+back (`adr-check.mjs --retired [NNNN]`; read-only, never a gate, so it needs no place
+in `check`). Without an id it lists the records deleted from `docs/adr/`: number,
+title, last status line, deleting commit and date. With one (`just adr-retired 0004`)
+it prints that record's last version. A number still on disk points at its file; a
+number never deleted exits 1. Nothing retired, or no repository: it says so, exit 0.
+
 `docs-check` guards the other documents against the same rot. It **fails** when an
 index and its units disagree — a link to a unit that does not exist, a unit no index
 carries — because those are facts, not judgments. Experience contracts also require

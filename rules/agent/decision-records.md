@@ -48,6 +48,8 @@ breeds status-line bookkeeping and gets cited as if it still bound.
   `Accepted` on disk. Never a `Proposed` record (a human withdraws it to
   `Rejected` first), never an `Accepted` one. Any other deletion is a proposal
   (`/adr-review`); the human's merge is the act.
+- **A retired record is read back from git**: `just adr-retired` lists them,
+  `just adr-retired NNNN` prints one; without the kit, `git log --diff-filter=D -- docs/adr/`.
 
 ## One record, one decision
 

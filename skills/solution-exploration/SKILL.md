@@ -32,8 +32,21 @@ Follow dependent ADRs when an option
 changes their assumptions or invariants; a shared authorization model, for
 example, can affect many decisions. Classify records by their explicit status
 line, including `Rejected`, `Rejeté`, or `Refusé`; do not infer status from a title.
-Search for relevant rejected records and alternatives refused inside accepted
-ADRs. Identify the exact proposal and why it was refused. Compare the new option
+
+Past refusals live in three places, read in this order:
+
+1. `Alternatives considered` of the records in force.
+2. Records still on disk whose status retires them (`Rejected`, `Superseded`,
+   `Deprecated`): a corpus not yet triaged keeps them.
+3. The archive: a triaged corpus deletes retired records, and git keeps them.
+   `just adr-retired` lists them and `just adr-retired NNNN` prints one. Without
+   that recipe, run:
+   - `git log --diff-filter=D --format='%h %ad %s' --name-only -- docs/adr/`
+   - `git log -S "<option>" -- docs/adr/`
+   - `git show <commit>^:docs/adr/NNNN-slug.md`
+
+An option absent from all three was never refused, as far as the record shows.
+Identify the exact proposal and why it was refused. Compare the new option
 with that proposal: is it the same solution, or materially
 different? Test whether the old objections still hold under current constraints
 and evidence, and say what would justify reopening the choice. A past refusal is
