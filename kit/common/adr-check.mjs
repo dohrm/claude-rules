@@ -353,7 +353,7 @@ const RECORD_NAME = /^(\d{4})-[^/]*\.md$/
 const READING_RETIRED = 'reading retired records'
 
 /** Deleted records whose number is gone from the corpus, newest deletion per number. */
-function retiredRecords(corpusDir, files) {
+function retiredRecords(corpusDir, files, only) {
   const onDisk = new Set(files.map((f) => path.basename(f).match(RECORD_NAME)?.[1]).filter(Boolean))
   // --no-renames: a renamed record reads as deleted, then the number filter keeps it out,
   // whatever the caller's diff.renames. `corpusDir` is repo-root-relative, like git's output.
@@ -368,6 +368,7 @@ function retiredRecords(corpusDir, files) {
     for (const file of names.filter(Boolean)) {
       const id = path.posix.basename(file).match(RECORD_NAME)?.[1]
       if (!id || path.posix.dirname(file) !== corpusDir || onDisk.has(id) || byId.has(id)) continue
+      if (only !== null && id !== only) continue
       // The version the deleting commit removed: the record's last words.
       const text = scanGit(['show', `${commit}^:${file}`], [0], READING_RETIRED)
       byId.set(id, { id, file, commit, date, subject: subject.join('\t'), text })
@@ -383,9 +384,8 @@ function showRetired(files) {
   }
   // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
   // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths, the
-  // dir up to its nearest existing ancestor.
+  // dir up to its nearest existing ancestor: it is gone once its last record is.
   const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
-  // The dir is gone once its last record is: resolve the nearest existing ancestor.
   let head = path.resolve(adrDir)
   let tail = ''
   while (!existsSync(head)) {
@@ -394,7 +394,8 @@ function showRetired(files) {
   }
   const real = path.join(realpathSync(head), tail)
   const corpusDir = forGit(path.relative(realpathSync(top), real))
-  if (corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir))
+  const outside = corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir)
+  if (outside || (existsSync(adrDir) && !isDirectory(adrDir)))
     bail(`--retired: ${adrDir} is not a directory inside this repository.`)
   // Through scanGit: a git that cannot run is an error here too, never "no commit yet".
   if (scanGit(['rev-parse', '--quiet', '--verify', 'HEAD'], [0, 1], READING_RETIRED) === '') {
@@ -403,7 +404,8 @@ function showRetired(files) {
   }
   if (git('rev-parse', '--is-shallow-repository')?.trim() === 'true')
     console.error('adr-check: shallow clone — history is cut, an older retirement may be missing.')
-  const retired = retiredRecords(corpusDir, files)
+  // One id asked: read only that record's body, not every retired one.
+  const retired = retiredRecords(corpusDir, files, retiredId)
   if (retiredId !== null) {
     const record = retired.find((r) => r.id === retiredId)
     if (record) {

@@ -83,6 +83,7 @@ function git(dir, args, input) {
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${r.stdout}${r.stderr}`)
   return r.stdout.trim()
 }
+export { git as fixtureGit }
 
 // Commits the tree, so a gate run with `base=HEAD` has a real base to compare the lock
 // against. `blank` (a repo-relative path) is committed EMPTY, then restored, so the tree

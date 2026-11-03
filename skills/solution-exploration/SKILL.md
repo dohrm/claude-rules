@@ -37,7 +37,7 @@ Past refusals live in three places, read in this order:
 
 1. `Alternatives considered` of the records in force.
 2. Records still on disk whose status retires them (`Rejected`, `Superseded`,
-   `Deprecated`): a corpus not yet triaged keeps them.
+   `Deprecated`, or their translations): a corpus not yet triaged keeps them.
 3. The archive: a triaged corpus deletes retired records, and git keeps them.
    `just adr-retired` lists them and `just adr-retired NNNN` prints one. Without
    that recipe, run:

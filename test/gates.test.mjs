@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo, commitBase } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, fixtureGit } from './helpers.mjs'
 
 const DOCS_CHECK = join(REPO, 'kit', 'common', 'docs-check.mjs')
 const ADR_CHECK = join(REPO, 'kit', 'common', 'adr-check.mjs')
@@ -1223,13 +1223,9 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
 
 // A retired record is one deleted from the corpus dir: git is the archive, and
 // `--retired` reads it back. Read-only — never a gate, never a failing exit for "none".
-const fixtureGit = (dir, ...args) => {
-  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' })
-  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`)
-}
 const retire = (dir, file, message) => {
-  fixtureGit(dir, 'rm', '-q', file)
-  fixtureGit(dir, 'commit', '-q', '-m', message)
+  fixtureGit(dir, ['rm', '-q', file])
+  fixtureGit(dir, ['commit', '-q', '-m', message])
 }
 
 test('adr-check: --retired lists a deleted record with its last status line, and prints it by number', () => {
@@ -1240,11 +1236,11 @@ test('adr-check: --retired lists a deleted record with its last status line, and
     commitBase(dir)
     retire(dir, 'docs/adr/0001-old.md', 'retire the old way')
     // A renamed record keeps its number: not retired.
-    fixtureGit(dir, 'mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md')
+    fixtureGit(dir, ['mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md'])
     // Deleted, then restored: in history as a deletion, on disk again — not retired.
     retire(dir, 'docs/adr/0002-new.md', 'scratch')
-    fixtureGit(dir, 'checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md')
-    fixtureGit(dir, 'commit', '-q', '-m', 'restore 0002')
+    fixtureGit(dir, ['checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md'])
+    fixtureGit(dir, ['commit', '-q', '-m', 'restore 0002'])
 
     const list = run(ADR_CHECK, ['--retired'], dir)
     assert.equal(list.status, 0, list.out)
@@ -1270,6 +1266,7 @@ test('adr-check: --retired lists a deleted record with its last status line, and
     assert.match(absolute.out, /1 retired record\(s\) — deleted from docs\/adr\//)
     assert.equal(run(ADR_CHECK, ['docs', '--retired'], dir).out, 'adr-check: no record has been retired from docs/.\n')
     assert.equal(run(ADR_CHECK, ['..', '--retired'], dir).status, 2)
+    assert.equal(run(ADR_CHECK, ['docs/adr/0002-new.md', '--retired'], dir).status, 2)
 
     const live = run(ADR_CHECK, ['--retired', '0002'], dir)
     assert.equal(live.status, 0, live.out)
@@ -1300,7 +1297,7 @@ test('adr-check: --retired still reads the archive once the last record, and its
 test('adr-check: --retired with nothing retired says so and exits 0', () => {
   withTmpRepo((dir) => {
     write(dir, 'docs/adr/0001-x.md', RECORD)
-    spawnSync('git', ['init', '-q'], { cwd: dir })
+    fixtureGit(dir, ['init', '-q'])
     const unborn = run(ADR_CHECK, ['--retired'], dir)
     assert.equal(unborn.status, 0, unborn.out)
     assert.match(unborn.out, /no commit yet — no record has been retired/)
