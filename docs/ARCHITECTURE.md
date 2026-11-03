@@ -29,8 +29,9 @@ flowchart LR
   cli --> lock[.claude-rules.lock]
 ```
 
-ADR-0008 (Accepted, not yet built) replaces the single GitHub source with ordered git
-sources merged into one staged tree before emitting.
+Sources (ADR-0008, `bin/sources.mjs`): the lock pins an ordered list of git sources,
+`core` (this library) first; each is fetched with the `git` on PATH and merged into one
+staged tree, which the emitters read.
 
 ## Technology stack
 
@@ -55,8 +56,11 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 ## Cross-cutting concerns
 
 - **Ownership**: the installer never merges build config; kit wiring is manual
-  (`CLAUDE.md`). Codex files carry hashes in the lock; Claude and Cursor copies are
-  replaced.
+  (`CLAUDE.md`). Every file the installer writes, on every target, carries its hash
+  in the lock (`installed[].files`; Codex's `codex.files`). A path edited since the
+  install, or not written by it, stops the run before any write; `--force`
+  overwrites it, except an edited Codex rule that `remove` would rescope, which
+  needs `update --force` first (ADR-0010, `bin/ownership.mjs`).
 - **Safety**: every write goes through `safePath` (no escape, no symlinked destination).
 - **Decisions**: ADRs only for cross-feature arbitrations (ADR-0005).
 

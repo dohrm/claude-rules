@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, chmodSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo, commitBase } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, fixtureGit } from './helpers.mjs'
 
 const DOCS_CHECK = join(REPO, 'kit', 'common', 'docs-check.mjs')
 const ADR_CHECK = join(REPO, 'kit', 'common', 'adr-check.mjs')
@@ -1218,6 +1218,107 @@ test('adr-check: an existing record, a shared one and an unscanned path are not 
     const broken = run(ADR_CHECK, ['docs/adr', '--strict'], dir)
     assert.equal(broken.status, 2, broken.out)
     assert.match(broken.out, /reference scan failed \(git ls-files\)/)
+  })
+})
+
+// A retired record is one deleted from the corpus dir: git is the archive, and
+// `--retired` reads it back. Read-only — never a gate, never a failing exit for "none".
+const retire = (dir, file, message) => {
+  fixtureGit(dir, ['rm', '-q', file])
+  fixtureGit(dir, ['commit', '-q', '-m', message])
+}
+
+test('adr-check: --retired lists a deleted record with its last status line, and prints it by number', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-old.md', '# ADR-0001: Old way\n\n- **Status**: Superseded by ADR-0002\n\n## Context\n\nthe refusal.\n')
+    write(dir, 'docs/adr/0002-new.md', RECORD.replace('ADR-0001: x', 'ADR-0002: New way'))
+    write(dir, 'docs/adr/0003-moved.md', RECORD.replace('ADR-0001: x', 'ADR-0003: Moved'))
+    commitBase(dir)
+    retire(dir, 'docs/adr/0001-old.md', 'retire the old way')
+    // A renamed record keeps its number: not retired.
+    fixtureGit(dir, ['mv', 'docs/adr/0003-moved.md', 'docs/adr/0003-renamed.md'])
+    // Deleted, then restored: in history as a deletion, on disk again — not retired.
+    retire(dir, 'docs/adr/0002-new.md', 'scratch')
+    fixtureGit(dir, ['checkout', '-q', 'HEAD~1', '--', 'docs/adr/0002-new.md'])
+    fixtureGit(dir, ['commit', '-q', '-m', 'restore 0002'])
+
+    const list = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(list.status, 0, list.out)
+    // `just adr-retired` with no id passes an empty, quoted argument.
+    assert.equal(run(ADR_CHECK, ['--retired', ''], dir).out, list.out)
+    assert.match(list.out, /1 retired record\(s\)/)
+    assert.match(list.out, /ADR-0001 {2}Old way\n {4}status: Superseded by ADR-0002\n {4}deleted: [0-9a-f]{7,} \d{4}-\d{2}-\d{2} — retire the old way/)
+    assert.doesNotMatch(list.out, /ADR-0002 |ADR-0003/)
+
+    const one = run(ADR_CHECK, ['--retired', '1'], dir)
+    assert.equal(one.status, 0, one.out)
+    assert.match(one.out, /docs\/adr\/0001-old\.md — deleted in [0-9a-f]{7,} on /)
+    assert.match(one.out, /- \*\*Status\*\*: Superseded by ADR-0002\n\n## Context\n\nthe refusal\.\n$/)
+    // The id after the flag is never read as the corpus dir.
+    assert.equal(run(ADR_CHECK, ['docs/adr', '--retired', 'ADR-0001'], dir).out, one.out)
+
+    // From a subdirectory, the corpus dir as the caller spells it.
+    mkdirSync(join(dir, 'src'))
+    const nested = run(ADR_CHECK, ['../docs/adr', '--retired'], join(dir, 'src'))
+    assert.equal(nested.status, 0, nested.out)
+    assert.match(nested.out, /1 retired record\(s\) — deleted from docs\/adr\//)
+    // An absolute dir, spelled through any symlink in the temp path (macOS: /var → /private/var).
+    const absolute = run(ADR_CHECK, [join(dir, 'docs/adr'), '--retired'], join(dir, 'src'))
+    assert.equal(absolute.status, 0, absolute.out)
+    assert.match(absolute.out, /1 retired record\(s\) — deleted from docs\/adr\//)
+    assert.equal(run(ADR_CHECK, ['docs', '--retired'], dir).out, 'adr-check: no record has been retired from docs/.\n')
+    assert.equal(run(ADR_CHECK, ['..', '--retired'], dir).status, 2)
+    assert.equal(run(ADR_CHECK, ['docs/adr/0002-new.md', '--retired'], dir).status, 2)
+
+    const live = run(ADR_CHECK, ['--retired', '0002'], dir)
+    assert.equal(live.status, 0, live.out)
+    assert.match(live.out, /ADR-0002 is not retired — read docs\/adr\/0002-new\.md/)
+    const unknown = run(ADR_CHECK, ['--retired', '0042'], dir)
+    assert.equal(unknown.status, 1, unknown.out)
+    assert.match(unknown.out, /no record ADR-0042 was ever deleted/)
+    const typo = run(ADR_CHECK, ['--retired', 'id=0001'], dir)
+    assert.equal(typo.status, 2, typo.out)
+    assert.match(typo.out, /--retired takes a record number/)
+  })
+})
+
+test('adr-check: --retired still reads the archive once the last record, and its dir, are gone', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    commitBase(dir)
+    retire(dir, 'docs/adr/0001-x.md', 'retire the last one')
+    assert.ok(!existsSync(join(dir, 'docs/adr')))
+    for (const spelling of ['docs/adr', join(dir, 'docs/adr')]) {
+      const r = run(ADR_CHECK, [spelling, '--retired'], dir)
+      assert.equal(r.status, 0, `${spelling}: ${r.out}`)
+      assert.match(r.out, /1 retired record\(s\) — deleted from docs\/adr\/, kept in git history:\n {2}ADR-0001 {2}x\n/)
+    }
+  })
+})
+
+test('adr-check: --retired with nothing retired says so and exits 0', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    fixtureGit(dir, ['init', '-q'])
+    const unborn = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(unborn.status, 0, unborn.out)
+    assert.match(unborn.out, /no commit yet — no record has been retired/)
+    commitBase(dir)
+    const r = run(ADR_CHECK, ['--retired'], dir)
+    assert.equal(r.status, 0, r.out)
+    assert.match(r.out, /no record has been retired from docs\/adr\//)
+  })
+})
+
+test('adr-check: --retired outside a git repository says so', () => {
+  withTmpRepo((dir) => {
+    write(dir, 'docs/adr/0001-x.md', RECORD)
+    const env = { ...process.env, GIT_CEILING_DIRECTORIES: join(dir, '..') }
+    delete env.GIT_DIR
+    delete env.GIT_WORK_TREE
+    const r = spawnSync(process.execPath, [ADR_CHECK, '--retired'], { cwd: dir, encoding: 'utf8', env })
+    assert.equal(r.status, 0, r.stdout + r.stderr)
+    assert.match(r.stdout, /not a git repository — no history to read retired records from/)
   })
 })
 

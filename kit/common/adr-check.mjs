@@ -29,14 +29,19 @@
 // qualified by one of `adr.externalPrefixes` (`shared ADR-NNNN`) names another
 // repository's record.
 //
+// `--retired [NNNN]` is a read-only lookup, never a gate: it lists the records deleted from
+// the corpus dir in git history (number, title, last status line, deleting commit and
+// date), or prints one retired record's last version. Exit 0 when nothing was retired.
+//
 // Node rather than bash so `just check` stays cross-platform — see kit/README.md. No
 // dependencies; Node >= 18.
 //
 // Usage:  just adr-check   (directly: node .dev/kit/common/adr-check.mjs [adr-dir] [--strict] [--config=<file>])
+//         just adr-retired [NNNN]   (directly: node .dev/kit/common/adr-check.mjs [adr-dir] --retired [NNNN])
 //         (defaults: docs/adr, .docs-budgets.json)
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const KNOWN_STATUSES = ['Proposed', 'Accepted', 'Rejected', 'Superseded', 'Deprecated']
@@ -44,11 +49,23 @@ const STATUS_LINE = /^-\s*\*\*Status\*\*:\s*(\S+)/m
 // A status line in a unified diff, added or removed.
 const STATUS_IN_DIFF = /^[+-]-\s*\*\*Status\*\*:/m
 
-const args = process.argv.slice(2)
+// An empty argument (`just adr-retired` passes `''`) is no argument.
+const args = process.argv.slice(2).filter((a) => a !== '')
 const strict = args.includes('--strict')
 const configArg = args.find((a) => a.startsWith('--config='))
 const configPath = configArg ? configArg.slice('--config='.length) : '.docs-budgets.json'
-const adrDir = args.find((a) => !a.startsWith('--')) ?? 'docs/adr'
+// `--retired NNNN`: the id is the token after the flag, so it is never read as the dir.
+const retiredAt = args.indexOf('--retired')
+const RETIRED_ID = /^(?:ADR-)?(\d{1,4})$/i
+const retiredId =
+  retiredAt >= 0 && RETIRED_ID.test(args[retiredAt + 1] ?? '')
+    ? args[retiredAt + 1].match(RETIRED_ID)[1].padStart(4, '0')
+    : null
+// Anything else after the flag is a typo (`id=0001`), not a corpus dir to read nothing from.
+if (retiredAt >= 0 && retiredId === null && args[retiredAt + 1] && !args[retiredAt + 1].startsWith('--'))
+  bail(`--retired takes a record number (NNNN or ADR-NNNN) — got "${args[retiredAt + 1]}".`)
+const adrDir =
+  args.find((a, i) => !a.startsWith('--') && !(retiredId !== null && i === retiredAt + 1)) ?? 'docs/adr'
 
 // One decision, one screen. Doctrine + per-section budgets: rules/agent/decisions.md.
 //
@@ -211,16 +228,16 @@ const DANGLING_SHOWN = 50
 const under = (file, prefix) => file === prefix || file.startsWith(`${prefix}/`)
 
 /**
- * git's stdout for the reference scan. Inside a repository a failure is fatal: a scan that
- * did not run must not read as a clean one. `ok` lists the exit codes that are answers.
+ * git's stdout for a read that must run (the reference scan, retired records). Inside a
+ * repository a failure is fatal: a scan that did not run must not read as a clean one. `ok` lists the exit codes that are answers.
  */
-function scanGit(args, ok = [0]) {
+function scanGit(args, ok = [0], what = 'the reference scan') {
   const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   if (r.error || !ok.includes(r.status)) {
     // A killed git says nothing on stderr: the signal is the cause.
     const why =
       r.error?.message ?? (r.stderr.trim() || (r.signal ? `killed by ${r.signal}` : `exit ${r.status}`))
-    bail(`the reference scan failed (git ${args[0]}) — ${why}`)
+    bail(`${what} failed (git ${args.find((a) => !a.startsWith('-') && !a.includes('='))}) — ${why}`)
   }
   return r.stdout
 }
@@ -237,19 +254,26 @@ function unscannedPrefixes(corpusDir) {
   return [...NEVER_SCANNED, ...vendored, ...config.referenceExclude]
 }
 
-/** Tracked, non-binary lines that mention a record, as { file, line, text }. */
-function candidateLines(corpusDir) {
-  // Outside a repository nothing is tracked. Probed first: scanGit fails hard there. A
-  // missing git binary is not "outside a repository" — scanGit reports it.
+/**
+ * True outside a git repository, where nothing is tracked. Probed first: scanGit fails hard
+ * there. A missing git binary is not "outside a repository" — scanGit reports it.
+ */
+function outsideRepository(what) {
   const probe = spawnSync('git', ['rev-parse', '--git-dir'], {
     encoding: 'utf8',
     env: { ...process.env, LC_ALL: 'C', LANGUAGE: '' }, // the message below is matched
   })
-  if (!probe.error && probe.status !== 0) {
-    // Only git's own "not a repository" skips: dubious ownership or a broken .git is a
-    // scan that cannot run, not a clean one.
-    if (!/not a git repository \(or any/i.test(probe.stderr))
-      bail(`the reference scan failed (git rev-parse) — ${probe.stderr.trim() || `exit ${probe.status}`}`)
+  if (probe.error || probe.status === 0) return false
+  // Only git's own "not a repository" counts: dubious ownership or a broken .git is a
+  // read that cannot run, not an empty one.
+  if (!/not a git repository \(or any/i.test(probe.stderr))
+    bail(`${what} failed (git rev-parse) — ${probe.stderr.trim() || `exit ${probe.status}`}`)
+  return true
+}
+
+/** Tracked, non-binary lines that mention a record, as { file, line, text }. */
+function candidateLines(corpusDir) {
+  if (outsideRepository('the reference scan')) {
     console.log('adr-check: not a git repository — reference scan skipped.')
     return []
   }
@@ -323,7 +347,101 @@ function reportDangling(found, strict) {
   )
 }
 
+// ------------------------------------------------------------ retired records
+// A record deleted from the corpus dir lives in git history: the triage's archive. Read
+// back here so a skill asks one command, not a chain of git invocations.
+const RECORD_NAME = /^(\d{4})-[^/]*\.md$/
+const READING_RETIRED = 'reading retired records'
+
+/** Deleted records whose number is gone from the corpus, newest deletion per number. */
+function retiredRecords(corpusDir, files, only) {
+  const onDisk = new Set(files.map((f) => path.basename(f).match(RECORD_NAME)?.[1]).filter(Boolean))
+  // --no-renames: a renamed record reads as deleted, then the number filter keeps it out,
+  // whatever the caller's diff.renames. `corpusDir` is repo-root-relative, like git's output.
+  const log = scanGit([
+    '-c', 'core.quotePath=false', 'log', '--no-renames', '--diff-filter=D',
+    '--name-only', '--date=short', '--format=%x01%h%x09%ad%x09%s', '--', `:(top,literal)${corpusDir}`,
+  ], [0], READING_RETIRED)
+  const byId = new Map()
+  for (const block of log.split('\x01').slice(1)) {
+    const [head, ...names] = block.split('\n')
+    const [commit, date, ...subject] = head.split('\t')
+    for (const file of names.filter(Boolean)) {
+      const id = path.posix.basename(file).match(RECORD_NAME)?.[1]
+      if (!id || path.posix.dirname(file) !== corpusDir || onDisk.has(id) || byId.has(id)) continue
+      if (only !== null && id !== only) continue
+      // The version the deleting commit removed: the record's last words.
+      const text = scanGit(['show', `${commit}^:${file}`], [0], READING_RETIRED)
+      byId.set(id, { id, file, commit, date, subject: subject.join('\t'), text })
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+function showRetired(files) {
+  if (outsideRepository(READING_RETIRED)) {
+    console.log('adr-check: not a git repository — no history to read retired records from.')
+    return 0
+  }
+  // git log prints repo-root-relative paths: resolve the dir the same way, whatever cwd and
+  // spelling (`../docs/adr`, an absolute path) the caller used. Both sides are real paths, the
+  // dir up to its nearest existing ancestor: it is gone once its last record is.
+  const top = scanGit(['rev-parse', '--show-toplevel'], [0], READING_RETIRED).trim()
+  let head = path.resolve(adrDir)
+  let tail = ''
+  while (!existsSync(head)) {
+    tail = path.join(path.basename(head), tail)
+    head = path.dirname(head)
+  }
+  const real = path.join(realpathSync(head), tail)
+  const corpusDir = forGit(path.relative(realpathSync(top), real))
+  const outside = corpusDir === '' || corpusDir === '..' || corpusDir.startsWith('../') || path.isAbsolute(corpusDir)
+  if (outside || (existsSync(adrDir) && !isDirectory(adrDir)))
+    bail(`--retired: ${adrDir} is not a directory inside this repository.`)
+  // Through scanGit: a git that cannot run is an error here too, never "no commit yet".
+  if (scanGit(['rev-parse', '--quiet', '--verify', 'HEAD'], [0, 1], READING_RETIRED) === '') {
+    console.log('adr-check: no commit yet — no record has been retired.')
+    return 0
+  }
+  if (git('rev-parse', '--is-shallow-repository')?.trim() === 'true')
+    console.error('adr-check: shallow clone — history is cut, an older retirement may be missing.')
+  // One id asked: read only that record's body, not every retired one.
+  const retired = retiredRecords(corpusDir, files, retiredId)
+  if (retiredId !== null) {
+    const record = retired.find((r) => r.id === retiredId)
+    if (record) {
+      console.log(
+        `adr-check: ${record.file} — deleted in ${record.commit} on ${record.date} (${record.subject}). Its last version:\n`,
+      )
+      process.stdout.write(record.text)
+      return 0
+    }
+    const live = files.find((f) => path.basename(f).startsWith(`${retiredId}-`))
+    if (live) {
+      console.log(`adr-check: ADR-${retiredId} is not retired — read ${forGit(live)}.`)
+      return 0
+    }
+    console.error(`adr-check: no record ADR-${retiredId} was ever deleted from ${corpusDir}/.`)
+    return 1
+  }
+  if (retired.length === 0) {
+    console.log(`adr-check: no record has been retired from ${corpusDir}/.`)
+    return 0
+  }
+  console.log(`adr-check: ${retired.length} retired record(s) — deleted from ${corpusDir}/, kept in git history:`)
+  for (const r of retired) {
+    const heading = r.text.match(/^#\s+(.+)$/m)?.[1].trim() ?? path.posix.basename(r.file)
+    const title = heading.replace(/^ADR-\d{4}\s*[:—-]\s*/, '')
+    const status = r.text.match(/^-\s*\*\*Status\*\*:\s*(.+)$/m)?.[1].trim() ?? '(no status line)'
+    console.log(`  ADR-${r.id}  ${title}\n    status: ${status}\n    deleted: ${r.commit} ${r.date} — ${r.subject}`)
+  }
+  console.log(`  Its last version: --retired NNNN (just adr-retired NNNN).`)
+  return 0
+}
+
 function main() {
+  if (retiredAt >= 0) return showRetired(isDirectory(adrDir) ? adrFiles(adrDir) : [])
+
   // A repo with no decision records is not a failing repo — the gate can be wired before the
   // first ADR exists, and stay wired after the last one is removed. Then every reference
   // left in the tree dangles, so the scan still runs.

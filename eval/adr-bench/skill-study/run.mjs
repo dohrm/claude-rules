@@ -137,7 +137,7 @@ try {
     }
   } else {
     reveal()
-    const prompt = `Use the installed /adr-review skill: read ${skillPath}. Review the frozen docs/adr corpus and its index, using available source extracts and project decision rules where relevant. Identify active and historical decisions, dependencies, contradictions, stale guidance, and uncertain findings. Return a source-linked map and prioritized action table. Evaluate consolidation only where it would clarify a coherent decision; keep accepted statuses intact. Do not edit files.`
+    const prompt = `Use the installed /adr-review skill: read ${skillPath}. Triage the frozen docs/adr corpus and its index, using available source extracts and project decision rules where relevant. Return the skill's hand-back: the triage table with one verdict, its evidence and its destination per record; gate candidates; a source-linked summary of the decisions in force; and the before/after totals (records, words, approximate tokens). This run is read-only: propose every move, deletion and reference rewrite instead of executing it, change no status line, and do not edit files.`
     if (setupOnly) console.log(JSON.stringify({ runner: runnerName, binary: runnerBin, skill, revision, skillSha256, files: paths(), ruleFiles: ruleProvenance(), prompt }, null, 2))
     else invoke('review', prompt)
   }

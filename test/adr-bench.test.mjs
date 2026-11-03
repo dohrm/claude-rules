@@ -141,5 +141,9 @@ test('future corpus review prompt does not name the target discrepancies or cons
   assert.equal(result.status, 0, result.stderr)
   const setup = JSON.parse(result.stdout)
   assert.doesNotMatch(setup.prompt, /Rig|genai|iroh|git remote|single consolidat/i)
+  // It measures the triage skill: its output, never its side effects on the snapshot.
+  assert.match(setup.prompt, /triage table/i)
+  assert.match(setup.prompt, /before\/after/i)
+  assert.match(setup.prompt, /read-only.*do not edit files/is)
   assert.equal(setup.files.filter(p => /^docs\/adr\/\d{4}-/.test(p)).length, 16)
 })

@@ -189,6 +189,15 @@ pointing at nothing.
   vendored corpora). Every run with records prints the corpus totals: records, words, ≈ tokens.
 - **A bare ADR number is no longer a comment's reason** (`agent/guardrails.md`). The
   comment states the invariant it protects. The number is only a pointer.
+- **`just adr-retired` reads a deleted record back** (`adr-check.mjs --retired [NNNN]`).
+  It lists the records deleted from `docs/adr/` with their number, title, last status
+  line, deleting commit and date; with a number, it prints that record's last version.
+  It is read-only and never a gate. The recipe comes with the imported `gate.just`.
+- **`/solution-exploration` finds a refusal after a triage.** It used to search
+  `Rejected` records, which a triage deletes, and would conclude an option had never
+  been refused. It now reads, in order: `Alternatives considered` of the records in
+  force, retired records still on disk, then the archive (`just adr-retired`, or three
+  git commands written out in the skill for an install without the kit).
 
 **Hand-merge:**
 

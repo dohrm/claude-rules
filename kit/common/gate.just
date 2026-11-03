@@ -577,6 +577,12 @@ adr-check:
     # Directories or files whose ADR numbers are not references to docs/adr/ (fixtures, templates):
     #   { "adr": { "referenceExclude": ["test/fixtures/"] } }
 
+# Read-only, never a gate — works wherever this file is imported, in `check` or not. A
+# record deleted from docs/adr/ lives in git history; this reads it back.
+# Retired ADRs: `just adr-retired` lists them, `just adr-retired NNNN` prints one.
+adr-retired id="":
+    @node {{kit}}/adr-check.mjs --retired {{quote(id)}}
+
 # ── Living documents ───────────────────────────────────────────────────────
 # Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.
 # A document meant to grow is a directory of units plus a compacted index — this fails

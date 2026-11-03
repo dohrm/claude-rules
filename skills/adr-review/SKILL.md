@@ -77,6 +77,8 @@ exists at its destination.
   `keep` until then); collapsing into a record that is not `Accepted`.
 
 Update the decision index in the same diff: a deleted record leaves the index.
+A deleted record is read back with `just adr-retired [NNNN]`, else
+`git show <commit>^:docs/adr/NNNN-slug.md`.
 
 ## 4. Rewrite every reference
 
