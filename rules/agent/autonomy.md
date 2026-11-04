@@ -129,8 +129,9 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   it if the board covers it and escalates to the human otherwise.
 - **The brief is the RFC and the phase number**, never a summary rewritten from it.
 - **It judges artifacts, not accounts.** It re-runs `just check` on the phase branch,
-  reads the diff and the review report, and merges on gates green, Tier 3 clean and
-  Tier 4 green in CI. The executor's report is a claim.
+  reads the diff and the review report, and merges on gates green, no `CRITICAL` in the
+  Tier 3 report and Tier 4 green in CI. `WARNINGS` do not block: they go into the final
+  report for the human, never into another fix round. The executor's report is a claim.
 - **It never writes in an executor's tree** while that executor runs.
 
 Reviewers are unrestricted: a stronger or different model reviewing is where

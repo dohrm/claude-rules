@@ -170,7 +170,8 @@ a gate bypass) and on a hold.
    first write the dependency graph you rely on under `## Log`.
 4. **Judge the artifacts.** Re-run `just check` on the phase branch, read the diff and
    the review report, wait for CI. If the board delegates phase merges, merge on gates
-   green, Tier 3 clean and Tier 4 green. Otherwise stop as at L3. A rejected phase goes
+   green, no `CRITICAL` in the Tier 3 report and Tier 4 green; its `WARNINGS` go into the
+   final report, never into another round. Otherwise stop as at L3. A rejected phase goes
    back to its executor, up to the board's cap.
 5. **Settle what the board covers** (a hold with a command, a `changed:` decision), and
    log each one with its proof. Stop on everything else: that is the minimal-risk
