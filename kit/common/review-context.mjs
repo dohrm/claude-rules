@@ -30,8 +30,9 @@
 //       cmd/opencodereview/background_file.go) — the full section, a ticket's comments
 //       included, ran 27,530 on the first real RFC.
 
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ensureWorkIgnored, headerOf, resolveSlug } from './work-slug.mjs'
 
 const HISTORY = new Set(['revisions', 'log'])
@@ -89,44 +90,64 @@ function withoutHistory(text) {
   return changed.length ? `${body}\n## Changed decisions (from ## Log)\n\n${changed.join('\n')}\n` : body
 }
 
-function reviewContext({ slug = '', cwd = '.' } = {}) {
+/** Which frame the branch was cut against, read from disk only — the one resolver
+ *  `review-context.mjs` and `scope-report.mjs` share. `kind` is one of:
+ *  `ambiguous` (`files`), `defect` (`path`, `text`), `none` (`slug`, `from`),
+ *  `local` (`path`, `text`), `unavailable` (`path`, `ticket`, `pointer`, `cachePath`: a ticket
+ *  pointer with no cache), `ticket` (`path`, `ticket`, `pointer`, `cachePath`, `written`, `text`:
+ *  the cache). `text` is the document whose `## Steps` a reader parses. */
+export function resolveRfc({ slug = '', cwd = '.' } = {}) {
   const resolved = resolveSlug({ slug, cwd })
   const dir = join('.work', resolved.slug)
   const rfcPath = join(dir, 'rfc.md')
-  const head = `=== RFC ===\n\n`
 
-  if (resolved.ambiguous) {
-    return `${head}RFC context not available: ${resolved.ambiguous.map((f) => `.work/${f}`).join(', ')} `
-      + 'all claim this branch in their **Branch** header — the tree contradicts its state files.\n'
-  }
+  if (resolved.ambiguous) return { kind: 'ambiguous', files: resolved.ambiguous.map((f) => `.work/${f}`) }
   // The file whose header named the branch; with a slug given or found by name, the RFC
   // first, else the diagnosis.
   const defectPath = join(dir, 'defect.md')
   const isDefect = resolved.file === 'defect.md'
     || (!resolved.file && !existsSync(join(cwd, rfcPath)) && existsSync(join(cwd, defectPath)))
-  if (isDefect) {
-    return `${head}Source: ${defectPath} (defect diagnosis)\n\n${withoutHistory(readFileSync(join(cwd, defectPath), 'utf8'))}`
-  }
-  if (!existsSync(join(cwd, rfcPath))) {
-    return `${head}No RFC for this branch (slug \`${resolved.slug}\`, from the ${resolved.from}).\n`
-  }
+  if (isDefect) return { kind: 'defect', path: defectPath, text: readFileSync(join(cwd, defectPath), 'utf8') }
+  if (!existsSync(join(cwd, rfcPath))) return { kind: 'none', slug: resolved.slug, from: resolved.from }
 
   const rfc = readFileSync(join(cwd, rfcPath), 'utf8')
   const ticket = headerOf(rfc).match(TICKET_HEADER)?.[1]
-  if (!ticket) return `${head}Source: ${rfcPath} (local RFC)\n\n${withoutHistory(rfc)}`
+  if (!ticket) return { kind: 'local', path: rfcPath, text: rfc }
 
   const cachePath = join(dir, 'review-context.md')
-  if (!existsSync(join(cwd, cachePath))) {
-    return `${head}RFC context not available: ${rfcPath} points to ${ticket} and no ${cachePath} `
-      + 'was cached — the implementing agent writes it before each phase\'s review '
-      + '(skills/rfc/ticket.md § Implementation). Report the review as run without its frame.\n\n'
-      + `Pointer:\n\n${withoutHistory(rfc)}`
-  }
+  if (!existsSync(join(cwd, cachePath))) return { kind: 'unavailable', path: rfcPath, ticket, pointer: rfc, cachePath }
   // A cache can sit on disk because a run wrote it; it is private either way.
   ensureWorkIgnored(cwd)
   const written = statSync(join(cwd, cachePath)).mtime.toISOString()
-  return `${head}Source: ${ticket}, cached in ${cachePath} at ${written}\n\n`
-    + `Pointer:\n\n${withoutHistory(rfc)}\nTicket:\n\n${readFileSync(join(cwd, cachePath), 'utf8')}`
+  return {
+    kind: 'ticket', path: rfcPath, ticket, pointer: rfc, cachePath, written,
+    text: readFileSync(join(cwd, cachePath), 'utf8'),
+  }
+}
+
+function reviewContext({ slug = '', cwd = '.' } = {}) {
+  const head = `=== RFC ===\n\n`
+  const r = resolveRfc({ slug, cwd })
+  switch (r.kind) {
+    case 'ambiguous':
+      return `${head}RFC context not available: ${r.files.join(', ')} `
+        + 'all claim this branch in their **Branch** header — the tree contradicts its state files.\n'
+    case 'defect':
+      return `${head}Source: ${r.path} (defect diagnosis)\n\n${withoutHistory(r.text)}`
+    case 'none':
+      return `${head}No RFC for this branch (slug \`${r.slug}\`, from the ${r.from}).\n`
+    case 'local':
+      return `${head}Source: ${r.path} (local RFC)\n\n${withoutHistory(r.text)}`
+    case 'unavailable':
+      return `${head}RFC context not available: ${r.path} points to ${r.ticket} and no `
+        + `${r.cachePath} `
+        + 'was cached — the implementing agent writes it before each phase\'s review '
+        + '(skills/rfc/ticket.md § Implementation). Report the review as run without its frame.\n\n'
+        + `Pointer:\n\n${withoutHistory(r.pointer)}`
+    default:
+      return `${head}Source: ${r.ticket}, cached in ${r.cachePath} at ${r.written}\n\n`
+        + `Pointer:\n\n${withoutHistory(r.pointer)}\nTicket:\n\n${r.text}`
+  }
 }
 
 const BRIEF_SECTIONS = /^##\s+(goal|model|local decisions)\s*$/i
@@ -155,14 +176,17 @@ function brief(text, max) {
 }
 
 // Context is the reviewer's input, never a gate: whatever goes wrong here is declared in
-// the section and the review still runs.
-const argv = process.argv.slice(2)
-const flag = (name) => (argv.includes(name) ? (argv[argv.indexOf(name) + 1] ?? '') : null)
-let section
-try {
-  section = reviewContext({ slug: flag('--slug') ?? '' })
-} catch (err) {
-  section = `=== RFC ===\n\nRFC context not available: ${err.message}\n`
+// the section and the review still runs. Run as a script only — `scope-report.mjs`
+// imports `resolveRfc` from here.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const argv = process.argv.slice(2)
+  const flag = (name) => (argv.includes(name) ? (argv[argv.indexOf(name) + 1] ?? '') : null)
+  let section
+  try {
+    section = reviewContext({ slug: flag('--slug') ?? '' })
+  } catch (err) {
+    section = `=== RFC ===\n\nRFC context not available: ${err.message}\n`
+  }
+  const max = Number(flag('--brief'))
+  process.stdout.write(flag('--brief') !== null && max > 0 ? brief(section, max) : section)
 }
-const max = Number(flag('--brief'))
-process.stdout.write(flag('--brief') !== null && max > 0 ? brief(section, max) : section)
