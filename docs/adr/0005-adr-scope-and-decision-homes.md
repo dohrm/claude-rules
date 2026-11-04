@@ -24,7 +24,7 @@ more than one feature, and refused real alternatives at a real cost. The rest go
   deployment): a shared decision repository, outside projects, that every project
   of the same organization follows.
 - **Stack conventions**: claude-rules profiles and kit.
-- **Feature-local choices**: the feature's work document (ADR-0006) and its PR.
+- **Feature-local choices**: the feature's work document (the RFC, ADR-0007) and its PR.
 - **Product and design rules**: PRD, `DESIGN.md`, `EXPERIENCE.md`, domain documents.
 
 Also:

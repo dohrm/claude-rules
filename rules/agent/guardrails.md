@@ -58,6 +58,8 @@ abstractions and vague comments removed; docs still matching behavior.
 - Catch-all errors (e.g. `Other(String)`) in domain code.
 - Tests that only assert construction, or mocks returning mocks.
 - Comments explaining obvious code while omitting the real invariant.
+- A bare ADR number as a comment's reason. A comment states the invariant it
+  protects; an ADR number is a pointer, never the reason.
 - Rewriting, reformatting, or adding a comment the code change did not make
   false. **A comment-only hunk is a failed edit.** Update a comment only when
   the change made it untrue.

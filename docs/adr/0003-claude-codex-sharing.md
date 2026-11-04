@@ -8,8 +8,8 @@
 The maintainer uses Claude Code and Codex together for implementation and review.
 The installer rejects Codex, while the kit already supports its review CLI.
 Consumers maintain their own bridge; updates purge `.agents/rules` and the old
-managed `AGENTS.md` block. The earlier two-target policy remains
-[Proposed](0001-emission-targets-claude-and-cursor.md).
+managed `AGENTS.md` block. The earlier policy named Claude Code and Cursor as
+the only targets; this record replaces it.
 
 Codex documents [directory-based instructions](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
 and [discovery of `.agents/skills`](https://learn.chatgpt.com/docs/build-skills).
@@ -58,3 +58,4 @@ this target policy waits for the maintainer's manual status change and commit.
 - Inline every rule into `AGENTS.md`: simpler, but loads unrelated conventions and risks truncation.
 - Generate nested files without discovery guidance: root sessions have no explicit instruction to find module guidance.
 - Share installed skills through symlinks: avoids duplicate bytes, but complicates portability and migration of existing directories.
+- Declare further tools best-effort targets, with no routing contract: half-supported emitters for no measured user; a target is added with its own routing contract.

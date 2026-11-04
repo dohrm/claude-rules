@@ -38,7 +38,7 @@ flowchart LR
 | **Frame** | `/interview` → `/prd` | `.work/<slug>/intent.md` (what is still open), then `docs/PRD.md` (+ `docs/prd/` once it grows) | human, question by question |
 | **Decide** | `/architect` | `docs/ARCHITECTURE.md` + one ADR per arbitration that earns one | agent writes `Proposed`, **human accepts** |
 | **Explore solutions** | `/solution-exploration` | independent options first, then ADR impacts; `Proposed` ADR only if a replacement is chosen for proposal | human decides whether to adopt it |
-| **Review decisions** | `/adr-review` | corpus map and prioritized consolidation recommendations | human changes ADR statuses |
+| **Review decisions** | `/adr-review` | triage table (one verdict per record), gate candidates, before/after size | human changes ADR statuses and merges deletions |
 | **Attack it** | `/pre-mortem` | `docs/premortem/<target>-<horizon>.md`, deltas back into PRD/ADRs | human, on each mitigation |
 | **Design the surfaces** | `/design-system`, `/experience` → `/ui-prompt` | `docs/DESIGN.md`, `docs/EXPERIENCE.md`, a generator prompt | human |
 | **Engineer one change** | `/rfc` | the RFC — `.work/<slug>/rfc.md` or a ticket in the project's tracker: the whole request in phases and holds, local decisions, steps with proofs; iterated, then implemented to the end | **human marks it `ready`** |
@@ -507,6 +507,7 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |
 | `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block (the RFC), before push; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
+| `just adr-retired [NNNN]` | — reads, never gates: the records deleted from `docs/adr/`, or one record's last version, from git history | on demand, with `docs/adr/` |
 | `just status` | — reports, never gates: every worktree at a glance (branch, dirty, RFC or loop, verdict, blockers) | opt-in, when sessions run in parallel trees |
 
 Tier 3 is independent review before push. Tier 4 mutation gates the PR; running

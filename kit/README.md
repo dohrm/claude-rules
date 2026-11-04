@@ -53,8 +53,29 @@ one run before the PR.
 correct, but whether a **decision** was taken by a human. A green gate is
 permission for code, never for a decision. It also warns (advisory; `--strict` to
 enforce) when a record blows the one-screen budget or invents a section — the two
-ways a decision log becomes something nobody reads. Doctrine:
+ways a decision log becomes something nobody reads — and on a **dangling reference**:
+`ADR-NNNN`, or a link to `adr/NNNN-*.md`, in a tracked file when no such record exists,
+which is what deleting a record leaves behind. The scan still runs once the last
+record is gone, and covers the records too (a successor citing a deleted record).
+Not scanned: `.work/`, `CHANGELOG.md`, installed agent assets at the root (`.claude/`,
+`.agents/`, `.cursor/`, `.dev/`), any directory holding its own `docs/adr/` (a package
+with its own corpus is never checked against the root one), and the directories or
+files listed in `adr.referenceExclude` (whole path components:
+`test/fix` does not exclude `test/fixtures/`). A reference qualified by one of
+`adr.externalPrefixes` (default `["shared", "enterprise"]`, as in `shared ADR-NNNN`)
+names another repository's record and is ignored; the prefix qualifies an ID, not a
+file link — a link counts as external only when it is a URL. The scan needs git: outside a
+repository it is skipped and says so; a git that cannot run is an error (exit 2), never
+a clean result. Every run with records prints the corpus totals — records, words,
+≈ tokens. Doctrine:
 `../rules/agent/decisions.md`.
+
+A deleted record is not lost — git is the archive — and `just adr-retired` reads it
+back (`adr-check.mjs --retired [NNNN]`; read-only, never a gate, so it needs no place
+in `check`). Without an id it lists the records deleted from `docs/adr/`: number,
+title, last status line, deleting commit and date. With one (`just adr-retired 0004`)
+it prints that record's last version. A number still on disk points at its file; a
+number never deleted exits 1. Nothing retired, or no repository: it says so, exit 0.
 
 `docs-check` guards the other documents against the same rot. It **fails** when an
 index and its units disagree — a link to a unit that does not exist, a unit no index
@@ -67,7 +88,8 @@ threshold, a `(continued)` heading). `docs/adr/` is left to `adr-check`. Doctrin
 
 Every budget of both gates is a **default**, overridable per repo in
 `.docs-budgets.json` at the root — `{ "prd": { "indexCeiling": 1500 } }`, `null` for
-no ceiling, `adr.unitCeiling` for the decision records. Put it there rather than in
+no ceiling, `adr.unitCeiling` for the decision records, `adr.referenceExclude` and
+`adr.externalPrefixes` for the dangling-reference scan. Put it there rather than in
 the script: the installer never writes that file, so `claude-rules update` cannot
 reset it. The gates print the override on every run, so a moved budget stays visible.
 
