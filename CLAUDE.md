@@ -25,10 +25,17 @@ See [the sharing contract](docs/agent-sharing.md) for alias, scope and ownership
 - `guidelines/` — patterns for working with Claude Code
 - `registry.json` + `bin/cli.mjs` + `bin/codex.mjs` — the installer (data-driven; the CLI stays dumb)
 - `test/` — `npm test`: black-box installer tests + asset-tree consistency (node:test, no deps, no network). Runs on every PR. Jalons (`test/rust-gates.test.mjs`, `test/python-gates.test.mjs`, `test/go-gates.test.mjs`, `test/ts-gates.test.mjs`, `test/godot-gates.test.mjs`, `test/devstack-gates.test.mjs`) skip when their toolchain is missing; the matching CI jobs install it and set `RUST_GATES=1` / `PYTHON_GATES=1` / `GO_GATES=1` / `TS_GATES=1` / `GODOT_GATES=1` / `DEVSTACK_GATES=1` so a skip cannot pass. `devstack-gates` is the odd one — `kit/devstack` gates nothing, but its two load-bearing claims (a quiet service's log FILE is empty while running; two work trees must not share a control socket) were found by hand and would otherwise never be replayed.
+- `maintainer/audit/` — this repo's own recurring multi-agent audit of skills and rules (`just audit-prep`, `just audit <mode> <agent> <model>`); never installed, so never in `registry.json`
 - `eval/` — agent regression harness; calls `claude` and spends tokens, so it is manual (model bumps only)
+- **Self-hosted** — this repo never installs itself. `.claude/skills`, `.agents/skills`, `.claude/agents`, `.claude/rules/{agent,product}` are committed relative symlinks to the canonical dirs, and the root `justfile` imports `kit/common/gate.just` in place (`kit := "kit/common"`, `base := "origin/next"`): `just check`, `just tree`, `just code-review` run the kit being edited. `.claude/rules/language.md` is this repo's own rule, so `rules/common` is not linked. macOS/Linux only; `test/self-host.test.mjs` keeps the links honest.
 
 ## Working rules
 
+- **Autonomy defaults** (raised by the human, 2026-10-28): `/defect` runs at **L3**
+  (diagnosis through to the PR), `/rfc` at **L4**. Pass the level at launch
+  (`/defect L3 …`, `/rfc L4 …`) so the state file header records it. An RFC without a
+  `## Delegation board` runs as L3 (`agent/autonomy.md` § L4). Hard checkpoints are
+  unchanged: ADR status, `ready`, scope changes and the merge stay the human's.
 - Keep the split honest: a new **convention** → `rules/`; a new **check** → `kit/`;
   a repeatable **procedure/methodology** → `skills/` (a `SKILL.md` dir); an **agent**
   only when the work needs its own context/tools (else a skill is lighter); otherwise it's a rule.

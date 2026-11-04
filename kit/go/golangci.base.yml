@@ -13,6 +13,16 @@ linters:
     - staticcheck   # SA* / S1* / QF* — gosimple folded in
     - unused
     - gosec         # security anti-patterns
+    # Resource lifecycle and context — each one a rule in rules/go/ a machine checks.
+    - bodyclose     # http.Response.Body closed
+    - sqlclosecheck # sql.Rows / Stmt closed
+    - rowserrcheck  # rows.Err() checked after the loop
+    - noctx         # outbound HTTP and DB calls carry a context
+    - contextcheck  # a function given a ctx passes it on, not context.Background()
+    - containedctx  # no context.Context stored in a struct
+    - errorlint     # %w when wrapping; errors.Is / errors.As, never == or a type switch
+    - nilerr        # `return nil` right after `if err != nil`
+    - exhaustive    # a switch on an enum names every value — `default` does not count
 
 formatters:
   enable:

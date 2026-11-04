@@ -9,7 +9,7 @@
 // prose varies, its OUTPUT SHAPE must not:
 //   • regex over what it said, and over the files it wrote;
 //   • and, best of all, the kit's own gates run against the artifacts. `/architect`
-//     is judged by adr-check, `/plan` and `/prd` by docs-check. The gate we ship to
+//     is judged by adr-check, `/prd` by docs-check. The gate we ship to
 //     consumers is the oracle here — if it passes for them, it must pass for us.
 //
 // See eval/README.md. No dependency beyond Node + the `claude` CLI.

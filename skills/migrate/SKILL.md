@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: "Upgrade an existing claude-rules install to the current harness: gap table, then lock --root, imported just library, lefthook/CI callers. Use on /migrate, \"update claude-rules\", \"migrate the harness\", \"justfile imports\". Not /onboard (first wire), not /ci-setup (pipeline only)."
+description: "Upgrade an existing claude-rules install to the current harness: gap table, then lock --root, imported just library, lefthook/CI callers. Use on /migrate, \"migrate the harness\", \"justfile imports\". Not /update (routine upgrade of a current install), not /onboard (first wire), not /ci-setup (pipeline only)."
 ---
 
 Upgrade **this repo's claude-rules install**. There is already a lock. You
@@ -11,7 +11,7 @@ any severity jump, then compose the install. You do not change product code.
 pipeline after the justfile is true. If there is no `.claude-rules.lock`,
 stop and send them to `/onboard`.
 
-If this skill is missing on disk: `npx github:dohrm/claude-rules@<ref> add product`
+If this skill is missing on disk: `npx github:dohrm/claude-rules#<ref> add product`
 lands it. Do **not** `update` until step 3 has `--root` queued — a bare update
 replays unscoped globs.
 
@@ -39,7 +39,7 @@ proof: `.dev/kit/common/README.md` after the kit lands, else
 `ts-web` recipes are `ts-web-lint` / `ts-web-check`. Prefer a root-justfile
 **alias** (`ts-check: ts-web-check`) over a silent rename that 404s CI.
 
-Pin: `npx github:dohrm/claude-rules@<ref>`. Ask once for `<ref>` if the lock
+Pin: `npx github:dohrm/claude-rules#<ref>`. Ask once for `<ref>` if the lock
 says `main` and they did not name a tag. Same `--agent` set as the lock.
 
 ## Process
@@ -82,7 +82,7 @@ Map languages to `--root` from the tree. Typical:
 - `react` on **every** React tree (web **and** React Native) — not bundled into `portal-flat`
 - Never `portal-http` and `tauri` together
 - `agent testing cicd --level gates` (agent is not a gift; a legacy `update` injects `agent@gates` if `levels` is missing — still name it)
-- `product investigate loop-setup goal-setup` if they already had them
+- `product defect loop-setup` if they already had them (the `goal-setup` profile is gone: `/rfc`, in `product`, replaces it and the former plan and tasks skills; `investigate` is now `defect`, and the old name still resolves)
 - `ops` `k8s` `incident` only if this repo owns run / manifests
 
 A kit `*_dir` is one directory. Two Rust workspaces → keep the second as a
@@ -96,11 +96,11 @@ a severity jump that would turn CI red overnight.
 ### 3. Lock, then update, then init
 
 ```
-npx github:dohrm/claude-rules@<ref> add <alias-or-profiles> --root <dir> --level gates
+npx github:dohrm/claude-rules#<ref> add <alias-or-profiles> --root <dir> --level gates
 # repeat per module; add is additive
-npx github:dohrm/claude-rules@<ref> add agent testing cicd --level gates
-npx github:dohrm/claude-rules@<ref> update --ref <ref>
-npx github:dohrm/claude-rules@<ref> init
+npx github:dohrm/claude-rules#<ref> add agent testing cicd --level gates
+npx github:dohrm/claude-rules#<ref> update --ref <ref>
+npx github:dohrm/claude-rules#<ref> init
 ```
 
 `init` does not rewrite an existing justfile body. It reports missing
@@ -150,8 +150,8 @@ mode — do not bootstrap a second pipeline.
 
 ### 7. Done
 
-- `npx github:dohrm/claude-rules@<ref> doctor`
-- `npx github:dohrm/claude-rules@<ref> budget <one file per module>` —
+- `npx github:dohrm/claude-rules#<ref> doctor`
+- `npx github:dohrm/claude-rules#<ref> budget <one file per module>` —
   portal rules must **not** load on a mobile / non-portal TS file
 - `just check` — if red because stock gates are stricter, restore the
   override; do not mass-fix the codebase in this pass

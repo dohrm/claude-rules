@@ -6,9 +6,10 @@ name: CI
 # Doctrine:
 # rules/cicd/pipeline.md.
 #
-# COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — the syntax is
-# the same. ADAPT: `runs-on` (GitHub: ubuntu-latest; Gitea: your runner label,
-# often `linux`), and DELETE the jobs for technologies this repo does not have.
+# COPY to .github/workflows/ci.yaml or .gitea/workflows/ci.yaml — one file for
+# both; the differences are in rules/cicd/pipeline.md § Forge note. ADAPT:
+# `runs-on` (GitHub: ubuntu-latest; Gitea: your runner label, often `linux`),
+# `ci-ok`'s job lists, and DELETE the jobs for technologies this repo does not have.
 #
 # `just` on the runner: baking it into the runner image is the fastest and the
 # most reliable (no marketplace action to mirror). The install step below is the
@@ -16,7 +17,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'rfc/**']   # rfc/**: L4 phase PRs (rules/agent/autonomy.md § L4)
   push:
     branches: [main]
 
@@ -36,6 +37,8 @@ jobs:
     runs-on: ubuntu-latest       # ADAPT to your runner label
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -50,7 +53,9 @@ jobs:
           command -v cargo-deny >/dev/null 2>&1 || cargo install cargo-deny --locked
           command -v cargo-machete >/dev/null 2>&1 || cargo install cargo-machete --locked
       - name: just rust-check
-        run: just rust-check
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" rust-check
 
   ts:                            # DELETE if no TypeScript
     runs-on: ubuntu-latest       # ADAPT
@@ -75,6 +80,8 @@ jobs:
     runs-on: ubuntu-latest       # ADAPT
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - uses: actions/setup-go@v5
         with:
           go-version: stable     # ADAPT — pin a version for a release-bearing repo
@@ -89,12 +96,16 @@ jobs:
           command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
           command -v govulncheck  >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: just go-check
-        run: just go-check
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" go-check
 
   python:                        # DELETE if no Python
     runs-on: ubuntu-latest       # ADAPT
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the audit gate needs the merge base of HEAD and the PR base
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -111,7 +122,9 @@ jobs:
       # dev dependencies, so the sync above installs the exact pinned versions the
       # gate was written for — no `@latest` drifting between runs.
       - name: just python-check
-        run: just python-check
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch; empty on a push (kit/common ci-base)
+        run: just base="$(just ci-base)" python-check
 
   # Documents gate — OPT-IN, only if the repo keeps ADRs (docs/adr/) or a PRD/PLAN.
   # An agent proposes a decision, a human accepts it (rules/agent/decisions.md); a document
@@ -139,10 +152,19 @@ jobs:
     needs: [rust, ts, go, python]   # ADAPT to the jobs you kept
     runs-on: ubuntu-latest       # ADAPT
     steps:
+      # Each job BY NAME, never `join(needs.*.result)`: Gitea's runner expands that
+      # filter to nothing, and a loop over nothing passes. ADAPT both lists to `needs`
+      # — a job missing here is not checked; a line for a job not in `needs` fails.
       - name: Every gate must have actually succeeded
+        env:
+          RUST: ${{ needs.rust.result }}
+          TS: ${{ needs.ts.result }}
+          GO: ${{ needs.go.result }}
+          PYTHON: ${{ needs.python.result }}
+        shell: bash                # ${!job} is a bash indirection
         run: |
-          RESULTS="${{ join(needs.*.result, ' ') }}"
-          echo "gate results: $RESULTS"
-          for r in $RESULTS; do
-            [ "$r" = "success" ] || { echo "✗ a required gate did not succeed ($r)"; exit 1; }
+          for job in RUST TS GO PYTHON; do
+            r="${!job}"
+            echo "$job: ${r:-<no result>}"
+            [ "$r" = "success" ] || { echo "✗ $job did not succeed (${r:-no result})"; exit 1; }
           done

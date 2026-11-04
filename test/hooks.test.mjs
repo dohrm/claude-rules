@@ -203,6 +203,8 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     '.dev/kit/common/review-guard.mjs',
     '.dev/kit/common/review-prompt.md',
     '.dev/kit/common/worktree-status.mjs',
+    '.dev/kit/common/landed.mjs',
+    '.dev/kit/common/work-stale.mjs',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]

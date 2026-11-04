@@ -86,7 +86,7 @@ question. It is an **open question**, and it is the reason the next section exis
 
 Write `.work/<slug>/intent.md` from `<intent-template>` — the brief `/prd` reads.
 
-It is **working memory, the same nature as `PLAN.md` and the worklist**: committed
+It is **working memory, the same nature as an RFC**: committed
 so a PR shows what was being framed, rewritable any turn, and deleted with
 `.work/<slug>/` once the capability ships (`product/documents.md`). Nothing durable
 reads it afterwards: what was promised ends up in the PRD, what was decided in an

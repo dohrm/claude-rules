@@ -26,6 +26,53 @@ test('every skill description carries its own /trigger', () => {
   }
 })
 
+// A project skill named like a Claude Code command replaces it in a terminal session,
+// here and in every repo that installs the skill: `/bug` stopped reporting bugs once.
+// Codex's own commands are listed too. Copied by hand from the command references
+// (code.claude.com/docs/en/commands, learn.chatgpt.com/docs/developer-commands) on
+// 2026-10-15; add a name when either one grows.
+const RESERVED = new Set([
+  // Claude Code: built-in commands, bundled skills and their aliases.
+  'add-dir', 'advisor', 'agents', 'android', 'app', 'artifact-capabilities', 'artifact-diagramming',
+  'artifacts', 'auto-mode-setup', 'autocompact', 'autofix-pr', 'background', 'batch', 'bg', 'branch',
+  'btw', 'bug', 'cd', 'checkpoint', 'checkup', 'chrome', 'claude-api', 'claude-in-chrome', 'clear',
+  'code-review', 'color', 'compact', 'config', 'context', 'continue', 'copy', 'cost', 'dataviz', 'debug',
+  'deep-research', 'design', 'design-login', 'design-sync', 'desktop', 'diff', 'doctor', 'effort', 'exit',
+  'export', 'fast', 'feedback', 'fewer-permission-prompts', 'focus', 'fork', 'goal', 'heapdump', 'help',
+  'hooks', 'ide', 'import', 'init', 'insights', 'install-github-app', 'install-slack-app', 'ios',
+  'keybindings', 'list-agents', 'login', 'logout', 'loop', 'mcp', 'memory', 'mobile', 'model', 'new',
+  'output-style', 'passes', 'permissions', 'plan', 'plugin', 'plugin-authoring', 'powerup', 'pr-comments',
+  'privacy-settings', 'proactive', 'quit', 'radio', 'rate-limit-options', 'rc', 'recap', 'release-notes',
+  'reload-plugins', 'reload-skills', 'remote-control', 'remote-env', 'rename', 'reset', 'resume', 'review',
+  'rewind', 'routines', 'run', 'run-skill-generator', 'sandbox', 'schedule', 'scroll-speed',
+  'security-review', 'settings', 'setup-bedrock', 'setup-vertex', 'share', 'simplify', 'skill-doctor',
+  'skills', 'slides', 'stats', 'status', 'statusline', 'stickers', 'stop', 'subtask', 'tasks',
+  'team-onboarding', 'teleport', 'terminal-setup', 'theme', 'tui', 'ultraplan', 'ultrareview', 'undo',
+  'update-config', 'upgrade', 'usage', 'usage-credits', 'verify', 'vim', 'voice', 'web-setup',
+  'workflow-authoring', 'workflows',
+  // Codex CLI.
+  'apps', 'approve', 'archive', 'clean', 'cwd', 'daemon', 'debug-config', 'delete', 'experimental',
+  'keymap', 'memories', 'mention', 'pet', 'pets', 'plugins', 'ps', 'pwd', 'raw', 'setup-default-sandbox',
+  'side', 'subagents', 'title', 'warnings', 'worktree',
+])
+
+test('no skill shadows an agent command', () => {
+  for (const name of SKILLS) {
+    assert.ok(!RESERVED.has(name),
+      `skills/${name}: "/${name}" is a Claude Code or Codex command — a project skill of that name replaces it`)
+  }
+})
+
+// npm reads `github:owner/repo@ref` as part of the repo name: git clone fails and
+// npx exits 128 with no message. The ref goes after `#`.
+test('npx pins a ref with #, never @', () => {
+  const files = [...proseFiles(), ...['README.md', 'docs/reference.md'].map(f => join(REPO, f))]
+  for (const f of files) {
+    const hit = read(f).match(/github:[\w-]+\/[\w-]+@/)
+    assert.ok(!hit, `${rel(f)}: "${hit?.[0]}" — npx needs github:owner/repo#<ref>`)
+  }
+})
+
 // A rule reference is written `dir/file.md` (relative to rules/) or `rules/dir/file.md`.
 test('rule references resolve', () => {
   for (const file of proseFiles()) {
@@ -120,13 +167,12 @@ test('document-producing skills name a path under docs/', () => {
 })
 
 // The mirror of the map above. These skills produce scaffolding, not documents:
-// it lives in .work/, committed but ephemeral, deleted once the capability it
-// belongs to ships. A bare `PLAN.md` (no path prefix) would read as the durable,
-// project-wide document this repo used to have — /plan now writes one per
-// capability, under .work/<slug>/, and a bare name for it invites that confusion
-// back.
+// it lives in .work/, committed but ephemeral, deleted once the work it belongs to
+// ships. A bare `PLAN.md` (no path prefix) would read as the durable, project-wide
+// document this repo used to have — /rfc writes one RFC per feature under
+// .work/<slug>/, and a bare name invites that confusion back.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['tasks', 'loop-setup', 'goal-setup', 'onboard', 'migrate', 'plan']) {
+  for (const name of ['rfc', 'loop-setup', 'onboard', 'migrate']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,

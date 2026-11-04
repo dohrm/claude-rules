@@ -27,8 +27,8 @@ code a tired human can understand six months later.
 ## Before coding
 
 Identify the requested outcome, the module that owns it, affected boundaries and
-how to verify the change. Use the plan when one exists. A small correction or an
-authorized adjustment does not require a new plan or worklist; update the affected
+how to verify the change. Use the RFC when one exists. A small correction or an
+authorized adjustment does not require a new RFC; update the affected
 documents as part of the change. Ask only when an unresolved choice affects scope
 or correctness. For a conflict with an accepted ADR, use `agent/decisions.md`.
 
@@ -58,6 +58,8 @@ abstractions and vague comments removed; docs still matching behavior.
 - Catch-all errors (e.g. `Other(String)`) in domain code.
 - Tests that only assert construction, or mocks returning mocks.
 - Comments explaining obvious code while omitting the real invariant.
+- A bare ADR number as a comment's reason. A comment states the invariant it
+  protects; an ADR number is a pointer, never the reason.
 - Rewriting, reformatting, or adding a comment the code change did not make
   false. **A comment-only hunk is a failed edit.** Update a comment only when
   the change made it untrue.

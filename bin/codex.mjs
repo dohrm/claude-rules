@@ -1,32 +1,16 @@
 // Codex output and ownership. Rule selection is requested reading, not native loading.
-import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs'
-import { resolve, relative, dirname, join, isAbsolute, sep, posix } from 'node:path'
-import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { relative, dirname, join, isAbsolute, sep, posix } from 'node:path'
+import { hash, safePath } from './ownership.mjs'
 
 export const START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
 export const END = '<!-- claude-rules:end -->'
-export const hash = content => createHash('sha256').update(content).digest('hex')
 const slash = path => path.split(sep).join('/')
 
 export function modulePath(path) {
   if (typeof path !== 'string' || !path || isAbsolute(path) || path.includes('\\') || /^[A-Za-z]:/.test(path) || /[\x00-\x1f`|<>]/.test(path) || path.split('/').includes('..'))
     throw new Error(`Unsafe module path: ${path}`)
   return posix.normalize(path).replace(/\/$/, '') || '.'
-}
-
-// Check every ancestor, including dangling symlinks, before reading or writing.
-export function safePath(path) {
-  const root = process.cwd(), abs = resolve(path), rel = relative(root, abs)
-  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error(`Path escapes repository: ${path}`)
-  let current = root
-  for (const part of rel.split(sep).filter(Boolean)) {
-    current = join(current, part)
-    let st
-    try { st = lstatSync(current) } catch (e) { if (e.code === 'ENOENT') continue; throw e }
-    if (st.isSymbolicLink()) throw new Error(`Refusing symlink destination: ${path}`)
-    if (current !== abs && !st.isDirectory()) throw new Error(`Not a directory: ${current}`)
-  }
-  return slash(rel) || '.'
 }
 
 function parts(text, path) {
@@ -71,40 +55,33 @@ export function instructionBlocks(rules, modules) {
   return blocks
 }
 
-function checkInventory(previous = {}) {
+// `onDisk: false` checks the paths' shape only, as the lock is read: what stands on
+// disk there is the ownership check's to list (bin/ownership.mjs), --force included.
+export function checkCodexInventory(previous = {}, onDisk = true) {
   if (previous.version !== undefined && previous.version !== 1) throw new Error('Unsupported Codex ownership version')
+  const canonical = path => onDisk ? safePath(path) : posix.normalize(path)
   for (const path of Object.keys(previous.files || {})) {
     if (!/^\.agents\/(rules|skills)\/.+/.test(path)) throw new Error(`Invalid Codex-owned path: ${path}`)
-    if (safePath(path) !== path) throw new Error(`Noncanonical owned path: ${path}`)
+    if (canonical(path) !== path || path.split('/').includes('..')) throw new Error(`Noncanonical owned path: ${path}`)
   }
   for (const rule of previous.rules || []) {
     if (previous.files?.[rule.path]?.kind !== 'rule') throw new Error(`Unowned rule reference: ${rule.path}`)
   }
   for (const path of previous.blocks || []) {
     if (path !== 'AGENTS.md' && !path.endsWith('/AGENTS.md')) throw new Error(`Invalid instruction path: ${path}`)
-    if (safePath(path) !== path) throw new Error(`Noncanonical owned path: ${path}`)
+    if (canonical(path) !== path || path.split('/').includes('..')) throw new Error(`Noncanonical owned path: ${path}`)
   }
 }
 
 export function prepareCodex(files, rules, modules, previous = {}) {
-  checkInventory(previous)
+  checkCodexInventory(previous, false)   // files: the ownership check stands on them; blocks: safePath below
   const blocks = instructionBlocks(rules, modules)
-  const writes = new Map(), deletes = [], inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
-  for (const [path, asset] of Object.entries(files)) {
-    safePath(path)
-    if (existsSync(path)) {
-      if (!lstatSync(path).isFile()) throw new Error(`Conflicting destination: ${path}`)
-      const current = hash(readFileSync(path)), old = previous.files?.[path]?.hash
-      if (current !== hash(asset.content) && current !== old) throw new Error(`Conflicting local content: ${path}; reconcile before updating`)
-    }
-    writes.set(path, asset.content)
+  const inventory = { version: 1, files: {}, rules, blocks: Object.keys(blocks) }
+  // The asset files themselves are written, checked and pruned by the shared ownership
+  // model (bin/ownership.mjs); this plan holds only the instruction blocks.
+  const writes = new Map(), deletes = []
+  for (const [path, asset] of Object.entries(files))
     inventory.files[path] = { hash: hash(asset.content), profiles: asset.profiles, kind: asset.kind }
-  }
-  for (const [path, old] of Object.entries(previous.files || {})) {
-    if (files[path] || !existsSync(path)) continue
-    if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== old.hash) throw new Error(`Modified owned file would be removed: ${path}`)
-    deletes.push(path)
-  }
   for (const path of new Set([...Object.keys(blocks), ...(previous.blocks || [])])) {
     safePath(path)
     if (existsSync(path) && !lstatSync(path).isFile()) throw new Error(`Conflicting instruction file: ${path}`)
@@ -122,18 +99,13 @@ export function prepareCodex(files, rules, modules, previous = {}) {
 
 export function applyCodex(plan) {
   for (const [path, content] of plan.writes) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content) }
-  for (const path of plan.deletes) {
-    rmSync(path)
-    // Remove empty asset directories only; never remove a module directory.
-    let dir = dirname(path)
-    while (dir.startsWith('.agents/') && existsSync(dir) && !readdirSync(dir).length) { rmSync(dir, { recursive: true }); dir = dirname(dir) }
-  }
+  for (const path of plan.deletes) rmSync(path)
 }
 
 export function auditCodex(lock, bad, warn) {
   if (!lock.codex) { bad.push('Codex ownership inventory missing — explicitly update to adopt the installation'); return }
   try {
-    checkInventory(lock.codex)
+    checkCodexInventory(lock.codex)
     for (const [path, asset] of Object.entries(lock.codex.files)) {
       if (!existsSync(path)) bad.push(`${path} — Codex asset missing`)
       else if (!lstatSync(path).isFile() || hash(readFileSync(path)) !== asset.hash) bad.push(`${path} — Codex asset differs from its installed revision`)
@@ -157,7 +129,7 @@ export function auditCodex(lock, bad, warn) {
 
 export function codexBudget(lock, target, globToRe) {
   if (!lock?.codex) throw new Error('No Codex ownership inventory — install with --agent codex first')
-  checkInventory(lock.codex)
+  checkCodexInventory(lock.codex)
   const path = target ? safePath(target) : null
   const dir = path ? dirname(path) : '.'
   const chain = []

@@ -15,14 +15,27 @@ runs `just rust-check`.
 
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `just rust-lint` | 1 | pre-commit | `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` · `cargo clippy --workspace --lib --bins -- -D clippy::unwrap_used -D clippy::expect_used` |
-| `just rust-check` | 2 | pre-push, `just check` | rust-lint · `cargo test --workspace` · `cargo deny check licenses advisories sources` · `cargo machete --skip-target-dir` |
+| `just rust-lint` | 1 | pre-commit | `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` + `dbg_macro` `todo` `unimplemented` `undocumented_unsafe_blocks` · `cargo clippy --workspace --lib --bins` + `unwrap_used` `expect_used` `panic` `string_slice` |
+| `just rust-check` | 2 | pre-push, `just check` | rust-lint · `cargo test --workspace` · `cargo deny check licenses sources` · `cargo machete --skip-target-dir` · `rust-audit` if `Cargo.lock` changed |
+| `just rust-audit` | 2 | `rust-check` when `Cargo.lock` changed; a schedule | `cargo deny check advisories` |
 | `just rust-mutate` | 3 | coherent block, never a hook | `cargo mutants --in-diff -j {{mutate_jobs}} {{mutate_args}}` against `{{base}}...HEAD` |
 
 `cargo build` is not a separate line: clippy and `cargo test` already
 compile. `unwrap` / `expect` are denied on lib and bins only — tests stay
 free. That is why the second clippy pass is `--lib --bins`, not
 `--all-targets`.
+
+`rust-check` runs `rust-audit` only when `Cargo.lock` changed since its
+merge base with `base`, or when that cannot be known (`base` empty or unresolvable,
+no merge base in a shallow clone). It prints which before running or skipping it
+(`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`, `audit: no merge base with …`). A branch merely behind a
+lock bump on `base` changed nothing, so it skips the audit.
+An advisory database moves with the date, not with the diff, so an audit inside
+every check turns unrelated PRs red. To ignore an advisory or add a flag, override
+the `rust_audit` variable, not the recipe: both recipes run it. A `Cargo.lock` you do
+not commit never reads as changed, so the gate never audits it.
+`licenses` and `sources` stay in `rust-check`: they are a function of the lock.
 
 ## Requirements
 
@@ -56,7 +69,7 @@ apt install mold               # or: brew install mold
 | `cargo-profile.snippet.toml` | merge into `<rust_dir>/Cargo.toml` | `cargo mutants --profile mutants` | nothing; opt in via `mutate_args` |
 | `cargo-config.snippet.toml` | merge into `<rust_dir>/.cargo/config.toml` | every `cargo` invocation | pick your linker target; sccache as-is |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just rust-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `timeout-minutes`, report path |
 
 `rust-fmt.sh` is a **special case**: only when a generated member crate
 must be skipped (`cargo fmt --all` would fight the generator). Swap the
@@ -73,7 +86,7 @@ changes which levers are worth pulling:
 | Baseline build | 972 s | cargo-mutants copies the tree to a scratch dir and builds it **cold** — your warm `target/` buys nothing |
 | Baseline test | 363 s | paid again **in full by every surviving mutant** |
 | Per mutant | ~60 s | an incremental **rebuild**, not test execution |
-| A 32-mutant sprint diff | ~50 min | of which 22 min is the baseline, before the first mutant runs |
+| A 32-mutant RFC diff | ~50 min | of which 22 min is the baseline, before the first mutant runs |
 
 Two consequences worth stating out loud:
 

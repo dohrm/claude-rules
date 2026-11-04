@@ -16,6 +16,9 @@ never for a **decision**.
   is already written and green, not because the human discussed it at length in the
   conversation. Discussing is not accepting, and nothing in the repository
   distinguishes the two afterwards.
+- **A decision no longer in force leaves the disk** — `Rejected`, `Deprecated`, or
+  superseded by an `Accepted` record: deleted at the human's merge, git is the
+  archive (`agent/decision-records.md` § Statuses).
 - **Say it in the hand-back**: what is proposed, what the alternatives were, and
   what changes if the answer is no. An ADR that lands silently has skipped the
   boundary even if its status line is honest.
@@ -49,16 +52,44 @@ record's decision intact until the human arbitrates.
 
 ## Which choices need an ADR
 
-Use an ADR for a durable project constraint: technology/architecture selection,
-security/authentication policy, a mandated structural library, or a change to an
-Accepted decision. Existing profiles already settle their conventions; applying
-one does not require an ADR per implementation detail. Profile selection can be
-recorded once with the stack decision.
+A project ADR records an arbitration that passes **all three** tests: it is hard to
+reverse, it constrains more than one feature, and it refused real alternatives at a
+real cost. Changing an Accepted decision is the fourth case. Everything else has
+another home:
 
-Local, reversible choices within that frame belong to the implementer: a helper,
-a component, an interaction variant or an ordinary dependency consistent with the
-stack. Explain relevant dependency trade-offs in the change summary and run the
-supply-chain checks. Novelty alone is not architectural significance.
+| Choice | Home |
+|---|---|
+| Enterprise policy — security, secrets, identity, data protection, observability, deployment | the shared decision repository the project references, if any; propose changes there |
+| Stack conventions — language, libraries, style, profile selection | the installed rules and the lock file; recorded once with the stack decision |
+| Feature-local choices — a field, a format, a validation rule, an event, a layout | the feature's work document under `.work/` and its PR |
+| Product and design rules | the PRD, `DESIGN.md`, `EXPERIENCE.md`, domain documents |
+
+A deviation from a rule is an **in-place exception with its reason**, next to the
+code it excuses, like a `nolint` with a justification. It is not an ADR. When the
+same deviation recurs, the rule is wrong: propose the change to the rule.
+
+Local, reversible choices belong to the implementer. Explain relevant dependency
+trade-offs in the change summary and run the supply-chain checks. Novelty alone is
+not architectural significance, and neither is the wish to stop an agent from
+changing something later.
+
+## Shared decisions
+
+An organization's enterprise policy lives in its **shared decision repository**,
+declared once per project in the header of `docs/ARCHITECTURE.md`:
+`> Shared decisions: <repository URL>` (or `none`). Ask for it when a project starts
+(`/architect`, `/onboard`) and whenever it is missing; record the answer.
+
+- Read the shared records that bear on the change — through the forge CLI (`gh`,
+  `tea`) or a local checkout, read-only. An accepted shared record binds like an
+  Accepted project ADR; a project change that contradicts it is an escalation.
+- When the project shows something with impact on the organization — a practice
+  worth generalizing, a shared decision that hurts here, a policy gap, a repeated
+  project ADR that is really enterprise policy — **propose a PR on the shared
+  repository**: a `Proposed` record, with this project's evidence. Prepare it, then
+  ask before opening it: a PR is outward-facing. Never merge it, never set a status.
+- Write it for the shared repository's audience: no detail the project would not
+  share with every other project of the organization.
 
 ## The ceremony stops at the ADR
 

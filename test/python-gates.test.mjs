@@ -10,7 +10,7 @@ import { cpSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
-import { REPO, withTmpRepo } from './helpers.mjs'
+import { REPO, withTmpRepo, commitBase, auditGateCases } from './helpers.mjs'
 
 const FIXTURE = join(REPO, 'test', 'fixtures', 'python-gate')
 const KIT_PY = join(REPO, 'kit', 'python')
@@ -67,8 +67,8 @@ const runEnv = {
   UV_LINK_MODE: 'copy',
 }
 
-const runJust = (dir, recipe) => {
-  const r = spawnSync('just', [recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
+const runJust = (dir, recipe, overrides = []) => {
+  const r = spawnSync('just', [...overrides, recipe], { cwd: dir, encoding: 'utf8', env: runEnv })
   if (r.error) throw r.error
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
@@ -101,15 +101,31 @@ describe('python quality gates', { concurrency: 1 }, () => {
     })
   })
 
+  // With a base and an untouched lock, the audit is skipped: this case stays green
+  // whatever advisories are published against the fixture's pinned dependencies.
   test('just python-check passes on the witness package', {
     skip,
     timeout: TIMEOUT,
   }, () => {
     withTmpRepo((dir) => {
       assemble(dir)
-      const r = runJust(dir, 'python-check')
+      commitBase(dir)
+      const r = runJust(dir, 'python-check', ['base=HEAD'])
       assert.equal(r.status, 0, `python-check must be green:\n${r.out}`)
+      assert.match(r.out, /deptry/)
+      assert.ok(r.out.includes('audit: skipped — api/uv.lock unchanged since its merge base with HEAD'), r.out)
     })
+  })
+
+  auditGateCases({
+    tech: 'python',
+    lock: 'api/uv.lock',
+    tool: 'pip-audit',
+    assemble,
+    runJust,
+    changeLock: (dir) => commitBase(dir, 'api/uv.lock'),
+    skip,
+    timeout: TIMEOUT,
   })
 
   test('just python-lint fails when ruff format would rewrite a file', {
@@ -155,6 +171,26 @@ describe('python quality gates', { concurrency: 1 }, () => {
       assert.match(r.out, /S110|TRY|pass/)
     })
   })
+
+  // One source per ruff family the snippet opts into beyond the floor.
+  const FAMILIES = [
+    ['ASYNC', 'import time\n\n\nasync def add_one(n: int) -> int:\n    time.sleep(1)\n    return n + 1\n'],
+    ['BLE', 'import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef add_one(n: int) -> int:\n    try:\n        return n + 1\n    except Exception as err:\n        logger.warning("failed: %s", err)\n        return n\n'],
+    ['DTZ', 'from datetime import datetime\n\n\ndef add_one(n: int) -> int:\n    return n + 1 + datetime.now().microsecond * 0\n'],
+    ['T20', 'def add_one(n: int) -> int:\n    print(n)\n    return n + 1\n'],
+    ['PERF', 'def add_one(n: int) -> list[int]:\n    out = []\n    for x in range(n):\n        out.append(x + 1)\n    return out\n'],
+  ]
+  for (const [family, body] of FAMILIES) {
+    test(`just python-lint fails on ${family}`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir)
+        write(dir, SRC, body)
+        const r = runJust(dir, 'python-lint')
+        assert.notEqual(r.status, 0, `${family} must fail python-lint:\n${r.out}`)
+        assert.match(r.out, new RegExp(`\\b${family}\\d+`))
+      })
+    })
+  }
 
   test('just python-check fails on a mypy error that lint does not see', {
     skip,

@@ -43,7 +43,7 @@ const PROTECTED = [
   /(^|\/)\.claude\/settings(\.local)?\.json$/,
   /(^|\/)\.cursor\/hooks\.json$/,
   /(^|\/)(bash|edit)-guard\.mjs$/,
-  /(^|\/)(adr-check|docs-check|review-guard|worktree-status)\.mjs$/,
+  /(^|\/)(adr-check|docs-check|review-guard|worktree-status|landed|work-stale)\.mjs$/,
   /(^|\/)review-prompt\.md$/,
   /(^|\/)\.coverage-baseline$/,
   /(^|\/)mutants\.toml$/,

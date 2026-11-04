@@ -47,6 +47,11 @@ select = [
     "S",        # bandit: security anti-patterns (the `gosec` counterpart)
     "TRY",      # tryceratops: the error-handling.md rules, mechanically
     "LOG", "G", # logging: no f-string in the message, no bare exception logging
+    "ASYNC",    # no blocking call (sleep, sync HTTP, open) inside `async def`
+    "BLE",      # no blind `except Exception` that does not re-raise or log it
+    "DTZ",      # no naive datetime — always a timezone
+    "T20",      # no print() — application output goes through logging
+    "PERF",     # the loop shapes that cost without saying so
     "RUF",      # ruff's own
 ]
 ignore = [
@@ -56,7 +61,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # `assert` is the point of a test, and a hardcoded password in a fixture is not
 # a finding. Narrow the exemption to the test tree, never repo-wide.
-"tests/**" = ["S101", "S105", "S106", "ARG"]
+"tests/**" = ["S101", "S105", "S106", "ARG", "T20"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "parents"    # `.sibling` fine, `..other_package` not

@@ -2,7 +2,7 @@
 
 Agents and skills are the **perishable** layer: a new model can silently change how
 `code-reviewer` behaves — a review that used to catch a bug starts missing it — or
-how `/runbook` writes, or whether `/plan` still splits a document into units. This
+how `/runbook` writes, or whether `/prd` still splits a document into units. This
 harness catches that regression *on a model bump* instead of in the field.
 
 It also catches something a static test cannot: an instruction that is **ambiguous**.
@@ -129,8 +129,8 @@ these cases are run against a model. Adding them is not a claim that they passed
 eval/cases/<name>/
   expect.json     # the target + the assertions
   input.rs        # a single fixture, left UNCOMMITTED — the working change (agent cases)
-  files/          # a whole fixture repo, committed as the baseline (skill cases):
-                  #   a justfile, docs/, manifests… whatever the skill must read
+  files/          # a fixture repo, committed as the baseline (skill cases, or files an input.* needs):
+                  #   a justfile, docs/, manifests, sibling sources… whatever the target must read
 ```
 
 The workspace is a real git repo: a baseline commit, then `input.*` on top as the
@@ -171,7 +171,7 @@ skill, the report is only what it *says* it did — the files are the truth
 
 **Let the gates be the oracle.** `gates` runs a `kit/common/*` script against the
 workspace and requires exit 0. `/architect` is judged by `adr-check --strict`,
-`/plan` and `/prd` by `docs-check --strict` — the same gate the consuming repo
+`/prd` by `docs-check --strict` — the same gate the consuming repo
 runs. It keeps the assertions deterministic while the prose varies, and it means a
 doctrine change lands in one place instead of two.
 
@@ -196,7 +196,6 @@ Each case guards **one claim that would be expensive to lose**.
 | `simplifier-nesting` | `code-simplifier` | needless clone, `else`-after-`return` and a nested `if` are flattened, **and** the signature and tests survive |
 | `runbook-commands` | `/runbook` | the commands come from the fixture's justfile and manifests, **not** from plausible invention — its central promise |
 | `architect-adr-budget` | `/architect` | one decision per ADR, under budget, `Proposed` — judged by `adr-check --strict` |
-| `plan-units` | `/plan` | a 9-capability PRD becomes units + a coherent index — judged by `docs-check --strict` |
 | `postmortem-blameless` | `/postmortem` | detect/mitigate/resolve separated, no name anywhere, action items owned and dated |
 
 Keep it at that unless a new case guards a behavior a real change depended on. The

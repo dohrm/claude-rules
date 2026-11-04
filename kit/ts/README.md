@@ -24,7 +24,7 @@ runs `just ts-check`.
 
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
-| `just ts-lint` | 1 | pre-commit | `eslint .` (`recommended` + `no-explicit-any` + `no-non-null-assertion`) |
+| `just ts-lint` | 1 | pre-commit | `eslint .` (`recommended` + `no-explicit-any` + `no-non-null-assertion`; type-aware: `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`, `eqeqeq`) |
 | `just ts-check` | 2 | pre-push, `just check` | ts-lint · `tsc --noEmit` · `vitest run` |
 | `just ts-mutate` | 3 | coherent block, never a hook | `stryker run --incremental` |
 
@@ -49,7 +49,7 @@ devDependency — see below, not a separate system install. `ts-web` /
 | `eslint.base.js` | `<ts_dir>/eslint.config.js` | eslint (ts-lint) | `globalIgnores` |
 | `tsconfig.base.json` | `<ts_dir>/tsconfig.json` | tsc (ts-check) | `include`, path aliases |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just ts-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `timeout-minutes`, `working-directory` |
 
 ```bash
 npm i -D eslint typescript typescript-eslint globals vitest

@@ -107,8 +107,10 @@ Introduce it as a ratchet instead:
 
 1. **Measure** — run it, record the per-package baseline in the repo. A healthy
    codebase often sits around 70%; a naive 75% bar would block every PR on day one.
-2. **Observe, non-blocking** — `continue-on-error`, for long enough to separate
-   real gaps from equivalent mutants and flakes.
+2. **Observe, non-blocking** — for long enough to separate real gaps from
+   equivalent mutants and flakes. Non-blocking on the tool's **findings** only: no
+   threshold yet, or its findings' exit codes tolerated. Never `continue-on-error`
+   on the job — it also greens a crash or a cancelled run, which measured nothing.
 3. **Ratchet** — flip to blocking at *the measured baseline*, not at a round
    number. The rule is "no lower than where we are".
 4. **Only ever up.** Raising the floor is a deliberate, committed change to the

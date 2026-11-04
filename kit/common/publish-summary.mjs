@@ -2,11 +2,11 @@
 
 // publish-summary — the per-loop counterpart to `worktree-status.mjs`: that one is
 // read-only across every worktree at a glance, this one is one worktree, once, at the
-// moment a `/loop-setup` or `/goal-setup` run stops.
+// moment a `/loop-setup` or `/rfc` run stops.
 //
 // Mechanical, not LLM-authored: everything below is either parsed out of the state
-// file the run was already maintaining (`.work/<slug>/loop.md`, `goal.md`, or the newest
-// `.work/<slug>/tasks/NN-*.md`) or computed from git — branch, commits ahead of
+// file the run was already maintaining (`.work/<slug>/loop.md`, else `rfc.md`) or
+// computed from git — branch, commits ahead of
 // `base`, a one-line diffstat. `status` is the one thing only the loop knows, because
 // it is why the loop stopped, not something derivable from the file.
 //
@@ -20,7 +20,7 @@
 //        (directly: node .dev/kit/common/publish-summary.mjs <slug> <status> [base]; default base origin/main)
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const STATUSES = ['COMPLETED', 'BLOCKED', 'BUDGET_EXHAUSTED']
@@ -66,40 +66,33 @@ function nonPlaceholderLines(body) {
   return body.split('\n').map((l) => l.trim()).filter((l) => l && !isPlaceholder(l))
 }
 
-/** `.work/<slug>/loop.md`, then `goal.md`, else the newest task worklist — the
- *  state files setup skills use and `worktree-status.mjs` reports. */
+/** `.work/<slug>/loop.md`, else `rfc.md` — the state files `/loop-setup` and `/rfc`
+ *  write and `worktree-status.mjs` reports. */
 function findStateFile(slug) {
   const dir = join('.work', slug)
   if (!existsSync(dir)) return { dir, file: null }
-  const loopFile = join(dir, 'loop.md')
-  if (existsSync(loopFile)) return { dir, file: loopFile }
-  const goalFile = join(dir, 'goal.md')
-  if (existsSync(goalFile)) return { dir, file: goalFile }
-  let entries = []
-  try {
-    entries = readdirSync(join(dir, 'tasks')).filter((n) => n.endsWith('.md')).sort()
-  } catch {
-    entries = []
+  for (const name of ['loop.md', 'rfc.md']) {
+    const file = join(dir, name)
+    if (existsSync(file)) return { dir, file }
   }
-  if (!entries.length) return { dir, file: null }
-  return { dir, file: join(dir, 'tasks', entries[entries.length - 1]) }
+  return { dir, file: null }
 }
 
 const { dir, file } = findStateFile(slug)
 if (!existsSync(dir)) bail(`no .work/${slug}/ directory`)
-if (!file) bail(`no loop.md, goal.md or tasks/*.md under .work/${slug}/`)
+if (!file) bail(`no loop.md or rfc.md under .work/${slug}/`)
 
 const text = readFileSync(file, 'utf8')
 
 const objectiveMatch = text.match(/^-\s*\*\*Objective \(bounded\)\*\*:\s*(.+)$/m)
-const h1Match = text.match(/^#\s+(.+)$/m)
+const h1Match = text.match(/^#\s+(?:RFC\s*[—-]\s*)?(.+)$/m)
 const objective = (objectiveMatch?.[1] ?? h1Match?.[1] ?? '—').trim()
 
 const guardrails = section(text, 'Guardrails')
 const iterationCap = guardrails?.match(/\*\*Iteration cap\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
 const tokenBudget = guardrails?.match(/\*\*Token budget\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
 
-const checklistBody = section(text, 'Remaining work') ?? section(text, 'Checkpoints') ?? section(text, 'Tasks')
+const checklistBody = section(text, 'Remaining work') ?? section(text, 'Steps')
 const items = (checklistBody ?? '')
   .split('\n')
   .map((l) => l.match(/^-\s*\[([ xX])\]\s*(.+)$/))

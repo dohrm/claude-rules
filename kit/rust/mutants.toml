@@ -17,8 +17,8 @@
 # already keeps it out of code review — this is the same doctrine reaching the
 # other gate, which it previously did not.
 #
-# This protects the VARIANCE, not the average. A typical sprint diff is a few dozen
-# mutants and would not notice; the sprint that regenerates an OpenAPI or protobuf
+# This protects the VARIANCE, not the average. A typical RFC diff is a few dozen
+# mutants and would not notice; the RFC that regenerates an OpenAPI or protobuf
 # client is thousands, and that is the run that makes someone turn the gate off.
 # Measured on one real workspace: 8128 mutants for a whole-tree sweep, generated
 # sources at the top of the per-file count.
@@ -82,3 +82,7 @@ exclude_re = [
 # `mutate_args`) gives per-test timeouts instead, which cuts the tail rather than
 # capping it.
 minimum_test_timeout = 30
+# Above that floor, a mutant's test run is cut at this multiple of the baseline test
+# time (cargo-mutants' default is 5). The CI job has a `timeout-minutes` of its own;
+# this keeps one mutant that spins forever from spending it alone.
+timeout_multiplier = 3.0

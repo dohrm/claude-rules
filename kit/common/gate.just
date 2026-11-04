@@ -41,7 +41,7 @@ review_out := ".work/review.tmp"
 # installer emits `.claude/` AND `.agents/` byte-identical — so two thirds of the
 # reviewer's context went to files nobody reviews, and it reviewed THIS library instead
 # of the feature. `.work/` is excluded for a second reason: it holds `review_in`, so a
-# repo that commits its plans feeds the reviewer the previous run's prompt.
+# repo that commits its RFCs feeds the reviewer the previous run's prompt.
 # Repo-specific generated paths (a vendored dir, a codegen output) belong in an override
 # in the root justfile, appended to this list — not silently dropped from it.
 #
@@ -51,7 +51,21 @@ review_out := ".work/review.tmp"
 # be glob-expanded by the shell before git ever sees it. `quote()` cannot do the job
 # here: it would wrap the whole list into ONE argument. Keep the convention when you
 # override — one quoted word per pathspec, space-separated.
-review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json'"
+#
+# Build outputs, vendored dependencies and generated code join the list from OCR's own
+# defaults (alibaba/open-code-review 1.12.13, default_exclude_patterns.json) — without
+# its tests, which OCR skips for precision and this reviewer reads on purpose.
+review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.json' ':(exclude).claude' ':(exclude).agents' ':(exclude).cursor' ':(exclude).dev/kit' ':(exclude).work' ':(exclude)*.gen.*' ':(exclude)*openapi.json' ':(exclude,glob)**/node_modules/**' ':(exclude,glob)**/vendor/**' ':(exclude,glob)**/dist/**' ':(exclude,glob)**/target/**' ':(exclude,glob)**/.next/**' ':(exclude,glob)**/__pycache__/**' ':(exclude,glob)**/*.min.js' ':(exclude,glob)**/*.min.css' ':(exclude,glob)**/*.pb.go' ':(exclude,glob)**/*.generated.*' ':(exclude,glob)**/__snapshots__/**' ':(exclude,glob)**/*.snap'"
+
+# Credential files never reach the reviewer's model, whatever `review_exclude` says — a
+# separate variable, so a repo that overrides the list above cannot drop it by accident.
+# The list is OCR's (default_secret_patterns.json plus its `.env` rule), case-insensitive.
+# One difference, by necessity: OCR keeps `.env.example` / `.sample` / `.template`, but a
+# git pathspec cannot re-include what an exclude matched, so every `.env.*` is withheld —
+# a template is cheap to lose, a `.env.production` is not. The name stays in the
+# inventory: the contract tells the reviewer what a withheld credential file means.
+review_secrets := "':(exclude,glob,icase)**/.env' ':(exclude,glob,icase)**/.env.*' ':(exclude,glob,icase)**/.ssh/**' ':(exclude,glob,icase)**/id_rsa' ':(exclude,glob,icase)**/id_dsa' ':(exclude,glob,icase)**/id_ecdsa' ':(exclude,glob,icase)**/id_ed25519' ':(exclude,glob,icase)**/.netrc' ':(exclude,glob,icase)**/_netrc' ':(exclude,glob,icase)**/.npmrc' ':(exclude,glob,icase)**/.pypirc' ':(exclude,glob,icase)**/.dockercfg'"
+review_paths   := review_exclude + " " + review_secrets
 
 # ── Incremental T3/T4 (the marker) ────────────────────────────────────────
 # `code-review` and `mutate-diff` both measured the WHOLE branch, so a branch built by
@@ -69,9 +83,10 @@ review_exclude := "':(exclude)*.lock' ':(exclude)*lock.yaml' ':(exclude)*lock.js
 # branch as a whole: `just incremental=0 code-review` is that pass, worth one run
 # before the PR.
 #
-# `work_slug` is the directory under `.work/` — empty means "the branch name", which is
-# right in a repo with one long-running run per branch. Set it to a `/loop-setup` or
-# `/goal-setup` capability slug to park the marker next to its state file.
+# `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` (or `defect.md`) whose
+# `**Branch**` header is the current branch (`/rfc` writes it per phase), else the branch
+# name (`work-slug.mjs`). Set it to a `/loop-setup` slug to park the marker next to its
+# state file.
 work_slug   := ""
 incremental := "1"
 
@@ -79,6 +94,40 @@ diff_since  := "node " + kit + "/diff-since.mjs"
 since_scope := "--slug " + quote(work_slug) + " --incremental " + quote(incremental)
 review_from := diff_since + " review --base " + quote(base) + " " + since_scope
 mutate_from := diff_since + " mutate --base " + quote(base) + " " + since_scope
+
+# The frame the change was cut against — the RFC the slug resolves to, or why there is
+# none — handed to the reviewer as `=== RFC ===` rather than left for it to find: a
+# read-only reviewer cannot follow a ticket RFC's pointer (review-context.mjs).
+review_context := "node " + kit + "/review-context.mjs --slug " + quote(work_slug)
+
+# ── Optional OCR pass (opt-in: `just ocr=1 code-review`) ─────────────────────
+# Open Code Review (alibaba/open-code-review) reviews the same diff first, with its own
+# deterministic pipeline, its own LLM and a brief of the RFC, and its findings reach OUR reviewer as
+# `=== OCR CANDIDATES ===` — leads to confirm or drop, never a verdict
+# (ocr-candidates.mjs). It needs its own provider (`npx @alibaba-group/open-code-review@<ver>
+# config provider`, once per machine) and costs that provider's tokens; a failure is
+# declared in the prompt and the review runs without it. Its tools only read git
+# (ls-files, grep, show — checked on 1.12.9 and 1.12.13); an MCP server added to OCR's own config
+# would give it more, so keep that config empty on a machine that gates with it.
+# Pinned like everything else — raise `ocr_version` deliberately, after reading the diff.
+# A global install (`npm i -g @alibaba-group/open-code-review@<ocr_version>`) is used with
+# `ocr_cmd := "ocr"` in the root justfile; its version is then yours to keep in step.
+ocr         := ""
+ocr_version := "1.12.13"
+ocr_cmd     := "npx --yes @alibaba-group/open-code-review@" + ocr_version
+# What our reviewer does not see, OCR does not pay for: `review_exclude`, in OCR's
+# syntax — doublestar globs, where `*` never crosses `/` (its help says "gitignore-style";
+# its matcher is not), hence the `**/` that git's `:(exclude)*.lock` does not need.
+# Credential files, build outputs and vendored code are not repeated here: OCR skips them
+# by default. Extend both together.
+ocr_exclude := "**/*.lock,**/*lock.yaml,**/*lock.json,.claude/**,.agents/**,.cursor/**,.dev/kit/**,.work/**,**/*.gen.*,**/*openapi.json"
+# Extra flags, e.g. `--max-tokens-budget 300000` to cap OCR's spend (a budget stop
+# publishes partial results and exits 0).
+ocr_args    := ""
+# OCR's background is a brief of the RFC (title, Goal, Local decisions — Scope is what
+# the diff already shows), not the reviewer's full section: OCR aborts past 8,000
+# characters. It warns past 2,000; 4,000 keeps a real RFC's decisions whole.
+ocr_background_chars := "4000"
 
 # A diff that does not fit the reviewer's context does not produce a smaller review: it
 # produces a review of an unknown subset that still returns a verdict — a `CLEAN` over
@@ -89,6 +138,9 @@ mutate_from := diff_since + " mutate --base " + quote(base) + " " + since_scope
 # is bigger, or split the change — a 700 KB diff is a review problem before it is a
 # budget problem.
 review_max_bytes := "400000"
+# The same number sizes an RFC phase (skills/rfc § Draft): a phase whose diff does not fit
+# one review was cut too big, so the failure names the cut before the knobs.
+review_too_large := "prompt too large: %s > %s bytes — cut the change smaller (an RFC phase must fit one review), or extend review_exclude / review_max_bytes\n"
 
 # Folder trust is a gate SEPARATE from the permission flags below, and neither claude
 # nor codex has a CLI flag to skip or pre-seed it inline — it is persisted state, keyed
@@ -110,10 +162,10 @@ review_max_bytes := "400000"
 reviewer := "claude"
 
 # ── Code review (Tier 3 — judgment, not correctness) ───────────────────────
-# Same cadence as mutate-diff: once per coherent block, BEFORE the push. One
-# reviewer, one process, one prompt ({{review_prompt}}) — any agent CLI runs
-# it. stdout IS the report, and the recipe parks it in .work/review-report.md, so
-# gitignore `.work/`: a report is working memory, never a committed artifact.
+# Once per coherent block, BEFORE the push. One reviewer, one process, one
+# prompt ({{review_prompt}}) — any agent CLI runs it. stdout IS the report, and
+# the recipe parks it in .work/review-report.md, so gitignore `.work/`: a report
+# is working memory, never a committed artifact.
 #
 # Permissions are the point: a reviewer that can edit the code becomes its author,
 # and then nobody reviewed it — the reason each `review-<agent>` recipe below exists
@@ -134,8 +186,10 @@ reviewer := "claude"
 # re-opens the door silently — re-enumerate on a CLI bump with:
 #   echo 'List every tool available to you, one per line.' | claude -p ...
 review_deny := "Bash,Write,Edit,NotebookEdit,Task,Agent,Artifact,WebFetch,WebSearch,Monitor,Workflow,Skill,ToolSearch,CronCreate,CronDelete,CronList,EnterWorktree,ExitWorktree,LSP,PushNotification,RemoteTrigger,SendMessage,ScheduleWakeup,TaskOutput,TaskStop,ListAgents,ListMcpResourcesTool,ReadMcpResourceTool,WaitForMcpServers,mcp__*"
+# `--settings` pins the language: `claude -p` otherwise inherits the user's `"language"`
+# and translates the headings review-guard parses (#55).
 review-claude:
-    claude -p --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < {{review_in}} > {{review_out}}
+    claude -p --settings '{"language":"English"}' --disallowedTools '{{review_deny}}' --allowedTools 'Read,Glob,Grep' < {{review_in}} > {{review_out}}
 
 # ── codex ── `codex exec` sandboxes to read-only BY DEFAULT (no writes, no network
 # unless enabled) — passed explicitly anyway so a future default change cannot silently
@@ -230,20 +284,34 @@ review-cursor:
 # `rm -f {{review_out}}` runs before dispatch, so `mv` either moves a file this run
 # produced or fails and takes the recipe with it. Deleting the TEMP is safe in a way
 # deleting the report is not — a dead CLI still leaves the previous report standing.
+#
+# Completeness is checked on the TEMP report, before `mv`: the reviewer must name every
+# file of `.work/review-files.txt` under `### Files reviewed`, and every `Location` must
+# exist at HEAD (review-guard.mjs `--expect-files`). An incomplete report is not
+# promoted — the previous one stands, the marker stays, the recipe fails, and the
+# report is kept as `.work/review-incomplete.md`: its VERDICT is not trusted, its
+# findings are (the first real run of this check rejected a pass that had found three
+# real defects — throwing it away would have lost them) — except one
+# that still blocks (a CRITICAL, or unreadable markers), promoted anyway (exit 3): a
+# CRITICAL is never hidden, and a truncated report blocks as malformed. One shell line,
+# because just runs each line in its own `sh -c` without `-e`.
 code-review reviewer=reviewer:
     case {{quote(reviewer)}} in claude|codex|cursor) ;; *) printf 'unknown reviewer: %s\n' {{quote(reviewer)}} >&2; exit 2 ;; esac
     mkdir -p .work
-    if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_exclude}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
-    rm -f {{review_out}}
+    if git diff --quiet "$({{review_from}})"...HEAD -- . {{review_paths}}; then printf 'nothing new since the last passing review — the standing .work/review-report.md IS the verdict (`just review-guard` reads it). Re-read the whole branch with: just incremental=0 code-review\n' >&2; exit 2; fi
+    rm -f {{review_out}} .work/review-incomplete.md
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > {{review_in}}
     printf '\n\n=== REVIEWED THROUGH ===\n\n%s\n' "$({{review_from}} 2>/dev/null)" >> {{review_in}}
+    {{review_context}} > .work/review-rfc.md; printf '\n\n' >> {{review_in}}; cat .work/review-rfc.md >> {{review_in}}
+    case {{quote(ocr)}} in ''|0|false|no|off) ;; *) rm -f .work/ocr.json; {{review_context}} --brief {{quote(ocr_background_chars)}} > .work/ocr-background.md; rc=0; {{ocr_cmd}} review --audience agent --format json --output .work/ocr.json --from "$({{review_from}} 2>/dev/null)" --to HEAD --background-file .work/ocr-background.md --exclude {{quote(ocr_exclude)}} {{ocr_args}} > .work/ocr.log 2>&1 || rc=$?; printf '\n\n' >> {{review_in}}; node {{kit}}/ocr-candidates.mjs .work/ocr.json "$rc" .work/ocr.log >> {{review_in}} || true ;; esac
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> {{review_in}}
     git diff --stat=200 {{base}}...HEAD >> {{review_in}}
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> {{review_in}}
-    git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_exclude}} >> {{review_in}}
-    n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} >> {{review_in}}
+    git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} > .work/review-files.txt
+    n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review-{{reviewer}}
-    mv {{review_out}} .work/review-report.md
+    rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then mv {{review_out}} .work/review-incomplete.md; exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
     node {{kit}}/review-guard.mjs --require-report
     {{diff_since}} review --mark "$(git rev-parse HEAD)" {{since_scope}}
 
@@ -269,11 +337,12 @@ review-with reviewer=reviewer topic="":
     rm -f .work/adhoc-review.tmp
     sed -e 's|{{{{base}}|{{base}}|g' -e "s|{{{{sha}}|$(git rev-parse HEAD)|g" {{review_prompt}} > .work/adhoc-prompt.md
     printf '\n\n=== FOCUS ===\n\n%s\n' {{quote(topic)}} >> .work/adhoc-prompt.md
+    printf '\n\n' >> .work/adhoc-prompt.md; {{review_context}} >> .work/adhoc-prompt.md
     printf '\n\n=== FILES CHANGED (full inventory) ===\n\n' >> .work/adhoc-prompt.md
     git diff --stat=200 {{base}}...HEAD >> .work/adhoc-prompt.md
     printf '\n\n=== DIFF UNDER REVIEW ===\n\n' >> .work/adhoc-prompt.md
-    git diff {{base}}...HEAD -- . {{review_exclude}} >> .work/adhoc-prompt.md
-    n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf 'prompt too large: %s > %s bytes — split the change, or extend review_exclude / review_max_bytes\n' "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    git diff {{base}}...HEAD -- . {{review_paths}} >> .work/adhoc-prompt.md
+    n=$(wc -c < .work/adhoc-prompt.md); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
     just review_in='.work/adhoc-prompt.md' review_out='.work/adhoc-review.tmp' review-{{reviewer}}
     cat .work/adhoc-review.tmp
 
@@ -328,19 +397,21 @@ mutate-mark:
 # archaeological dig this replaces.
 worktree_root := env_var_or_default('CR_WORKTREES', env_var_or_default('HOME', '.') / '.worktrees')
 
-# `just tree <slug> [branch]` — the worktree for one CAPABILITY, at its canonical
+# `just tree <slug> [branch]` — the worktree for one RFC, at its canonical
 # path, printed on stdout so the next step (an `cd`, an IDE, an orchestrator) does
 # not have to guess it. Idempotent: an existing tree is printed, not recreated.
 #
-# One tree per capability, one branch per sprint INSIDE it — not one tree per
-# sprint. `.work/<capability-slug>/` is per-worktree and holds that capability's
-# plan and every sprint worklist, so any other arrangement splits one work unit
-# across trees (rules/agent/autonomy.md, "One tree, one writer").
+# One tree per RFC. `.work/<slug>/` is per-worktree and holds that RFC's state
+# file, so any other arrangement splits one work unit across trees
+# (rules/agent/autonomy.md, "One tree, one writer").
 #
-# And parallelise across CAPABILITIES, never across the sprints of one: a sprint is
-# a vertical slice, so two sprints of the same capability traverse the same layers
-# and collide by construction. `Blocked by` in the plan serialises the dependent
-# ones; the others are independent as promises, not as files.
+# Parallelise across RFCs that touch disjoint code, never across the phases of
+# one RFC: those traverse the same layers and collide by construction, so they run
+# one after the other, in its tree. The exception is L4: the orchestrator gives each
+# phase its own tree (`just tree <slug>-p<n> phase/<slug>/<n>`, run from the
+# integration tree so the branch starts from `rfc/<slug>`) and removes it with
+# `just base=origin/rfc/<slug> tree-rm <slug>-p<n>`, because a phase merges into the
+# RFC's branch, not the base.
 #
 # git refuses to check out a branch that is already live in another tree. That is
 # the invariant, enforced by the tool rather than by prose — leave it that way.
@@ -381,8 +452,18 @@ tree slug branch="":
 # forest this exists to prevent. Found by running it, not by reading it.
 #
 # "Merged" is measured against `{{base}}`, the same trunk every other gate here
-# measures against. A `base` that does not resolve (no remote fetched yet) fails
+# measures against, by `landed.mjs`: an ancestor, or a squash merge recognised by its
+# patch-id (a squash is never an ancestor, and `branch -d` would refuse it — hence
+# `-D`, after the check). A `base` that does not resolve (no remote fetched yet) fails
 # CLOSED: unproven is not the same as merged.
+#
+# The remote branch goes too, only when it is the branch's OWN upstream — same name —
+# and never `base`: a branch cut from `origin/next` tracks `next`, and `next` is not
+# this tree's to delete. It goes when the remote holds the local tip or an ancestor of
+# it (nothing there that has not landed); a commit pushed from elsewhere is never
+# discarded. A forge that already deleted it on merge leaves nothing to do. An
+# unreachable remote, or a push the pre-push hook or the forge refuses, is said, never
+# an error: the tree and the local branch are already gone by then.
 tree-rm slug:
     #!/usr/bin/env sh
     set -eu
@@ -396,11 +477,27 @@ tree-rm slug:
     if ! git rev-parse --verify --quiet {{quote(base)}} >/dev/null; then
         printf 'cannot resolve {{base}}, so "merged" is unprovable — nothing removed. Fetch it, or pass base=<ref>.\n' >&2; exit 2
     fi
-    if ! git merge-base --is-ancestor "$branch" {{quote(base)}}; then
+    if ! node {{kit}}/landed.mjs "$branch" {{quote(base)}}; then
         printf '%s is not merged into {{base}} — nothing removed. Merge it, or discard it by hand.\n' "$branch" >&2; exit 2
     fi
+    tip=$(git rev-parse "$branch")
+    remote=$(git config "branch.$branch.remote" || true)
+    upstream=$(git config "branch.$branch.merge" || true)
     git worktree remove "$path"
-    git branch -d "$branch"
+    git branch -D "$branch"
+    [ -n "$remote" ] && [ "$remote" != . ] && [ "$upstream" = "refs/heads/$branch" ] || exit 0
+    case "$(git rev-parse --abbrev-ref {{quote(base)}} 2>/dev/null)" in "$branch"|"$remote/$branch") exit 0 ;; esac
+    if ! live=$(git ls-remote --heads "$remote" "$upstream"); then
+        printf '%s unreachable — remote branch %s left as it is.\n' "$remote" "$branch" >&2; exit 0
+    fi
+    live=${live%%[[:space:]]*}
+    if [ -z "$live" ]; then exit 0; fi
+    if [ "$live" = "$tip" ] || { git cat-file -e "$live^{commit}" 2>/dev/null && git merge-base --is-ancestor "$live" "$tip"; }; then
+        git push --quiet "$remote" --delete "$branch" \
+            || printf 'could not delete %s/%s (pre-push hook, protection or permission) — left as it is.\n' "$remote" "$branch" >&2
+    else
+        printf '%s/%s holds commits this tree never had — left as it is.\n' "$remote" "$branch" >&2
+    fi
 
 # One tree, one writer. `.work/` is per-worktree, so `review-guard` answers about the
 # tree it runs in: two sessions in one checkout share one verdict, and A's CLEAN
@@ -413,13 +510,20 @@ tree-rm slug:
 status:
     node {{kit}}/worktree-status.mjs {{base}}
 
+# `.work/` keeps a directory per branch a gate ever ran on, holding only gitignored
+# markers — nothing removed them once the branch was gone (#57). This deletes, in THIS
+# tree, the ones no local branch resolves to (work-stale.mjs), and lists the committed
+# state files whose branch landed or is gone: those leave in a commit, not here.
+work-prune:
+    node {{kit}}/work-stale.mjs --prune {{base}}
+
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
 # The per-loop counterpart to `just status`: that one is read-only across every
 # worktree at a glance, this one is one worktree, once, at the moment a
-# `/loop-setup` or `/goal-setup` run stops — objective met, blocked, or cap/budget exhausted
+# `/loop-setup` or `/rfc` run stops — objective met, blocked, or cap/budget exhausted
 # (the setup skills' completion/escalation outcomes, mapped straight onto the
-# three statuses below). Reads `.work/<slug>/loop.md`,
-# `goal.md` (or the newest `tasks/NN-*.md`) plus what only git knows — branch, commits
+# three statuses below). Reads `.work/<slug>/loop.md`
+# (else `rfc.md`) plus what only git knows — branch, commits
 # ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
 # catching up on a parallel loop means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something
@@ -428,6 +532,23 @@ status:
 publish-summary slug status base=base:
     case '{{status}}' in COMPLETED|BLOCKED|BUDGET_EXHAUSTED) ;; *) echo "unknown status: {{status}}" >&2; exit 2 ;; esac
     node {{kit}}/publish-summary.mjs {{slug}} {{status}} {{base}}
+
+# ── CI: the base a gate job compares against ─────────────────────────────────
+# `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),
+# so a PR's gate job needs the PR's target branch. The job passes it through `env:`
+# (`BASE: ${{ github.base_ref }}`, never interpolated into the shell) and runs
+# `just base="$(just ci-base)" <tech>-check`. This recipe fetches that branch in full —
+# never shallow — and prints `origin/<branch>`. With no BASE (a push) it prints `HEAD`:
+# nothing to compare, so the audit is skipped, and the scheduled audit covers the
+# default branch. A failed fetch prints nothing, and an empty `base` does not resolve,
+# so the audit runs: fail closed. Only the ref goes to stdout; git talks on stderr.
+ci-base:
+    @if [ -n "${BASE:-}" ]; then \
+        git fetch --quiet --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE" >&2 \
+            && echo "origin/$BASE"; \
+    else \
+        echo HEAD; \
+    fi
 
 # ── Duplication (opt-in) ───────────────────────────────────────────────────
 # Copy-paste is an agent's native failure mode, and it is the one "AI slop
@@ -445,13 +566,22 @@ dup-check:
 # An agent proposes a decision, a human accepts it — and accepting means committing
 # the status line, which is the one signal an agent does not produce on its own.
 # Doctrine: rules/agent/decisions.md. Node (>=18) rather than bash, so `just check`
-# stays cross-platform; the script is a no-op when there are no ADRs.
+# stays cross-platform; the script is a no-op when there are no ADRs and no reference to one
+# (the reference scan needs git — exit 2 when git cannot run inside a repository).
 adr-check:
     node {{kit}}/adr-check.mjs
     # Size/section budgets are advisory above. Enforce them with:
     #   node {{kit}}/adr-check.mjs docs/adr --strict
     # Move the ceiling for THIS repo in .docs-budgets.json (never in the script — an
     # update overwrites it):  { "adr": { "unitCeiling": 900 } }
+    # Directories or files whose ADR numbers are not references to docs/adr/ (fixtures, templates):
+    #   { "adr": { "referenceExclude": ["test/fixtures/"] } }
+
+# Read-only, never a gate — works wherever this file is imported, in `check` or not. A
+# record deleted from docs/adr/ lives in git history; this reads it back.
+# Retired ADRs: `just adr-retired` lists them, `just adr-retired NNNN` prints one.
+adr-retired id="":
+    @node {{kit}}/adr-check.mjs --retired {{quote(id)}}
 
 # ── Living documents ───────────────────────────────────────────────────────
 # Opt-in: add `docs-check` to `check` above if the repo keeps a PRD/PLAN under docs/.
@@ -468,7 +598,8 @@ docs-check:
 # Opt-in: add `rules-check` to `check` above once the install has settled. It audits
 # .claude-rules.lock against what is actually on disk and in this repo — an asset the
 # lock does not explain, a rule whose globs match no file here, the always-on context
-# budget. Offline and deterministic (npx fetches the CLI once, then npm caches it).
-# Fails on facts, warns on judgments; `--strict` promotes the warnings.
+# budget. Deterministic: the CLI is the one the lock's core rev ships (cli-spec.mjs),
+# fetched once by npx and then cached. Fails on facts, warns on judgments; `--strict`
+# promotes the warnings.
 rules-check:
-    npx --yes github:dohrm/claude-rules doctor
+    spec="$(node {{kit}}/cli-spec.mjs)" && npx --yes "$spec" doctor

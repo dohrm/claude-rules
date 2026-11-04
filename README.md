@@ -23,9 +23,12 @@ checks too. `init` creates missing scaffolding; follow the reported wiring steps
 for existing files and install the tools your kit needs. Run `just check` once
 wired. See the [kit setup](kit/README.md).
 
-**Keep local changes outside generated rules.** Codex updates track owned files
-and refuse conflicting local edits; Claude/Cursor rule directories are replaced. The kit is copied for adaptation. Review the diff after each
-installation or update. Use `--ref <tag-or-commit>` to pin an asset revision.
+**Keep local changes in `.dev/overrides/`, not in installed files.** The lock records
+every file the installer writes, with its hash, for every agent. An `update` that finds
+one edited, or a file it did not write in an installed skill, lists the paths and
+changes nothing; `--force` overwrites them. The kit is copied for adaptation. Review
+the diff after each installation or update. Use `--ref <tag-or-commit>` to pin an
+asset revision.
 
 ## Pick your stack
 
@@ -43,7 +46,7 @@ npx github:dohrm/claude-rules add ts-web-app --root apps/web --level gates
 
 # Add shared checks, product skills and execution support as needed:
 npx github:dohrm/claude-rules add agent testing cicd --level gates
-npx github:dohrm/claude-rules add product goal-setup  # Codex durable goals
+npx github:dohrm/claude-rules add product        # framing skills and /rfc
 npx github:dohrm/claude-rules add devstack --level gates
 ```
 
@@ -71,21 +74,31 @@ slash-command notation.
 | Clarify a product or capability | `/prd`; `/interview` if the intent is still unclear |
 | Define the initial architecture and write ADRs | `/architect` |
 | Explore a proposed solution or architectural limit | `/solution-exploration`: assess options before reading affected ADRs |
-| Untangle a large ADR corpus | `/adr-review`: map active decisions, conflicts and consolidation options |
-| Organize substantial work | `/plan` → `/tasks` → `/goal-setup` (Codex) or `/loop-setup` (repeated loop) |
+| Shrink a large ADR corpus | `/adr-review`: one verdict per record, move then delete, references rewritten, size before and after |
+| Engineer a change, then let the agent build it | `/rfc`: iterate on one document until you mark it ready; a large change is decomposed into phases and holds inside it, then run to the end at L3, or orchestrated at L4 within a delegation board |
+| Run a repeated chore to a measurable end | `/loop-setup` |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |
 | Run a local monorepo | `devstack`; [setup and commands](kit/devstack/README.md) |
-| Equip an existing repo / migrate an installation | `/onboard` / `/migrate` |
+| Equip an existing repo / update or migrate an installation | `/onboard` / `/update` / `/migrate` |
 
 Use `/solution-exploration` to assess a problem and its options before reading
 the relevant ADRs; it then follows dependent decisions where needed. Use `/adr-review`
-to audit the whole corpus for decisions in force, duplication, contradictions and
-consolidation opportunities. `/architect` remains the entry point for initial
-architecture and ADR writing. Accepted decisions stay in force during exploration;
-only you can change and commit their status.
+to triage the whole corpus down to the decisions in force: superseded records are
+deleted (git is the archive), product rules move to their documents. `/architect`
+remains the entry point for initial architecture and ADR writing. Accepted
+decisions stay in force during exploration; only you can change and commit their
+status.
 
 Ordinary authorized adjustments update the affected product documents in place.
+
+An RFC lives in `.work/<slug>/rfc.md` by default, or as a ticket in any tracker.
+For a tracker, `docs/ARCHITECTURE.md` declares the adapter under `## RFC store`:
+how to reach it (a CLI first, then the REST API, an MCP server last), which accounts
+are reserved to agents, and how statuses map. A webhook can trigger a refinement round
+unattended; a dispatcher that already holds the ticket may pre-fetch it into
+`.work/<slug>/ticket-context.md`. Implementation starts only on `/rfc implement`,
+once you mark the RFC `ready`.
 
 Other skills, including design-system, UI prompt export and incident workflows,
 remain available in the [skill catalogue](docs/reference.md#the-commands-you-end-up-with).
@@ -115,7 +128,7 @@ See [testing and mutation](docs/reference.md#the-commands-you-end-up-with).
 npx github:dohrm/claude-rules list
 npx github:dohrm/claude-rules doctor
 npx github:dohrm/claude-rules budget apps/api/src/main.rs --agent codex
-npx github:dohrm/claude-rules update --ref <tag-or-commit>
+npx github:dohrm/claude-rules#<tag-or-commit> update --ref <tag-or-commit>
 npx github:dohrm/claude-rules remove <profile>
 ```
 
@@ -124,6 +137,33 @@ To add Codex to an existing installation, repeat an installed profile explicitly
 
 Removal leaves your justfile and hook wiring for you to adjust.
 [Installer reference](docs/reference.md#install) covers levels, roots and updates.
+
+## Layer your own assets
+
+A team's private rules, skills and kit go in their own git repository, added as a
+second source on top of this library and pinned like it. Your git credentials fetch
+it; nothing else is stored.
+
+```bash
+npx github:dohrm/claude-rules add --source team=git@git.example:team/agent-rules.git#v0.3.0
+npx github:dohrm/claude-rules update --ref team=v0.4.0   # move that source only
+npx github:dohrm/claude-rules remove --source team       # drop it, its files, its own profiles
+```
+
+- **The last path wins**: a file for rules, agents and kit; a whole directory for a
+  skill. A source's `registry.json` can add profiles and aliases, and its `exclude`
+  list removes files or skills of the sources before it.
+- **`.dev/overrides/`** is the repo's own last layer, in the same layout
+  (`.dev/overrides/rules/common/language.md`). The installer never writes it.
+- **Every override is listed** in the lock (`overrides`) and printed. `update` warns
+  when the file you override changed upstream; `update --strict` fails on it.
+- The lock also keeps the merged `aliases`, so an offline `remove` understands an
+  alias only your source defines.
+- Refused, never guessed: two entries that install the same source path to two
+  places, two entries whose source paths nest, and a skill directory that is emptied while it holds a file the installer
+  did not write.
+
+See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrides).
 
 ## Find the details
 

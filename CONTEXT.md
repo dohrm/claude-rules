@@ -29,9 +29,32 @@ each profile lives.
 _Avoid_: root (root is the flag/directory; a module is the lock's record of it)
 
 **Lock** (`.claude-rules.lock`):
-The record of what's installed — profiles, agents, modules, levels — that
-`update` replays at a new ref.
+The record of what's installed — sources, profiles, agents, modules, levels, every
+file written with its hash, and the overrides — that `update` replays at new refs.
 _Avoid_: manifest, config
+
+**Source**:
+One git repository the installer reads assets from, pinned in the lock as
+`{ name, url, ref }`. The first is always `core`, this library (ADR-0008).
+_Avoid_: repo (the consuming repo is the repo), remote, upstream
+
+**Overlay**:
+A source after `core`: its files replace earlier ones by path, its registry adds
+profiles and aliases, its `exclude` removes earlier paths. `.dev/overrides/` is the
+repo's own overlay, last and unpinned.
+_Avoid_: plugin, fork, extension
+
+**Override**:
+One path a later layer replaced, recorded as `{ path, by, over, baseHash }` and
+printed on `add`/`update`; `update` warns when the replaced version moved. A file
+for rules, agents and kit; a whole directory for a skill.
+_Avoid_: patch, customisation (an override replaces, it never merges)
+
+**Corruption**:
+A path the installer would write or delete that is neither absent nor recorded and
+unchanged — an edit, an unrecorded copy, a foreign file in a skill. Listed and
+refused, never reconciled; `--force` or the user fixes it (ADR-0010).
+_Avoid_: conflict, drift (drift is what `doctor` reports on a tree no command is changing)
 
 **Forge**:
 The git hosting platform running CI — GitHub or Gitea. The pipeline doctrine is
@@ -92,16 +115,39 @@ One unit of the PRD — an actor, the job it does for them, its status, and
 where its User Stories live (`docs/prd/NN-<slug>.md`).
 _Avoid_: feature, epic, milestone (considered and rejected — see below)
 
-**Sprint**:
-One vertical slice inside a capability's `.work/<slug>/PLAN.md`, cut by
-`/plan`, executed by `/tasks` + `/loop-setup`.
-_Avoid_: phase (the retired, project-wide term this replaced)
-
 **ADR**:
 A decision record under `docs/adr/`. `Proposed` by an agent; `Accepted` /
 `Rejected` / `Superseded` / `Deprecated` only by a human, in a commit
 (`agent/decisions.md`).
-_Avoid_: RFC, design doc
+_Avoid_: design doc
+
+**RFC**:
+One request for change framed by `/rfc` — in `.work/<slug>/rfc.md` or a ticket in the project's
+tracker, per the project's RFC store: its local decisions,
+execution steps and stopping condition, iterated until the human marks it `ready`,
+then implemented to the end. A large change is decomposed into phases (one PR each)
+and holds inside the one RFC, never split into several.
+Ephemeral; deleted once its PR merges. Not a decision record — a
+choice that earns an ADR leaves the RFC as a `Proposed` ADR.
+_Avoid_: spec, plan, sprint (the retired `/plan` → `/tasks` units it replaced)
+
+**Delegation board**:
+The `## Delegation board` section of an RFC run at L4: the hard checkpoints the
+human delegates, the executors allowed (coding agent · model), and the caps
+(`agent/autonomy.md` § L4, ADR-0009). Without it, L4 runs as L3.
+_Avoid_: permissions, policy
+
+**ODD**:
+The operational design domain of an L4 run: the board plus the prerequisites the
+orchestrator proves at launch. Outside it, the run parks and escalates (the
+minimal-risk condition) instead of improvising.
+_Avoid_: scope (scope is what the RFC changes)
+
+**Orchestrator / Executor**:
+At L4, the orchestrator owns the RFC and its integration branch `rfc/<slug>` and
+merges phases on proof. An executor implements one phase on `phase/<slug>/<n>`, in its
+own tree, at L3 at most, and merges nothing.
+_Avoid_: manager / worker
 
 **Experience contract**:
 One screen or workflow for one actor profile under `docs/experience/`, indexed by

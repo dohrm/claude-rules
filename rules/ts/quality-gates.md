@@ -19,8 +19,8 @@ matching derivative README).
 
 | Recipe | Command | Config |
 |---|---|---|
-| `ts-lint` | `eslint .` | `eslint.config.js` ← `eslint.base.js` (`no-explicit-any`, `no-non-null-assertion`) |
-| `ts-check` | `tsc --noEmit` | `tsconfig.json` ← `tsconfig.base.json` (`strict`) |
+| `ts-lint` | `eslint .` | `eslint.config.js` ← `eslint.base.js` (`no-explicit-any`, `no-non-null-assertion`, type-aware `no-floating-promises` / `no-misused-promises` / `switch-exhaustiveness-check`, `eqeqeq`, no `eval`) |
+| `ts-check` | `tsc --noEmit` | `tsconfig.json` ← `tsconfig.base.json` (`strict`, `noUncheckedIndexedAccess`) |
 | `ts-check` | `vitest run` | — |
 | `ts-mutate` | `stryker run --incremental` | `stryker.config.json` |
 

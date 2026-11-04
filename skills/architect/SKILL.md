@@ -1,13 +1,13 @@
 ---
 name: architect
-description: "Define initial architecture, compare alternatives, and recommend stack, boundaries and claude-rules profiles. Writes `docs/ARCHITECTURE.md` + one Proposed ADR per decision under `docs/adr/`. Use on /architect, \"choose the stack\", \"write an ADR\", or \"which rules do we need\". For a focused challenge to an existing choice, use /solution-exploration. Names real technology — /prd does not."
+description: "Define initial architecture, compare alternatives, and recommend stack, boundaries and claude-rules profiles. Writes `docs/ARCHITECTURE.md` + a Proposed ADR for each arbitration that earns one, under `docs/adr/`. Use on /architect, \"choose the stack\", \"write an ADR\", or \"which rules do we need\". For a focused challenge to an existing choice, use /solution-exploration. Names real technology — /prd does not."
 ---
 
-You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + one ADR per significant decision under `docs/adr/`.
+You are a consulting software architect, not a form. You propose an opinionated technical shape, justify every choice against the product's actual constraints, and accept adjustments. **Simplicity first: every added moving part must earn its place against the PRD — challenge premature complexity, name the cost of each decision.** Output: a profile-selection recommendation, then `docs/ARCHITECTURE.md` + an ADR for each arbitration that earns one under `docs/adr/`.
 
 **Two levels of usage, same process.** Right after `/prd`, this runs once at
-**product level**: shape, stack, cross-cutting guidelines. Later, `/plan` may
-call you again at **capability level**, when opening one capability surfaces a
+**product level**: shape, stack, cross-cutting guidelines. Later, `/rfc` may
+call you again at **capability level**, when framing one feature surfaces a
 decision scoped to it alone (a new port, a framing choice `/architect`'s
 product-level pass never had reason to make). Same steps 1–4 either way — only
 the scope of "the decision" narrows.
@@ -60,10 +60,9 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `portal-http` | the HTTP transport of that portal: OpenAPI-generated client, TanStack Query, cache policy | the portal talks HTTP — i.e. every web portal, on top of `portal-flat` |
 | `tauri` | the desktop transport instead: IPC (invoke/listen), Zustand stores, no OpenAPI | the frontend ships as a **desktop app** — on top of `ts react portal-flat`, and never with `portal-http` |
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; principles, no prescribed library |
-| `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/migrate`, `/prd`, `/architect`, `/plan`, `/tasks`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
-| `investigate` | 4-phase debug methodology (`/investigate`) | opt-in, any shape |
+| `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/update`, `/migrate`, `/prd`, `/architect`, `/rfc`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
+| `defect` | diagnose a bug, then fix it on request (`/defect`); alias `investigate` | opt-in, any shape |
 | `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
-| `goal-setup` | frames a durable Codex goal (`/goal-setup`) | opt-in, when long-running work has one verifiable outcome |
 | `devstack` | the contract between an agent and a running app (no foreground server, no orphan, the log is the truth) + `process-compose` lifecycle at `--level gates` | the rule: any repo you run locally. The kit: only once it runs **more than one process** — one service wants a `just dev`, not an orchestrator |
 
 Aliases unpack (`rust-api`, `ts-web-app`, `ts-tauri-app`, `ts-node-api`,
@@ -82,7 +81,7 @@ Do **not** recommend `rust testing cicd ops hexagonal api backend` as one bag. T
 `python` carries one decision the others don't: it assumes a **committed lockfile
 and a runner that installs from it** (uv by default). On a brownfield repo still
 on `pip install -r requirements.txt`, say so out loud — adopting the profile means
-adopting that, and it is worth its own ADR.
+adopting that, and it belongs in the stack decision's ADR.
 
 In a **monorepo**, anchor each profile to the directory it governs (`--root`), and
 keep `react` on every React tree, `portal-flat` on every portal, and let the
@@ -106,9 +105,9 @@ For each **architecturally-significant** decision (costly to reverse, wide blast
 
 Create `docs/` and `docs/adr/` if absent.
 
-- One **ADR per architecturally-significant decision**: `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). If the `agent` module is installed, read `agent/decision-records.md` before writing (it is path-scoped and may not have loaded yet); otherwise follow the repository's ADR format and the template below. Record the selected profiles with the stack/boundary decision they implement; do not create a separate ADR for each profile or local implementation choice.
+- One **ADR per arbitration that earns one** (`agent/decisions.md` § Which choices need an ADR; most stack rows of the overview do not): `docs/adr/NNNN-<slug>.md` (zero-padded, sequential). If the `agent` module is installed, read `agent/decision-records.md` before writing (it is path-scoped and may not have loaded yet); otherwise follow the repository's ADR format and the template below. Record the selected profiles with the stack/boundary decision they implement; do not create a separate ADR for each profile or local implementation choice.
 - Every ADR you write is **`Proposed`**, with or without the optional `agent/decisions.md` rule. In the hand-back, list what you propose and what changes if the answer is no — otherwise nothing tells the human something is waiting on them.
-- The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR.
+- The **overview**: `docs/ARCHITECTURE.md` per `<architecture-template>`, linking each stack choice to its ADR. Ask for the shared decision repository if the human has not named it (`agent/decisions.md` § Shared decisions); `none` is an answer. Read its records before deciding anything they cover: an enterprise policy there is not re-decided here. Ask too where RFCs live (`skills/rfc` § Where the RFC lives); `local` is the default.
 
 Confirm *"✓ written to `docs/ARCHITECTURE.md` and docs/adr/"*, list the ADRs created, and state
 plainly that they are **proposed and awaiting acceptance**.
@@ -117,9 +116,9 @@ Then ask, per ADR: *"Do you accept ADR-NNNN as written?"* On an explicit yes, sh
 the one-line status edit and let the human make and commit it. **Never write
 `Accepted` yourself, even on a yes in this same turn** — `agent/decisions.md`.
 
-### 5. Hand off to /plan
+### 5. Hand off to /rfc
 
-The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what a capability's `.work/<slug>/PLAN.md` "Durable decisions" header should reference — `/plan` reads `docs/ARCHITECTURE.md` rather than re-deriving them.
+The durable decisions here (routes, schema shape, key model names, auth, boundaries) are what an RFC's **Constrained by** line references — `/rfc` reads `docs/ARCHITECTURE.md` rather than re-deriving them.
 
 <adr-template>
 <!-- Shape and budgets: agent/decision-records.md. Status always Proposed. -->
@@ -140,6 +139,8 @@ The durable decisions here (routes, schema shape, key model names, auth, boundar
 # Architecture — <project name>
 
 > Source PRD: `docs/PRD.md`
+> Shared decisions: <the organization's shared decision repository URL, or `none`>
+> RFC store: <local | <tracker> — see § RFC store>
 
 ## Shape & profiles
 
@@ -171,6 +172,15 @@ Auth/authz, observability, error contract, config & secrets, egress posture. (Mo
 
 External services, the contract with each, the blast radius if it fails.
 
+## RFC store
+
+<!-- Only when RFCs live in a tracker; the contract is in the rfc skill's ticket.md. -->
+- Tracker: <tool>, <project or repository>
+- Access: <CLI command> — else <REST base URL>, token in `$<VAR>`; an MCP server only when nothing else exists
+- Agent accounts: <bot or machine accounts reserved to agents, or `none` — the identity itself is whoever the access is authenticated as>
+- Status: draft = <…>, ready = <…>, implementing = <…>, done = <…>
+- Who set ready: <where the status history names the actor>
+
 ## Decision log
 
 - [ADR-0001](./adr/0001-<slug>.md) — <title>
@@ -178,7 +188,7 @@ External services, the contract with each, the blast radius if it fails.
 
 ## Rules
 
-- ADR only **architecturally-significant** decisions. Shape: `agent/decision-records.md`. Index shape: `product/documents.md`.
+- ADR only the arbitrations that pass `agent/decisions.md` § Which choices need an ADR. A small project may need three. Shape: `agent/decision-records.md`. Index shape: `product/documents.md`.
 - Status is always **`Proposed`**. Discussing is not accepting.
 - Simplicity first — justify every service, store, and layer against the PRD.
 - Name real technology here. Never invent a PRD constraint — ask.

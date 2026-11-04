@@ -139,6 +139,24 @@ test('the shipped eslint configs name any / ! (and the React overlay names hooks
   assert.equal(tauri.includes('react-hooks'), true)
 })
 
+// The witness is only a proof for what the README installs (#49: it locked react-hooks 5
+// and eslint 9 while the README installed 7 and 10 unpinned, so both breakages passed here).
+test('the ts-web README pins the majors the witness lock tests', () => {
+  const readme = readFileSync(join(KIT.web, 'README.md'), 'utf8')
+  const lock = JSON.parse(readFileSync(join(FIXTURE, 'package-lock.json'), 'utf8')).packages
+  // Every `name@spec` on an `npm i` line, so a new pin is guarded too — and only a bare
+  // major is comparable with the lock, so any other spec fails rather than being skipped.
+  const pins = [...readme.matchAll(/^npm i(?: -D)? (.+)$/gm)]
+    .flatMap(m => m[1].split(/\s+/)).map(t => t.match(/^(@?[^@\s]+)@(.+)$/)).filter(Boolean)
+  const pinned = pins.map(([, name]) => name)
+  for (const name of ['eslint', '@eslint/js', 'eslint-plugin-react-hooks', 'eslint-plugin-jsx-a11y'])
+    assert.ok(pinned.includes(name), `${name} pinned: an unpinned major drifts from the witness`)
+  for (const [tok, name, major] of pins) {
+    assert.match(major, /^\d+$/, `${tok}: pin a bare major, the one the guard compares`)
+    assert.equal(lock[`node_modules/${name}`]?.version.split('.')[0], major, `${tok}: the witness locks that major`)
+  }
+})
+
 describe('ts language floor', { concurrency: 1 }, () => {
   test('just ts-lint / ts-check pass on the witness package', {
     skip,
@@ -215,6 +233,70 @@ describe('ts language floor', { concurrency: 1 }, () => {
       const r = runJust(dir, 'ts-check')
       assert.notEqual(r.status, 0, `a red test must fail ts-check:\n${r.out}`)
       assert.match(r.out, /99|AssertionError|failed/)
+    })
+  })
+})
+
+// The typed rules ship in all four configs: each flavor must catch a dropped promise,
+// or that flavor's config lost its `projectService`.
+const FLOATING = 'async function save(n: number): Promise<number> {\n  return n\n}\n\n'
+  + 'export function addOne(n: number): number {\n  save(n)\n  return n + 1\n}\n'
+describe('typed lint rules', { concurrency: 1 }, () => {
+  for (const [flavor, recipe, file] of [
+    ['ts', 'ts-lint', 'api/src/add.ts'],
+    ['node', 'ts-node-lint', 'api/src/add.ts'],
+    ['web', 'ts-web-lint', 'api/src/save.ts'],
+    ['tauri', 'ts-tauri-lint', 'api/src/save.ts'],
+  ]) {
+    test(`just ${recipe} fails on a floating promise`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir, flavor)
+        write(dir, file, FLOATING)
+        const r = runJust(dir, recipe)
+        assert.notEqual(r.status, 0, `a dropped promise must fail ${recipe}:\n${r.out}`)
+        assert.match(r.out, /no-floating-promises/)
+      })
+    })
+  }
+
+  const LINT_CASES = [
+    ['a non-exhaustive switch',
+      "type Op = 'inc' | 'dec'\n\nexport function addOne(n: number, op: Op = 'inc'): number {\n"
+        + "  switch (op) {\n    case 'inc':\n      return n + 1\n  }\n  return n\n}\n",
+      /switch-exhaustiveness-check/],
+    ['== against a non-null value',
+      'export function addOne(n: number): number {\n  if (n == 0) return 1\n  return n + 1\n}\n',
+      /eqeqeq/],
+  ]
+  for (const [what, body, signal] of LINT_CASES) {
+    test(`just ts-lint fails on ${what}`, { skip, timeout: TIMEOUT }, () => {
+      withTmpRepo((dir) => {
+        assemble(dir, 'ts')
+        write(dir, 'api/src/add.ts', body)
+        const r = runJust(dir, 'ts-lint')
+        assert.notEqual(r.status, 0, `${what} must fail ts-lint:\n${r.out}`)
+        assert.match(r.out, signal)
+      })
+    })
+  }
+
+  test('just ts-check fails on an unchecked index access', { skip, timeout: TIMEOUT }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir, 'ts')
+      write(dir, 'api/src/add.ts', 'export function addOne(n: number, xs: number[] = []): number {\n  const first: number = xs[0]\n  return n + first + 1 - first\n}\n')
+      const r = runJust(dir, 'ts-check')
+      assert.notEqual(r.status, 0, `xs[0] is number | undefined under noUncheckedIndexedAccess:\n${r.out}`)
+      assert.match(r.out, /undefined/)
+    })
+  })
+
+  test('just ts-web-lint fails on dangerouslySetInnerHTML', { skip, timeout: TIMEOUT }, () => {
+    withTmpRepo((dir) => {
+      assemble(dir, 'web')
+      write(dir, 'api/src/raw.tsx', 'export function Raw({ html }: { html: string }) {\n  return <div dangerouslySetInnerHTML={{ __html: html }} />\n}\n')
+      const r = runJust(dir, 'ts-web-lint')
+      assert.notEqual(r.status, 0, `raw HTML must fail ts-web-lint:\n${r.out}`)
+      assert.match(r.out, /No raw HTML/)
     })
   })
 })

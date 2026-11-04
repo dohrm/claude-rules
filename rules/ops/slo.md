@@ -39,9 +39,9 @@ explicitly bought.
 - **The budget is the point.** It says how much risk a release may spend, and it is
   the only honest way to answer "can we ship on Friday".
 - **99.9% is not a default.** Each nine multiplies cost. Choose the number against
-  what the product actually needs, from the PRD, and write the reasoning down — this
-  is a decision, so it belongs in an ADR (`agent/decisions.md`), not in a dashboard
-  config.
+  what the product actually needs, from the PRD, and write the reasoning next to the
+  target in `docs/OBSERVABILITY.md`, not in a dashboard config. A human agrees it;
+  the SLO method itself is enterprise policy (`agent/decisions.md`).
 - **Error budget policy**, agreed in advance and by a human: when the budget is
   exhausted, the next work is reliability, not features. A budget with no consequence
   is a metric, not a commitment.

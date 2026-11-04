@@ -17,14 +17,18 @@ name: Mutation (Python)
 # touched, not on the hunks — a large file with a two-line change still mutates
 # whole. Narrow `source_paths` in pyproject.toml if that gets slow.
 #
-# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose, and
-# mutmut has no built-in threshold flag. First establish a baseline, triage real
+# CALIBRATION PHASE: this job is NON-BLOCKING ON ITS FINDINGS on purpose — mutmut
+# has no built-in threshold flag, and `mutmut run` exits 0 whatever survives, non-zero
+# only when the run itself failed. First establish a baseline, triage real
 # gaps vs equivalent mutants, THEN decide what number you defend — and enforce it
 # in the last step rather than by hand. Never a round number: see the ratchet rule.
+# Never `continue-on-error` on the job: it also greens a crash or a cancelled run.
 #
 # COPY to .gitea/workflows/mutation-python.yaml (or .github/workflows/). The
 # syntax is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g.
 # `linux`; GitHub: `ubuntu-latest`) and working-directory to your python_dir.
+#
+# Needs kit/common imported by the root justfile: the PR's base comes from `ci-base`.
 #
 # One-time setup: `uv add --dev mutmut`, then the [tool.mutmut] section from
 # pyproject.snippet.toml. Add `.mutmut-cache` and `mutants/` to .gitignore.
@@ -33,11 +37,19 @@ on:
   pull_request:
     branches:
       - main
+      - 'rfc/**'   # L4 phase PRs merge on this proof (rules/agent/autonomy.md § L4)
+
+env:
+  JUST_VERSION: '1.42.4'               # ADAPT / bump deliberately
 
 jobs:
   mutation:
+    # The `rfc/<slug>` → default-branch PR is not mutated again: each phase was, against
+    # `rfc/<slug>`, and those runs are the proof (rules/agent/autonomy.md § L4).
+    # An `if:` rather than a trigger filter, so the PR shows the job skipped, not missing.
+    if: ${{ !(startsWith(github.head_ref, 'rfc/') && github.base_ref == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest             # ADAPT to your runner label
-    continue-on-error: true            # ← remove once the baseline is ratcheted
+    timeout-minutes: 120               # ADAPT once you know your numbers — bounded by default
     defaults:
       run:
         working-directory: .           # ADAPT to your python_dir (e.g. services/api)
@@ -46,6 +58,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0               # need the base branch to compute the diff
+
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -57,10 +75,13 @@ jobs:
 
       - name: Compute changed source files
         id: changed
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
-                  | grep -E '\.py$' | grep -v -E '(^|/)(tests?|conftest)' | paste -sd, -)
+          base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          # exit 1 tolerated per grep: no match is no file, not a failure under pipefail (Gitea's default)
+          FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
+                  | { grep -E '\.py$' || [ $? -eq 1 ]; } | { grep -v -E '(^|/)(tests?|conftest)' || [ $? -eq 1 ]; } | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
 

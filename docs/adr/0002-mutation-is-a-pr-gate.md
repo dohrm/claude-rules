@@ -71,3 +71,9 @@ Not load-bearing yet: all three `mutation-ci.yaml` snippets still ship
 `continue-on-error: true`, so until a consuming repo ratchets its baseline this
 gate reports and does not block. And nothing fails if the doctrine is reverted — it
 is prose, and no test asserts it.
+
+Amendment 2026-10-29: the job-level `continue-on-error` greened a run SIGTERM'd before
+its first mutant, so no snippet sets it. Calibration tolerates findings only: the Rust
+step passes cargo-mutants' exits 2 and 3, and the TS, Python and Go tools exit 0 on
+findings until a threshold is set. "Drops `continue-on-error`" now reads "drops that
+tolerance". `test/cicd.test.mjs` holds it.

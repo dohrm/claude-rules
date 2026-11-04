@@ -85,7 +85,7 @@ Then hand each off — never edit the target yourself:
 - an alert or an SLI → `/observability`
 - a first move → `/runbook`
 - a design change → an ADR via `/architect` (`Proposed`; a human accepts it)
-- scope or sequencing → `/prd`, `/plan`
+- scope or sequencing → `/prd`, `/rfc`
 
 Prefer **one prevent + one detect + one mitigate** over ten items nobody will do. A list
 longer than five is a list that will be closed unread.

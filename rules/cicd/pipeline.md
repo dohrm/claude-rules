@@ -62,6 +62,12 @@ pinning, fork-PR secrets, or a skipped required check reading as green.
 - **A skipped required check must not read as green.** A conditional job that is
   "required" but skipped is a hole a broken PR walks through. Either the job
   always runs (and short-circuits inside), or it is not a required check.
+- **A verdict that moves with the date does not block a PR.** A vulnerability
+  audit reads an advisory database, not the diff: `<tech>-check` runs `<tech>-audit`
+  only when the lock changed since its merge base with `base`, so the gate job
+  checks out with full history and runs `just base="$(just ci-base)" <tech>-check`,
+  which fetches the PR base in full.
+  The rest runs on a schedule on the default branch and opens an issue.
 - **Keep the workflow boring and short.** Long inline shell in a workflow is code
   with no tests, no lint and no local runner — move it into a script the justfile
   calls, and then CI calls the justfile.
@@ -79,3 +85,10 @@ both. The adaptation surface is deliberately tiny:
   a repo/org secret you set by hand, and the wiring note must say which.
 - Self-hosted runners are **not** ephemeral by default: never assume a clean
   workspace, and never write outside the workspace.
+- `actions/upload-artifact@v4` fails on Gitea (`GHESNotSupportedError`), and v3 no
+  longer runs on github.com. A snippet that uploads carries one step per forge, guarded
+  by `github.server_url == 'https://github.com'` and its negation.
+- Gitea's runner expands the `needs.*` object filter to **nothing**, so
+  `join(needs.*.result, ' ')` is an empty string and an aggregator looping over it
+  passes with every gate red. Read each result by name (`needs.<job>.result`), and
+  fail on an empty one — the shipped `ci-ok` does both.

@@ -12,7 +12,496 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — `<tech>-check` audits only a changed lock
+
+A vulnerability audit reads an advisory database that moves on its own schedule, not
+with the diff ([#50](https://github.com/dohrm/claude-rules/issues/50)). Inside the
+gate, it turned docs-only PRs and an untouched default branch red the day a CVE was
+published, including Go standard-library findings that no change to the repository
+can fix.
+
+- **`go-audit`, `python-audit`, `rust-audit`.** New recipes that run `govulncheck`,
+  `pip-audit` and `cargo deny check advisories` every time they are called.
+- **`<tech>-check` calls the audit only when its lock changed** since its merge base
+  with `base` (`go.sum`, `uv.lock`, `Cargo.lock` under the tech dir, working tree
+  included), or when that cannot be known: `base` empty or unresolvable, or no merge
+  base (a shallow clone). It prints which before running or skipping it:
+  `audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+  `audit: base is empty …`, `audit: no merge base with …`. A branch merely behind a
+  lock bump on `base` skips the audit. A PR that adds or bumps a dependency still
+  fails on a known advisory.
+- **`rust-check` keeps `cargo deny check licenses sources`.** Only `advisories` moved.
+- **`go.just` and `python.just` define `base`** (`origin/main`), as `rust.just`
+  already did, so each parses without `kit/common`.
+- **CI gate jobs pass the PR base.** New `just ci-base` (`kit/common`) fetches the
+  branch named by `$BASE` in full and prints `origin/<branch>`, or `HEAD` when `BASE`
+  is empty (a push: the audit is skipped). The rust, go and python jobs of
+  `kit/cicd/ci.snippet.yaml` take `BASE: ${{ github.base_ref }}` through `env:` and run
+  `just base="$(just ci-base)" <tech>-check`. Their checkout sets `fetch-depth: 0`: the
+  default shallow HEAD has no merge base with the PR base, so the audit would run on
+  every PR.
+- **The default branch is audited daily.** New `kit/cicd/audit.snippet.yaml` runs each
+  `<tech>-audit` on a schedule. New `kit/cicd/advisory-issue.mjs` opens one issue per
+  red audit, titled `security-advisory: <tech>-audit`, updates it while the audit stays
+  red, and closes it when the audit is green. It works on GitHub and Gitea. A red audit
+  leaves the run green. A Go standard-library finding is named in the issue as a
+  toolchain fix.
+
+Migration:
+
+- Merge the new gate step, and `fetch-depth: 0` on its checkout, into each rust, go
+  and python job of your CI workflow by hand. Without them, `base` does not resolve or
+  has no merge base on the runner, so every PR still runs the audit: it fails closed.
+- Copy `audit.snippet.yaml` next to your CI workflow and delete the matrix entries for
+  the technologies you don't have. The job token needs `issues: write`. Without the
+  workflow, an advisory published after your lock was committed is reported nowhere.
+- An override that already moved `advisories` out of `rust-check` can be deleted.
+- A repo whose trunk is not `main` sets `base` in its root justfile (e.g.
+  `base := "origin/next"`). Otherwise `origin/main` does not resolve and every local
+  `<tech>-check` runs the audit.
+- Customise an audit through the `<tech>_audit` variable (e.g. `pip-audit
+  --ignore-vuln <id>`), not by overriding the recipe: `<tech>-check` runs the variable.
+
+### Breaking — the lock pins the commit it installed, and the CLI must match it
+
+An `update` could move a repo silently, and nothing showed it
+([#54](https://github.com/dohrm/claude-rules/issues/54)). The lock recorded `ref: next`
+but not a commit. Without `--ref`, `update` sent core back to `main`. And
+`npx github:dohrm/claude-rules` without `#<ref>` ran `main`'s CLI. Together these could
+install an older tree while the lock looked unchanged.
+
+- **`rev` per source.** The lock records the commit each source was fetched at.
+  `update` prints one line per source: `core  next  5728086 → 319310a`, or
+  `unchanged (…)`. A lock without `rev` gets one on its next write.
+- **Core replays its locked ref.** Without `--ref`, `update` stays on the ref the lock
+  names, as the other sources already did. `defaultRef` only seeds a first `add`.
+- **The CLI must be the one core ships.** `add`, `update` and `remove --source` refuse
+  before writing when the running CLI's `bin/` differs from the fetched core's. The
+  error prints the command to re-run. `--local` is exempt.
+- **`rules-check` runs the locked CLI.** It runs `npx <core url>#<rev> doctor`, resolved
+  by the new `.dev/kit/common/cli-spec.mjs`, instead of the default branch.
+
+Migration:
+
+- Run the CLI at the ref you install: `npx github:dohrm/claude-rules#<ref> update`.
+  On a mismatch, the refusal names the exact command.
+- A repo that relied on `update` without `--ref` to follow `main` now passes
+  `--ref main`.
+- `rules-check` is delivered by `update`. A repo that overrides it adopts the
+  `cli-spec.mjs` line by hand.
+
+### Breaking — `/investigate` is now `/defect`
+
+`/investigate` was a debug method that stopped after every phase. `/defect` keeps the same
+method and adds a lifecycle around it ([#44](https://github.com/dohrm/claude-rules/issues/44)):
+
+- **Two commands.** `/defect <symptom or ticket>` diagnoses: it reproduces the bug, ranks
+  3 hypotheses and confirms the root cause, then stops. `/defect fix` lands the minimal fix
+  as a PR. It refuses to start without a recorded diagnosis, and its reproduction must
+  still fail on the base before any fix.
+- **Autonomy levels.** L1 stops after each phase, as `/investigate` did. L2 stops after
+  the diagnosis. L3 runs through to the PR. The human gate is the merge.
+- **A state file on its own branch.** The state lives in `.work/<slug>/defect.md`, committed
+  on the bug's branch, which is cut before the diagnosis. The file's `**Branch**` header
+  places the gate markers, and `just code-review` reads the file as the frame.
+- **`just status` shows one escalation per slug.** Before, a tree showed only its newest
+  state file's escalation. Now each slug reports its own `## Blocked on the human`,
+  prefixed with its label. Within one slug the RFC still wins, so an `rfc.md` replaces
+  the escalation of the `defect.md` it came from.
+- **Restore, never change.** `/defect` only restores established behavior. A change request,
+  a contested expected behavior, three refuted hypotheses, a touched ADR, public API or
+  schema, or a fix larger than one PR all go to `/rfc`.
+
+Migration:
+
+- `update` replaces `investigate` with `defect` in the lock, installs `skills/defect` and
+  deletes the old `investigate` skill directories for Claude and Codex.
+- `add investigate` and `remove investigate` still work: `investigate` is a profile alias.
+  So is `bug`, transitionally, for installs taken from `next` while the skill carried that
+  name: their `update` installs `defect` and removes the `bug` skill directories. Unlike
+  `investigate`, the `bug` alias is removed before the first tagged release: update
+  from `next` before pinning a tag.
+- Why not `/bug`: Claude Code has a built-in `/bug` (report a bug), and a project skill
+  of the same name replaces it in a terminal session, here and in every repo that
+  installs the profile.
+- The typed `/investigate` command is gone. The `defect` description keeps "bug",
+  "investigate" and "debug" as triggers, so asking in plain words still finds it.
+- Wired the kit by hand? Update `kit/common` whole: `work-slug.mjs`, `review-context.mjs`
+  and `worktree-status.mjs` changed.
+
+### Breaking — the installer writes only over what it owns
+
+The lock now records every file the installer writes, for every target, with its
+hash, and `add`, `update` and `remove` refuse a tree they cannot explain
+([ADR-0010](docs/adr/0010-installer-refuses-unexplained-tree.md), [#33](https://github.com/dohrm/claude-rules/issues/33)).
+Four behaviours change:
+
+- **A hand edit or an unrecorded copy at an installed path stops `add`/`update`.**
+  Claude and Cursor copies used to be overwritten silently. Now the command lists
+  every such path (an edited rule, a file the lock does not record even when
+  byte-identical, a foreign file in an installed skill directory), exits 1 and
+  changes nothing. Move the edit to `.dev/overrides/` (below), or re-run with
+  `--force` to overwrite the listed paths.
+- **The first `update` from a lock without file hashes overwrites once.** Any lock
+  written before this change is adopted: the run lists every installed destination,
+  overwrites it whole (local edits included) and records it. Without a terminal it
+  needs `--force`. Save your edits under the listed paths first, then run
+  `update --force` once and review `git diff`.
+- **Legacy trees are purged only by that adoption.** `.dev/rules/`, `.opencode/`,
+  the old `.claude/kit/` directories and retired skills are deleted by the adopting
+  `update`, never by a later one. One left behind after that is yours to delete;
+  `doctor` reports the retired-target trees.
+- **`remove` deletes only the files it recorded.** It reads the lock's `installed`
+  inventory, not a registry, and refuses a lock without hashes: run `update` once
+  first. A file it did not write survives. An edited file it would delete stops it;
+  `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
+  rescope stops it even under `--force`: restore it with `update --force` first.
+
+### Changed — `/adr-review` shrinks the decision corpus
+
+A decision log grew by keeping every record it ever held
+([#81](https://github.com/dohrm/claude-rules/issues/81)). Superseded records stayed on
+disk, their status lines became review work, and agents cited them as if they still
+bound. Code cites ADR numbers heavily, so deleting a record left those references
+pointing at nothing.
+
+**What changes:**
+
+- **Only a decision in force stays on disk; git is the archive.** A `Rejected`,
+  `Deprecated` or `Superseded by` record is deleted at the human's merge, not kept
+  (`agent/decision-records.md` § Statuses). Content still worth keeping moves to its
+  home in the same diff. A refusal that still prevents a recurring proposal becomes one
+  line under `Alternatives considered` of the record in force. An agent deletes only a
+  mechanical fate: a human-set `Rejected`, `Deprecated`, or `Superseded by ADR-XXXX`
+  status line with ADR-XXXX `Accepted` on disk. It never deletes a `Proposed` or
+  `Accepted` record.
+- **`/adr-review` triages instead of mapping.** Every record gets one verdict from a
+  closed set: `keep`, `move → <home>`, `gate`, `shared`, `delete` or `collapse`, each
+  with its evidence. The skill executes the mechanical deletions and proposes the rest.
+  It rewrites every reference to a deleted record, lists gate candidates (absolute rules
+  agents forget while coding), and reports the corpus size before and after.
+- **`adr-check` warns on dangling references.** It flags `ADR-NNNN`, or a link to
+  `adr/NNNN-*.md`, in a tracked file when no such record exists. The warning is advisory,
+  and `--strict` fails on it. `.docs-budgets.json` gains `adr.externalPrefixes`
+  (default `["shared", "enterprise"]`): a reference qualified this way, such as
+  `shared ADR-0001`, names another repository's record. It also gains
+  `adr.referenceExclude`: path prefixes that are not references (templates, fixtures,
+  vendored corpora). Every run with records prints the corpus totals: records, words, ≈ tokens.
+- **A bare ADR number is no longer a comment's reason** (`agent/guardrails.md`). The
+  comment states the invariant it protects. The number is only a pointer.
+- **`just adr-retired` reads a deleted record back** (`adr-check.mjs --retired [NNNN]`).
+  It lists the records deleted from `docs/adr/` with their number, title, last status
+  line, deleting commit and date; with a number, it prints that record's last version.
+  It is read-only and never a gate. The recipe comes with the imported `gate.just`.
+- **`/solution-exploration` finds a refusal after a triage.** It used to search
+  `Rejected` records, which a triage deletes, and would conclude an option had never
+  been refused. It now reads, in order: `Alternatives considered` of the records in
+  force, retired records still on disk, then the archive (`just adr-retired`, or three
+  git commands written out in the skill for an install without the kit).
+
+**Hand-merge:**
+
+- A repo that runs `adr-check --strict` in its gate now fails on a reference to a
+  missing record. Rewrite the reference, or add the path to `adr.referenceExclude`.
+- `adr-check` now needs git, even without `--strict`: a missing git binary, or one
+  that cannot open the checkout (`safe.directory` in a CI container, a broken `.git`),
+  exits 2. Outside a repository, with git installed, the scan is skipped. Fix the
+  checkout or the image; do not drop the gate.
+- Run `/adr-review` when convenient. It deletes only records whose status a human
+  already set; the rest waits for your answer in the PR.
+
+### Changed — finished work leaves nothing behind
+
+`.work/` and the work branches were never cleaned up
+([#57](https://github.com/dohrm/claude-rules/issues/57)):
+- state files stayed on the base branch with a stale status;
+- every branch a gate ran on left a directory of markers;
+- `tree-rm` refused every squash-merged branch.
+
+**What changes:**
+
+- **`/rfc` and `/defect` remove their own state.** The PR that ends the work deletes
+  `.work/<slug>/` in its last commit, and its description carries what is still worth
+  reading. No cleanup PR follows the merge.
+- **`just tree-rm` recognises a squash merge.** A branch whose cumulative diff matches a
+  commit on `base` by patch-id has landed. The recipe then deletes the local branch, and
+  the remote branch when the remote holds exactly the local tip. A remote branch with
+  commits the tree never had is kept, and the recipe says so.
+- **New `just work-prune`.** It deletes, in the current tree, the `.work/` directories
+  that hold only gate markers and match no local branch.
+- **`just status` gains a `stale:` line.** It lists those directories, and the committed
+  state files whose branch landed or is gone. It stays read-only.
+- **A phase branch always resolves to its RFC's slug.** `phase/<slug>/<n>` maps to
+  `.work/<slug>/` even when that tree has no `rfc.md`, so `.work/phase-<slug>-<n>/`
+  orphans no longer appear.
+
+**Hand-merge:**
+
+- `update` brings the recipes. If your justfile overrides `tree-rm`, port the new body.
+- Run `just status` once. Delete the listed state files in a commit, and run
+  `just work-prune` in each tree.
+
+### Fixed — at L4, a phase merges on a current Tier 3 report that is not `CRITICAL`
+
+`agent/autonomy.md` § L4 and `/rfc` said a phase merges on "Tier 3 clean", which reads
+as the verdict `CLEAN` ([#90](https://github.com/dohrm/claude-rules/issues/90)). The
+gate (`review-guard`) and the loop block only on `CRITICAL`. Read the strict way, an
+orchestrator sent `WARNINGS` back round after round, and each review found a new edge
+case. The condition now names a Tier 3 report on the phase's head whose verdict is not
+`CRITICAL`; no report is not a pass. `WARNINGS` are logged with the merge and listed in
+the final report for the human. Nothing to merge by hand.
+
+### Fixed — `remove <language>` takes that language's overlays with it
+
+`remove go` left `.claude/rules/hexagonal/go.md` (and the Cursor `.mdc`) installed and
+owned by the lock: the kept profile's records were never re-checked for the removed
+language ([#48](https://github.com/dohrm/claude-rules/issues/48)). `remove` now drops a
+kept profile's Claude or Cursor rule whose every glob targets a language no longer
+locked — exactly what `add` and `update` would not emit. Codex was already right.
+
+- **Nothing to hand-merge.** A repo that hit this: `update` removes the leftover, or
+  delete it and its lock entry by hand. An overlay you edited is refused like any edited
+  file (`--force` deletes it).
+- **New refusal.** A kept Claude or Cursor rule that is no longer a regular file (a
+  directory, a symlink) stops `remove`, even under `--force`: its globs cannot be read.
+  Restore it with `update --force` first.
+
+### Fixed — the React eslint overlay works on current packages
+
+([#49](https://github.com/dohrm/claude-rules/issues/49)) The `kit/ts-web` install block,
+followed by copying `eslint.react.js`, failed twice on a fresh app. npm refused eslint 10
+(the peer range of `eslint-plugin-jsx-a11y` 6.10 stops at 9). Then
+`eslint-plugin-react-hooks` 7 rejected the overlay: `configs['recommended-latest']` is
+its legacy config since v7. The kit's own TS gate tested react-hooks 5, so it passed.
+
+- **Both `eslint.react.js` copies (ts-web, ts-tauri) read
+  `reactHooks.configs.flat['recommended-latest']`.**
+- **The ts-web install block pins its majors**: `eslint@9 @eslint/js@9` (until jsx-a11y
+  supports 10), `eslint-plugin-react-hooks@7`, `eslint-plugin-jsx-a11y@6`. The ts-tauri
+  README points to it.
+- The TS gate's witness tests react-hooks 7. A test keeps each major the README pins on the
+  one the witness locks.
+
+Hand-merge — `eslint.config.js` is a copy:
+
+- Replace `reactHooks.configs['recommended-latest']` with
+  `reactHooks.configs.flat['recommended-latest']` (react-hooks 7+).
+- If npm resolved eslint 10, `npm i -D eslint@9 @eslint/js@9`.
+- **Expect new findings.** react-hooks 7's `recommended-latest` is no longer 2 rules. It
+  adds the React Compiler rules (`purity`, `refs`, `immutability`, `set-state-in-effect`,
+  `static-components`…), 14 of 17 at `error` on 7.1.1. Your first `just ts-web-lint` (or
+  `ts-tauri-lint`) may go red on code that passed under react-hooks 5.
+
+### Fixed — a Tier 4 job that measured nothing is no longer green
+
+A downstream Rust mutation job was killed by SIGTERM after its baseline, before its
+first mutant, and reported **success**. The four Tier 4 snippets set
+`continue-on-error: true` on the job, which made every outcome green, not only the
+findings that calibration is meant to tolerate.
+
+- **No snippet sets `continue-on-error` on the job.** A crash, a failed baseline or a
+  cancelled or timed-out run now shows red.
+- **The Rust mutation step tolerates cargo-mutants' findings, and nothing else.** Exit 2
+  (survivors) and 3 (timeouts) pass while calibrating, and the log says so. Every other
+  exit fails the step. The base is resolved on its own line, so a failed `ci-base`
+  fails the step.
+- **TS, Python and Go need no tolerance.** Stryker without `thresholds.break`,
+  `mutmut run`, and the Go ratchet at a `0.0` baseline all exit 0 on findings.
+- **The TS and Python changed-files steps pass when nothing matches.** Under
+  `pipefail` (Gitea's default shell), a PR with no source file failed on `grep`'s
+  exit 1. The key used to hide that.
+- **`rust-mutate`'s empty-range refusal exits 1, not 2.** 2 is the code the step
+  tolerates.
+- `testing/ratchet.md` § The ratchet: "non-blocking" now means non-blocking on findings.
+
+Hand-merge — in each copied workflow (`mutation*.yaml`, `coverage-go.yaml`):
+
+- Remove the job's `continue-on-error: true`.
+- Rust: replace the mutation step's `run:` with the snippet's block.
+- TS and Python: in the changed-files step, wrap each `grep` as `{ grep … || [ $? -eq 1 ]; }`.
+
+### Fixed — mutation in CI measures the PR's own diff, in bounded time and disk
+
+Mutation in CI was measured failing on a downstream repo
+([#70](https://github.com/dohrm/claude-rules/issues/70), absorbs
+[#43](https://github.com/dohrm/claude-rules/issues/43)). A phase PR into `rfc/<slug>`
+was mutated against `main`, which included the phases already merged: 732 mutants. The
+final `rfc/<slug>` → `main` PR mutated the whole RFC again. A run with no time limit
+used up an account's Actions quota. Target dirs outside the workspace filled the
+runner's disk. The base was fetched `--depth=1`, so there was no merge base.
+`upload-artifact@v4` failed the job on Gitea. And `just mutate_jobs=N mutate-diff`
+ignored `N`.
+
+- **`kit/rust/mutation-ci.yaml` calls `just`.** The step is
+  `just base="$(just ci-base)" mutate_jobs=2 rust-mutate`, with
+  `BASE: ${{ github.base_ref }}` through `env:`, so the range is the PR's diff against
+  its own target branch, fetched in full. The job installs `just` if it is missing,
+  carries `timeout-minutes: 120`, and is skipped on a `rfc/*` → default-branch PR
+  (its phases are the proof). It uploads `mutants.out/` with `upload-artifact@v4` on
+  github.com and `@v3` elsewhere. It no longer suggests a `CARGO_TARGET_DIR` outside
+  the workspace: the target dir stays in the workspace, and sccache is the persistent
+  part. It has no `working-directory` any more: `rust-mutate` reads `rust_dir`.
+- **`rust-mutate` refuses an empty range.** `just base= rust-mutate` exits 1 instead of
+  mutating the empty diff and passing, which is what a failed `ci-base` fetch produced.
+- **`kit/rust/mutants.toml` sets `timeout_multiplier = 3.0`**, so one hanging mutant
+  cannot use up the job's time limit on its own.
+- **`kit/python/mutation-ci.yaml`, `kit/ts/mutation-ci.yaml` and
+  `kit/go/coverage-ci.yaml` take their base from `ci-base`** (`base="$(just ci-base)"`,
+  fetched in full; a failed fetch fails the step), and install `just` if it is missing.
+  The TS and Go jobs upload their report per forge like the Rust one. The TS and Python
+  mutation jobs carry `timeout-minutes: 120` and skip the `rfc/*` → default-branch PR,
+  like the Rust one.
+- **`init` writes a `mutate-diff` that forwards the overrides.** The Rust line passes
+  `base`, `mutate_jobs` and `mutate_args` to the nested `just` calls, which otherwise
+  re-read them from the files.
+
+Hand-merge — `init` never rewrites an existing justfile, and the snippets are copies:
+
+- In your justfile's `mutate-diff`, replace `just rust-mutate "$(just mutate-from)"`
+  with:
+  `just base={{quote(base)}} mutate_jobs={{quote(mutate_jobs)}} mutate_args={{quote(mutate_args)}} rust-mutate "$(just base={{quote(base)}} mutate-from)"`
+- Re-copy the mutation (or Go coverage) workflow, then re-apply your `runs-on`, report
+  path (`<rust_dir>/mutants.out/`, `<ts_dir>/reports/mutation/`, `<go_dir>/coverage.out`)
+  and `timeout-minutes` (Rust also `RUSTC_WRAPPER`). The root justfile must import
+  `kit/common`, for `ci-base`.
+- If your runner sets a `CARGO_TARGET_DIR` outside the workspace for this job, remove
+  it and clean what it left on the runner's disk.
+- Add `timeout_multiplier` to your `.cargo/mutants.toml`.
+
+### Added — layered sources and `.dev/overrides/`
+
+A team can add its private rules, skills and kit as a second pinned source, and a
+repo can keep its own edits; one `update` replays every layer
+([ADR-0008](docs/adr/0008-layered-sources.md), [#33](https://github.com/dohrm/claude-rules/issues/33)).
+See [sources, layers and overrides](docs/reference.md#sources-layers-and-overrides).
+
+- **`sources` in the lock.** An ordered list of `{ name, url, ref }`, `core` first.
+  An old `{ repo, ref }` lock reads as `core` and is rewritten in the new shape by
+  the next write. Sources are fetched with `git` on `PATH` and your own credentials
+  (`github:owner/repo` or any git URL); `giget` is gone.
+- **`add --source <name>=<url>#<ref>` / `remove --source <name>`** append and drop a
+  source. **`--ref <name>=<ref>`** moves one source; a bare `--ref` still moves `core`.
+- **Each source's `registry.json` decides** what it installs; registries merge in
+  order (profiles append, aliases and `retired` merge, later wins), and a source may
+  define profiles only it has. Its **`exclude`** removes files or whole skills of the
+  sources before it, and `update` deletes their installed copies.
+- **`.dev/overrides/`**, if present, is the last layer: same layout as a source, never
+  written by the installer. A file there replaces the installed one and survives
+  `update`.
+- **Overrides are listed.** The lock records `overrides: [{ path, by, over,
+  baseHash }]`, and `add`/`update` print each one. When a replaced file changed in the
+  layer under it, `update` warns
+  `⚠ <path> changed in <over> (overridden by <by>)` (`removed from <over>` when it is
+  gone there); **`update --strict`** fails before writing anything.
+- **The lock records the merged `aliases`**, so an offline `remove` unpacks an alias
+  only an overlay defined, and **`doctor` audits the hashed inventory** offline: an
+  overlay-only profile passes, an edited or deleted installed file fails.
+- **Three new refusals:** two registry entries that install the same source path to
+  two destinations, two entries whose source paths nest, and a skill directory that an `exclude`, a dropped entry or a
+  `remove` empties while it still holds a file the installer did not write
+  (`--force` removes it).
+
+### Breaking — stricter language gates
+
+The language rules' high-stakes lines (taken from Open Code Review's per-language
+checklists) are now **checked**, not just written: a gate that was green can go red.
+Fix the finding, or keep an exception with its reason on the same line. Each language
+says whether `update` delivers it or you merge it by hand — the configs are copies
+the installer never merges, so `update` refreshes `.dev/kit/<lang>/` and nothing else.
+
+- **Rust — delivered by `update`** (`rust.just`). `rust-lint` adds clippy
+  `dbg_macro`, `todo`, `unimplemented`, `undocumented_unsafe_blocks` on all targets,
+  and `panic`, `string_slice` on `--lib --bins` (tests stay free). An invariant keeps
+  `#[allow(clippy::panic, reason = "…")]`; a byte slice becomes `s.get(a..b)`. To
+  adopt later, override `rust-lint` in the root justfile with the old two lines.
+- **TypeScript — merge by hand**, from `.dev/kit/ts/eslint.base.js` (or the
+  `ts-web` / `ts-node` / `ts-tauri` overlay you copied) into `eslint.config.js`:
+  `parserOptions.projectService` (type-aware linting — slower), then
+  `no-floating-promises`, `no-misused-promises`, `switch-exhaustiveness-check`,
+  `no-implied-eval`, `no-eval`, `eqeqeq: smart`; the React overlays also ban
+  `dangerouslySetInnerHTML`. From the matching `tsconfig.*.json` into `tsconfig.json`:
+  `noUncheckedIndexedAccess` — the largest churn (`xs[0]` becomes `T | undefined`);
+  merge it in its own commit.
+- **Go — merge by hand**, from `.dev/kit/go/golangci.base.yml` into `.golangci.yml`:
+  `bodyclose`, `sqlclosecheck`, `rowserrcheck`, `noctx`, `contextcheck`,
+  `containedctx`, `errorlint`, `nilerr`, `exhaustive` (a `default` does not make an
+  enum switch exhaustive).
+- **Python — merge by hand**, from `.dev/kit/python/pyproject.snippet.toml` into
+  `[tool.ruff.lint]`: `ASYNC`, `BLE`, `DTZ`, `T20`, `PERF` in `select`, and `T20` in
+  the `tests/**` per-file-ignores.
+- **Rules — delivered by `update`.** New `rules/go/concurrency.md` (goroutine
+  ownership, channel closing, `defer` in loops, writer `Close` errors, typed nil).
+  Rust gains task ownership, `spawn_blocking`, cancellation-safe `select!` and bounded
+  retries; TypeScript a deadline on every `fetch` and `Promise.all` for independent
+  awaits; Python `asyncio.to_thread` and no shared module-level state.
+
 ### Added
+
+- **Autonomy L4 — orchestrated** (ADR-0009). An RFC carrying a `## Delegation board`
+  can run at L4. The orchestrator checks its domain at launch (or drops to L3), gives
+  each phase to an executor the board lists on `phase/<slug>/<n>`, merges phases into
+  `rfc/<slug>` on proof, and hands back one PR with a final report. The human merges
+  it. Doctrine in `agent/autonomy.md` § L4. **Hand merge:** add `'rfc/**'` to the
+  `pull_request` branches of your CI and mutation workflows (the templates now have
+  it), or delegated merges run without Tier 4. `work-slug.mjs` resolves a phase branch
+  to its RFC.
+
+- **`/update`, and the CHANGELOG ships with the install.** Every install now writes
+  this file to `.dev/kit/CHANGELOG.md`; after `update`, `git diff` on it is exactly
+  what changed since the repo last installed — no tag needed. `/update` (in
+  `product`) runs `update`, reads that diff, triages each entry (delivered by
+  `update`, hand merge, stricter gate) in `.work/update.md` and stops for a yes on
+  every stricter gate before merging and re-greening `just check`. `/migrate` stays
+  for an older harness (no `modules`, no imported just library).
+  **Get it:** `add product`, then `update` — the first `update` writes the baseline,
+  so this first time `/update` falls back to the kit diff.
+
+- **The review reads its RFC.** `code-review` and `review-with` put an `=== RFC ===`
+  section before the diff: the local RFC without its history, or the ticket the
+  implementing agent cached raw in `.work/<slug>/review-context.md` (gitignored) —
+  a ticket RFC without a cache is declared, and reported as a 🟡, never reviewed
+  silently without its frame. The gates now find the RFC by its new `**Branch**`
+  header, so the review marker lands beside it instead of in a directory named after
+  the branch. Install with `update`; existing RFCs gain the header at their next phase.
+
+- **Credential files never reach the reviewer's model.** `.env*`, `.ssh/`, private keys
+  (`id_*`), `.netrc`, `.npmrc`, `.pypirc` and `.dockercfg` are withheld from the review
+  diff by `review_secrets` — kept even when a repo overrides `review_exclude` — and the
+  contract makes a committed private key a 🔴, any other such file a 🟡 to confirm.
+  `review_exclude` also drops build outputs, vendored dependencies and generated code
+  (`node_modules/`, `vendor/`, `dist/`, `target/`, `*.min.*`, `*.pb.go`, snapshots).
+  Both lists come from Open Code Review's defaults; its test exclusion was not taken.
+
+- **An optional OCR pass.** `just ocr=1 code-review` runs Open Code Review
+  (alibaba/open-code-review, pinned `ocr_version := "1.12.13"`) on the same range first, with a 4,000-character brief of the RFC (title, Goal, Local decisions);
+  its findings reach the reviewer as candidates to confirm or drop, never as a verdict.
+  It needs its own LLM provider and costs its tokens; a failed pass is declared and the
+  review runs without it. Off by default.
+
+- **The review proves what it read.** A report must name every file of the diff under
+  `### Files reviewed`, and its `Location`s must exist (`path:line` as of the reviewed
+  commit). `code-review` rejects an incomplete report before promoting it: the previous
+  one stands and the marker stays, and the report is kept as `.work/review-incomplete.md`
+  — its findings are real even when its verdict is not trusted — except one that still blocks (a `CRITICAL`, or
+  unreadable markers), which is promoted anyway. An oversized prompt now says to cut
+  the RFC phase smaller; `/rfc` sizes phases to fit.
+
+- **The review contract follows ADR-0005.** An accepted shared decision binds like an
+  Accepted ADR (🔴). An in-place rule exception with its reason is compliant; without
+  one it is a 🟡, and the same exception repeated is a 🔵 against the rule. Departing
+  from an RFC local decision is a 🟡 at most, unless the RFC records the change.
+
+- **`/rfc`, the execution path** (ADR-0006, ADR-0007). One request for change is
+  framed in one RFC: verdict, local decisions, steps with proofs and a stopping
+  condition. A large change is decomposed into phases (one PR each) and holds (a
+  migration to finish, a deploy) inside the same RFC. You iterate on it with the
+  agent, mark it `ready`, and the agent implements it under the declared autonomy
+  level — at L3, every phase, stopping only at holds and hard checkpoints. The RFC lives where `> RFC store:` in `docs/ARCHITECTURE.md` says:
+  `local` (default) or a ticket in any tracker. The project's `## RFC store` section
+  is the adapter: tracker, access (CLI first, then REST, an MCP server last), bot
+  account, status mapping. A webhook dispatcher may pre-fetch the ticket into
+  `.work/<slug>/ticket-context.md` to save the agent the reads. Install with `update`
+  on a `product` profile.
 
 - **`/goal-setup` for Codex.** It frames one durable `/goal` with a bounded
   objective, stopping condition, checkpoints, progress proof and pause causes.
@@ -51,6 +540,39 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ### Changed
 
+- **Rust tests have one layout: `rules/rust/test-layout.md`.** Unit tests in
+  `foo/tests.rs` declared by `#[cfg(test)] mod tests;` (no inline `mod tests { … }`, no
+  `#[path]`), integration tests in one `tests/it/` crate, fixtures shared across crates
+  behind a `test-support` feature. `rules/testing/strategy.md` now points to it instead
+  of suggesting an inline module. It is a convention, not a gate: existing inline test
+  modules still pass `just rust-lint`. Move them when you next touch the file.
+- **`/rfc` asks for a model when a step rewrites existing state.** A new optional
+  `## Model` section lists the invariants the change keeps and the states it refuses
+  instead of handling; a review finding asking to handle a refused state is answered by
+  the refusal. The OCR brief (`review-context.mjs --brief`) now carries it with Goal and
+  Local decisions. Learned on #33: without a model, each review round found one more
+  combination of old and new state.
+- **L4 launch check: a missing witness is not failing first.** `agent/autonomy.md` § L4
+  now says that when the RFC writes its own witness, the stopping condition names it and
+  fails on its absence: `node --test a b` drops a missing `a` when `b` exists.
+
+- **RFC store: `Act as` becomes `Agent accounts`.** The identity is whoever the
+  tracker access is authenticated as (whoami at run time); the adapter now lists only
+  the accounts reserved to agents, or `none`. Any other whoami is a human's, so the
+  agent signs `on behalf of <whoami>`. Rename the line in your `docs/ARCHITECTURE.md`
+  § RFC store by hand: `Agent accounts: <your bot>`, or `none` if the agent ran under
+  your account.
+
+- **Fewer, broader ADRs** (ADR-0005). A project ADR now needs an arbitration that is
+  hard to reverse, constrains more than one feature, and refused real alternatives.
+  Enterprise policy goes to a shared decision repository, stack conventions to the
+  installed rules, feature-local choices to the work document and PR. A rule deviation
+  is an in-place exception with its reason, not an ADR. Records no longer carry lock
+  clauses, and the "we will outside Decision" split test is gone. `/architect` stops
+  writing one ADR per stack row; `/observability` keeps SLO targets in
+  `docs/OBSERVABILITY.md` instead of one ADR each. Existing ADRs stay valid; consolidate
+  them with `/adr-review` when convenient.
+
 - **Four validation depths:** T1 lint, T2 technical checks, T3 independent review,
   T4 mutation/Go coverage ratchet. Generated justfile guidance now matches PR mutation
   cadence; local mutation stays optional and shipped CI remains non-blocking during
@@ -60,6 +582,22 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   selected profiles do not require an ADR merely because they are new.
 
 ### Breaking
+
+- **A custom `review_prompt` must ask for `### Files reviewed`.** `code-review` now
+  rejects a report that does not name every file of the diff there, or whose
+  `Location`s do not exist. A repo that overrides `review_prompt` fails every review
+  until its prompt asks for the section and for `path:line` Locations: copy both from
+  `.dev/kit/common/review-prompt.md` § Output format.
+
+- **`/plan`, `/tasks` and `/goal-setup` are removed** (ADR-0007), and so is the
+  `goal-setup` profile. `update` drops `goal-setup` from an existing lock (it says
+  so) and deletes the `plan`, `tasks` and `goal-setup` skill directories; review them
+  with `git status`.
+  `/rfc` replaces all three. The coherent block of `agent/autonomy.md` is the RFC,
+  not the sprint. `just status` and `just publish-summary` read `.work/<slug>/rfc.md`
+  and `loop.md` only. Finish open `.work/<slug>/PLAN.md` / `tasks/` work first, or
+  rewrite what remains as RFCs. `/loop-setup` stays, for repeated chores only; it no
+  longer extends a worklist.
 
 - **`cqrs` drops `cqrs-rust-lib`.** The profile is the write/read +
   event-sourcing principles. `rules/cqrs/rust.md` is gone (it was a
@@ -81,6 +619,32 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
   bag that loaded 21 rules on a domain entity.
 
 ### Fixed
+
+- **`ci-ok` passed with every gate red on Gitea** ([#53](https://github.com/dohrm/claude-rules/issues/53)).
+  The aggregator looped over `join(needs.*.result, ' ')`. Gitea's runner expands that
+  filter to nothing, and a loop over nothing exits 0: the one required check was green
+  whatever the gates said. It now reads each job by name (`needs.<job>.result`) and fails
+  on an empty result, on both forges. **Hand-merge**: `ci.snippet.yaml` is copied, not
+  installed — replace your `ci-ok` step with the new one and list YOUR jobs in its `env:`
+  and its loop. A Gitea repo on the old step has had no aggregate gate since it copied it.
+
+- **The Tier 3 report came back translated, and `review-guard` rejected it**
+  ([#55](https://github.com/dohrm/claude-rules/issues/55)). `claude -p` inherits the
+  user's `"language"` setting, so on a machine set to French the report's headings —
+  `### Files reviewed` among them — were translated, and every review failed as
+  incomplete. `review-claude` now passes `--settings '{"language":"English"}'`, and the
+  prompt asks every reviewer for English. Delivered by `update` (`gate.just`,
+  `review-prompt.md`); a repo that overrides `review-claude` or `review_prompt` adds the
+  flag or the sentence by hand.
+
+- **`reviewer=codex` reviewed the diff blind.** The review prompt told every reviewer
+  "you have no shell — Read/Glob/Grep is all you need", which is true for Claude only.
+  Codex reads through its read-only sandbox shell, took the sentence literally, and
+  reported it could not read the repo, so `CLAUDE.md`, the ADRs and any file outside the
+  diff went unchecked. The prompt now names each CLI's read-only mechanism and asks every
+  reviewer to read the repo. Delivered by `update` (`.dev/kit/common/review-prompt.md`);
+  a repo that overrides `review_prompt` merges the "Read-only, and not by promise"
+  bullet by hand.
 
 - **`mutate-diff` never advanced its marker, so mutation re-ran the whole branch
   every time.** `init` wrote it as a dependency list — `mutate-diff: rust-mutate` —

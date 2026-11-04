@@ -22,13 +22,24 @@ runner and keep the rest.
 | Recipe | Tier | When | What it runs |
 |---|---|---|---|
 | `just python-lint` | 1 | pre-commit | `ruff format --check .` · `ruff check .` |
-| `just python-check` | 2 | pre-push, `just check` | python-lint · `mypy` · `pytest` · `pip-audit` · `deptry .` |
+| `just python-check` | 2 | pre-push, `just check` | python-lint · `mypy` · `pytest` · `deptry .` · `python-audit` if `uv.lock` changed |
+| `just python-audit` | 2 | `python-check` when `uv.lock` changed; a schedule | `pip-audit` |
 | `just python-mutate` | 3 | coherent block, never a hook | `mutmut run` + `mutmut results` |
 
 `mypy` takes no path: `[tool.mypy] files` is the scope. `S` / `TRY` /
 `G`+`LOG` are why error-handling and logging rules do not need a second
 ruff pass. Tests stay free of `S101` (assert) via
 `[tool.ruff.lint.per-file-ignores]`.
+
+`python-check` runs `python-audit` only when `uv.lock` changed since its
+merge base with `base`, or when that cannot be known (`base` empty or unresolvable,
+no merge base in a shallow clone). It prints which before running or skipping it
+(`audit: skipped — …`, `audit: … changed`, `audit: … unresolvable`,
+`audit: base is empty …`, `audit: no merge base with …`). A branch merely behind a
+lock bump on `base` changed nothing, so it skips the audit.
+An advisory database moves with the date, not with the diff, so an audit inside
+every check turns unrelated PRs red. To ignore an advisory or add a flag, override
+the `python_audit` variable, not the recipe: both recipes run it.
 
 ## Requirements
 
@@ -46,7 +57,7 @@ is a `uv`-managed dependency group — see below, not a separate system install.
 | `pyproject.snippet.toml` | merge into `<python_dir>/pyproject.toml` | ruff, mypy, pytest, deptry, mutmut | `src`, `files`, `target-version`, mypy overrides |
 | `.python-version` | `<python_dir>/.python-version` | uv | match `requires-python` |
 | `lefthook.snippet.yml` | merge into root `lefthook.yml` | lefthook | nothing if `just python-*` exists |
-| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `working-directory` |
+| `mutation-ci.yaml` | `.gitea/workflows/` or `.github/workflows/` | CI — **the gate** | runner, `timeout-minutes`, `working-directory` |
 
 Dev tools go in a dependency group, never in runtime deps:
 

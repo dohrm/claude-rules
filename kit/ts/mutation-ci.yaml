@@ -15,14 +15,19 @@ name: Mutation (TS)
 # `--mutate` on the PR's changed files, which needs no prior state on a fresh
 # runner. Same verdict, different starting point.
 #
-# CALIBRATION PHASE: this job is NON-BLOCKING (continue-on-error) on purpose.
-# First establish a baseline, triage real gaps vs equivalent mutants, THEN set
-# `thresholds.break` in stryker.config.json to the measured baseline and remove
-# continue-on-error. Never a round number — see the ratchet rule.
+# CALIBRATION PHASE: this job is NON-BLOCKING ON ITS FINDINGS on purpose — with
+# `thresholds.break` unset (null, the default), Stryker exits 0 whatever survives,
+# and non-zero only when the run itself failed. First establish a baseline, triage
+# real gaps vs equivalent mutants, THEN set `thresholds.break` in
+# stryker.config.json to the measured baseline. Never a round number — see the
+# ratchet rule. Never `continue-on-error` on the job: it also greens a crash or a
+# cancelled run, which measured nothing.
 #
 # COPY to .gitea/workflows/mutation-ts.yaml (or .github/workflows/). The syntax
 # is the same on both; ADAPT `runs-on` (Gitea: your runner label, e.g. `linux`;
 # GitHub: `ubuntu-latest`) and the working-directory to your ts_dir.
+#
+# Needs kit/common imported by the root justfile: the PR's base comes from `ci-base`.
 #
 # One-time setup in the frontend/package root:
 #   npm i -D @stryker-mutator/core @stryker-mutator/vitest-runner   # or the jest runner
@@ -35,14 +40,20 @@ on:
   pull_request:
     branches:
       - main
+      - 'rfc/**'   # L4 phase PRs merge on this proof (rules/agent/autonomy.md § L4)
 
 env:
   CI: 'true'
+  JUST_VERSION: '1.42.4'               # ADAPT / bump deliberately
 
 jobs:
   mutation:
+    # The `rfc/<slug>` → default-branch PR is not mutated again: each phase was, against
+    # `rfc/<slug>`, and those runs are the proof (rules/agent/autonomy.md § L4).
+    # An `if:` rather than a trigger filter, so the PR shows the job skipped, not missing.
+    if: ${{ !(startsWith(github.head_ref, 'rfc/') && github.base_ref == github.event.repository.default_branch) }}
     runs-on: ubuntu-latest             # ADAPT to your runner label
-    continue-on-error: true            # ← remove once the baseline is ratcheted
+    timeout-minutes: 120               # ADAPT once you know your numbers — bounded by default
     defaults:
       run:
         working-directory: .           # ADAPT to your ts_dir (e.g. apps/web)
@@ -51,6 +62,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0               # need the base branch to compute the diff
+
+      - name: Ensure just
+        run: |
+          command -v just >/dev/null 2>&1 || \
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh \
+              | bash -s -- --tag "$JUST_VERSION" --to /usr/local/bin
 
       - uses: actions/setup-node@v4
         with:
@@ -62,10 +79,13 @@ jobs:
 
       - name: Compute changed files
         id: changed
+        env:
+          BASE: ${{ github.base_ref }}   # the PR's target branch (kit/common ci-base)
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          FILES=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" \
-                  | grep -E '\.(ts|tsx)$' | grep -v -E '(\.test\.|/generated/)' | paste -sd, -)
+          base="$(just ci-base)"         # fetched in full; a failed fetch fails the step
+          # exit 1 tolerated per grep: no match is no file, not a failure under pipefail (Gitea's default)
+          FILES=$(git diff --name-only --diff-filter=d "$base...HEAD" \
+                  | { grep -E '\.(ts|tsx)$' || [ $? -eq 1 ]; } | { grep -v -E '(\.test\.|/generated/)' || [ $? -eq 1 ]; } | paste -sd, -)
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Mutating: ${FILES:-<none>}"
 
@@ -73,12 +93,21 @@ jobs:
         if: steps.changed.outputs.files != ''
         run: npx stryker run --mutate "${{ steps.changed.outputs.files }}" --reporters clear-text,html
 
-      - name: Upload mutation report
-        if: always()
+      # upload-artifact@v4 fails on Gitea (GHESNotSupportedError) and v3 no longer runs
+      # on github.com: one step per forge.
+      - name: Upload mutation report (github.com)
+        if: always() && github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: stryker-report
-          path: reports/mutation/
+          path: reports/mutation/      # ADAPT: <ts_dir>/reports/mutation/
+
+      - name: Upload mutation report (Gitea)
+        if: always() && github.server_url != 'https://github.com'
+        uses: actions/upload-artifact@v3
+        with:
+          name: stryker-report
+          path: reports/mutation/      # ADAPT: <ts_dir>/reports/mutation/
 
 # ---------------------------------------------------------------------------
 # Nightly full sweep (enable when ready): track the score over time and catch
