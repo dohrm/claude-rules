@@ -157,6 +157,29 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Added — at L4, review-driven drift has a stop
+
+One L4 executor ran `code-review` 17 times on a phase and, to clear one finding, built
+a reservation mechanism the RFC never named
+([#87](https://github.com/dohrm/claude-rules/issues/87)). The rules asked it to stop;
+nothing made it.
+
+- **`review_cap`** (`kit/common/gate.just`, empty by default). When set, `code-review`
+  counts its passes per branch in `.work/<slug>/.review_passes` and, once the cap is
+  spent, refuses before dispatch with "escalate to the orchestrator". Empty keeps
+  today's behavior. `.work/.gitignore` gains `*/.review_passes` on the next run.
+- **`agent/autonomy.md` § L4.** An executor escalates once its phase reaches the
+  board's review-pass cap. A review-driven fix that adds a persisted event, a command,
+  an aggregate state, a worker or a lease the RFC does not name is a scope escalation.
+  Two launch checks fail the domain: an empty cap (budget, review passes, rejected
+  rounds), and a phase that rewrites state or touches concurrency given to a model
+  other than the orchestrator's without a `## Model` covering it.
+- **`/rfc`.** The L4 brief passes `review_cap=<n>` to `code-review`; the board's
+  `Caps` line names all three caps, with 3 review passes per phase as the default.
+
+Nothing to merge by hand. An orchestrator on an older `/rfc` keeps briefing without
+`review_cap`, so its executors run uncapped until it updates.
+
 ### Changed — `/adr-review` shrinks the decision corpus
 
 A decision log grew by keeping every record it ever held

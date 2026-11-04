@@ -99,6 +99,15 @@ marker lands next to its RFC; else, for an L4 phase branch `phase/<slug>/<n>`, t
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
 
+## A cap on review passes
+
+`just review_cap=<n> code-review` allows `<n>` review passes on the current branch,
+counted in `.work/<slug>/.review_passes` (per developer, gitignored like the markers).
+Past them it refuses before calling the reviewer and says to escalate. A run refused
+for size, or for having nothing new, does not count; another branch in the same tree
+starts from zero. Empty, the default, is no cap. An L4 orchestrator passes the
+delegation board's cap in each executor's brief (`rules/agent/autonomy.md` § L4).
+
 ## What the reviewer never sees
 
 `review_exclude` drops what a human reviewer skips too — lockfiles, the installed

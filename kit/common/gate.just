@@ -90,6 +90,12 @@ review_paths   := review_exclude + " " + review_secrets
 work_slug   := ""
 incremental := "1"
 
+# `review_cap` — review passes allowed on this branch, counted in
+# `.work/<slug>/.review_passes`; past it `code-review` refuses and says to escalate.
+# Empty (the default) is no cap. An L4 brief passes the board's cap
+# (rules/agent/autonomy.md § L4).
+review_cap  := ""
+
 diff_since  := "node " + kit + "/diff-since.mjs"
 since_scope := "--slug " + quote(work_slug) + " --incremental " + quote(incremental)
 review_from := diff_since + " review --base " + quote(base) + " " + since_scope
@@ -310,6 +316,7 @@ code-review reviewer=reviewer:
     git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} >> {{review_in}}
     git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} > .work/review-files.txt
     n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    {{diff_since}} review --count-pass --cap {{quote(review_cap)}} {{since_scope}}
     just review-{{reviewer}}
     rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then mv {{review_out}} .work/review-incomplete.md; exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
     node {{kit}}/review-guard.mjs --require-report

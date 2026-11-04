@@ -37,7 +37,7 @@ test('the root justfile imports the kit library in place', () => {
   const text = readFileSync(join(REPO, 'justfile'), 'utf8')
   assert.match(text, /^import 'kit\/common\/gate\.just'$/m)
   assert.match(text, /^kit\s*:=\s*"kit\/common"$/m)
-  assert.match(text, /^base\s*:=\s*"origin\/next"$/m)
+  assert.match(text, /^base\s*:=\s*"origin\/main"$/m)
   assert.match(text, /^set allow-duplicate-recipes$/m)
   assert.match(text, /^set allow-duplicate-variables$/m)
 })
@@ -45,7 +45,7 @@ test('the root justfile imports the kit library in place', () => {
 // Local only: the main CI job runs `npm test` without `just`, so there the regexes above
 // are the witness and this case skips.
 test('just resolves kit and base from the root justfile', { skip: spawnSync('just', ['--version']).error && 'just not installed' }, () => {
-  for (const [name, want] of [['kit', 'kit/common'], ['base', 'origin/next']]) {
+  for (const [name, want] of [['kit', 'kit/common'], ['base', 'origin/main']]) {
     const r = spawnSync('just', ['--evaluate', name], { cwd: REPO, encoding: 'utf8' })
     assert.equal(r.status, 0, r.stderr)
     assert.equal(r.stdout, want)
