@@ -66,6 +66,9 @@ ignore red. On the second observed flake:
 
 1. **Quarantine it** (skip/ignore with the marker your toolchain provides) — never
    paper over it with a retry, a longer sleep, or a rerun-on-failure CI flag.
+   Skipping a behavioral test is a hard bypass (`agent/autonomy.md`): an agent
+   never quarantines on its own — it escalates with both failing runs, and the
+   human applies the skip.
 2. **Open an issue** linked from the skip annotation, naming the suspected source
    of nondeterminism.
 3. **Put a date on it.** If it is not fixed by then, delete the test. A permanently
