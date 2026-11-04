@@ -143,7 +143,10 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   the phase branch's head whose verdict is not `CRITICAL`, and Tier 4 green in CI. No
   report is not a pass (§ Detect, never assume). `WARNINGS` do not block: log them with
   the merge, for the final report, never into another fix round. The executor's report
-  is a claim.
+  is a claim. `just scope-report` on the phase branch names the packages its steps did
+  not declare: each one is justified by a `changed:` or `## Assumptions` line, or the
+  phase is rejected or escalated. A rejected round is re-briefed with `review_cap` =
+  the passes already spent plus the board's cap.
 - **It never writes in an executor's tree** while that executor runs.
 
 Reviewers are unrestricted: a stronger or different model reviewing is where
@@ -152,7 +155,7 @@ independence is cheapest.
 **The human merges the RFC.** The `rfc/<slug>` → base PR carries the final report:
 every delegated decision with its proof and reversibility, the assumptions, the
 `changed:` lines, each hold with its check output, each phase's Tier 3 `WARNINGS`,
-and where the run diverged from the plan. A hold that needs production is a merge
+the RFC-wide scope report, and where the run diverged from the plan. A hold that needs production is a merge
 point: the human merges what precedes it, and the run resumes from the new base once
 the hold's check passes.
 
