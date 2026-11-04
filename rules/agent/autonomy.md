@@ -141,9 +141,10 @@ independence is cheapest.
 
 **The human merges the RFC.** The `rfc/<slug>` → base PR carries the final report:
 every delegated decision with its proof and reversibility, the assumptions, the
-`changed:` lines, each hold with its check output, each phase's Tier 3 `WARNINGS`, and
-where the run diverged from the plan. A hold that needs production is a merge point: the human merges what precedes it,
-and the run resumes from the new base once the hold's check passes.
+`changed:` lines, each hold with its check output, each phase's Tier 3 `WARNINGS`,
+and where the run diverged from the plan. A hold that needs production is a merge
+point: the human merges what precedes it, and the run resumes from the new base once
+the hold's check passes.
 
 ## One tree, one writer
 

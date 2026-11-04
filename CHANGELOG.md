@@ -241,7 +241,7 @@ pointing at nothing.
 - Run `just status` once. Delete the listed state files in a commit, and run
   `just work-prune` in each tree.
 
-### Fixed — at L4, only a `CRITICAL` review blocks a phase merge
+### Fixed — at L4, a phase merges on a current Tier 3 report that is not `CRITICAL`
 
 `agent/autonomy.md` § L4 and `/rfc` said a phase merges on "Tier 3 clean", which reads
 as the verdict `CLEAN` ([#90](https://github.com/dohrm/claude-rules/issues/90)). The
