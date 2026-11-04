@@ -129,9 +129,11 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   it if the board covers it and escalates to the human otherwise.
 - **The brief is the RFC and the phase number**, never a summary rewritten from it.
 - **It judges artifacts, not accounts.** It re-runs `just check` on the phase branch,
-  reads the diff and the review report, and merges on gates green, no `CRITICAL` in the
-  Tier 3 report and Tier 4 green in CI. `WARNINGS` do not block: they go into the final
-  report for the human, never into another fix round. The executor's report is a claim.
+  reads the diff and the review report, and merges on gates green, a Tier 3 report on
+  the phase branch's head whose verdict is not `CRITICAL`, and Tier 4 green in CI. No
+  report is not a pass (§ Detect, never assume). `WARNINGS` do not block: log them with
+  the merge, for the final report, never into another fix round. The executor's report
+  is a claim.
 - **It never writes in an executor's tree** while that executor runs.
 
 Reviewers are unrestricted: a stronger or different model reviewing is where
@@ -139,8 +141,8 @@ independence is cheapest.
 
 **The human merges the RFC.** The `rfc/<slug>` → base PR carries the final report:
 every delegated decision with its proof and reversibility, the assumptions, the
-`changed:` lines, each hold with its check output, and where the run diverged from the
-plan. A hold that needs production is a merge point: the human merges what precedes it,
+`changed:` lines, each hold with its check output, each phase's Tier 3 `WARNINGS`, and
+where the run diverged from the plan. A hold that needs production is a merge point: the human merges what precedes it,
 and the run resumes from the new base once the hold's check passes.
 
 ## One tree, one writer
