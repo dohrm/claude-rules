@@ -408,6 +408,54 @@ test('nothing new since the last pass is refused before dispatch, never reviewed
   })
 })
 
+// ------------------------------------------------- review_cap (rules/agent/autonomy.md § L4)
+// The executor that ran 17 passes was obeying its reviewer; only a refusal stops that.
+const PASSES = '.work/cap/.review_passes'
+const newBlock = (dir, n) => { write(dir, `b${n}.rs`, `BLOCK_${n}\n`); commitAll(dir) }
+
+test('review_cap: passes under the cap run and are counted',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    newBlock(dir, 1)
+    const r = just('review_cap=2', 'code-review', 'claude')
+    assert.equal(r.status, 0, r.stderr)
+    assert.match(r.stderr, /review pass 1 of 2/)
+    assert.match(readFileSync(join(dir, PASSES), 'utf8'), / 1\n$/)
+    assert.ok(readFileSync(join(dir, '.work/.gitignore'), 'utf8').split('\n').includes('*/.review_passes'),
+      'the count is per developer, like the marker')
+  })
+})
+
+test('review_cap: at the cap, code-review refuses before dispatch and says to escalate',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    for (const n of [1, 2]) { newBlock(dir, n); assert.equal(just('review_cap=2', 'code-review', 'claude').status, 0) }
+    newBlock(dir, 3)
+    rmSync(join(dir, '.work/seen-prompt.md'))
+    const r = just('review_cap=2', 'code-review', 'claude')
+    assert.notEqual(r.status, 0, 'a third pass past a cap of 2 is refused')
+    assert.match(r.stderr, /cap reached: 2 of 2 .*escalate/)
+    assert.ok(!existsSync(join(dir, '.work/seen-prompt.md')), 'the reviewer was never called')
+
+    // The count belongs to the branch: another branch in the same tree starts from zero.
+    spawnSync('git', ['checkout', '-q', '-b', 'other'], { cwd: dir })
+    assert.equal(just('review_cap=2', 'code-review', 'claude').status, 0)
+  })
+})
+
+test('review_cap: no cap is the old behavior — no refusal, no count',
+  { skip: JUST.error ? 'just not installed' : false }, () => {
+  withReviewRepo(TRUNK + VERDICT_STUB(), (dir, just) => {
+    trunkAt(dir)
+    for (const n of [1, 2, 3, 4]) { newBlock(dir, n); assert.equal(just('code-review', 'claude').status, 0) }
+    assert.ok(!existsSync(join(dir, PASSES)))
+    newBlock(dir, 5)
+    assert.equal(just('review_cap=0', 'code-review', 'claude').status, 2, 'a cap that is not a positive integer is a usage error')
+  })
+})
+
 // ------------------------------------------------- completeness (Files reviewed)
 // The failure OCR's authors measured on general-purpose agents: on a large diff the
 // reviewer reads some files, skips others, and still signs CLEAN.

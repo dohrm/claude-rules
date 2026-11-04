@@ -23,6 +23,8 @@
 //       because the caller reads this inside `$( )`.
 //   node diff-since.mjs <review|mutate> --mark <sha> [--slug <s>]
 //       records <sha> as cleared. Callers run it AFTER the gate passed, never before.
+//   node diff-since.mjs review --count-pass --cap <n> [--slug <s>]
+//       counts one review pass on this branch, or refuses (exit 1) once <n> are spent.
 //
 // It never fails closed on its own state: every way the marker can be wrong — absent,
 // unparseable, a commit that no longer exists, a commit that is not an ancestor of
@@ -90,6 +92,34 @@ if (given('mark')) {
   writeFileSync(marker, `${sha}\n`)
   ensureWorkIgnored()
   console.log(`${kind}: cleared through ${short(sha)} — recorded in ${marker}`)
+  process.exit(0)
+}
+
+// The review-pass cap (rules/agent/autonomy.md § L4): an executor that followed its
+// reviewer for 17 passes was obeying, so prose did not stop it — a refusal does. One
+// line of state, `<branch> <passes>`, beside the marker: another branch in the same
+// tree starts from zero. The recipe calls it just before dispatch, so a run refused
+// for size or for having nothing new never counts. An empty cap is no cap, and writes
+// nothing. A corrupt count reads as zero: this is a brake, not a security boundary.
+if (given('count-pass')) {
+  const cap = flag('cap')
+  if (cap === '') process.exit(0)
+  if (kind !== 'review' || !/^[1-9][0-9]*$/.test(cap)) {
+    note(`--count-pass takes the review kind and a positive integer --cap, got ${kind} --cap ${cap}`)
+    process.exit(2)
+  }
+  const branch = git('rev-parse', '--abbrev-ref', 'HEAD') || 'HEAD'
+  const file = join(dir, '.review_passes')
+  const [onBranch, count = ''] = existsSync(file) ? readFileSync(file, 'utf8').trim().split(' ') : []
+  const done = onBranch === branch && /^[0-9]+$/.test(count) ? Number(count) : 0
+  if (done >= Number(cap)) {
+    note(`review-pass cap reached: ${done} of ${cap} passes on ${branch} — escalate to the orchestrator instead of running another pass.`)
+    process.exit(1)
+  }
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(file, `${branch} ${done + 1}\n`)
+  ensureWorkIgnored()
+  note(`review pass ${done + 1} of ${cap} on ${branch}.`)
   process.exit(0)
 }
 
