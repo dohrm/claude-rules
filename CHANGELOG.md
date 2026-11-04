@@ -180,6 +180,28 @@ nothing made it.
 Nothing to merge by hand. An orchestrator on an older `/rfc` keeps briefing without
 `review_cap`, so its executors run uncapped until it updates.
 
+### Added — `just scope-report`: where a branch went beyond its plan
+
+Reviewing an L4 PR, the human checks which packages it touched and how much, against
+what the issue named ([#87](https://github.com/dohrm/claude-rules/issues/87)). That is
+now one command.
+
+- **`just scope-report`** (`kit/common/scope-report.mjs`). Per package — the nearest
+  `Cargo.toml`, `go.mod`, `package.json`, `pyproject.toml`, `*.csproj` or
+  `project.godot` below the root, else the top-level directory — the lines added and
+  removed against `base`, and whether the RFC's steps declared it in their `touches`:
+  `yes`, `no — overflow`, or `declared, untouched`. On a `phase/<slug>/<n>` branch only
+  phase `<n>` declares. It reads the RFC as the review does (local `rfc.md`, else the
+  ticket cache). An indicator: it exits 0 whenever there is a diff to report.
+- **`publish-summary`** appends the same table to `SUMMARY.md`.
+- **`/rfc` and `agent/autonomy.md` § L4.** The orchestrator runs it on each phase
+  branch and justifies every overflow package from a `changed:` or `## Assumptions`
+  line, or rejects the phase. A rejected round is re-briefed with `review_cap` = the
+  passes already spent plus the board's cap. The final report carries the RFC-wide
+  table.
+
+Nothing to merge by hand.
+
 ### Changed — `/adr-review` shrinks the decision corpus
 
 A decision log grew by keeping every record it ever held
