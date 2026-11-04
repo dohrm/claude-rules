@@ -71,8 +71,9 @@ ignore red. On the second observed flake:
    human applies the skip.
 2. **Open an issue** linked from the skip annotation, naming the suspected source
    of nondeterminism.
-3. **Put a date on it.** If it is not fixed by then, delete the test. A permanently
-   skipped test is a lie in the suite.
+3. **Put a date on it.** If it is not fixed by then, the human deletes the test; an
+   agent that finds the date passed escalates. A permanently skipped test is a lie
+   in the suite.
 
 Retries are acceptable only at the e2e level, against a genuinely remote system,
 and the retry must be logged and counted — never silent.

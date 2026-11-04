@@ -246,9 +246,9 @@ pointing at nothing.
 Two installed assets let an agent settle what `agent/autonomy.md` reserves to the
 human. `/prd` wrote a capability's `Shipped` from the git log without asking; it now
 proposes it with its evidence and writes it once the human confirms.
-`testing/strategy.md` told the agent to quarantine a flaky test with a skip; a skipped
-behavioral test is a hard bypass, so the agent now escalates with both failing runs
-and the human applies the skip. Nothing to merge by hand.
+`testing/strategy.md` told the agent to quarantine a flaky test with a skip, then
+delete it past its date; both are hard bypasses, so the agent now escalates and the
+human applies the skip or the deletion. Nothing to merge by hand.
 
 ### Fixed — at L4, a phase merges on a current Tier 3 report that is not `CRITICAL`
 
