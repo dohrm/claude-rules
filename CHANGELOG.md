@@ -241,6 +241,15 @@ pointing at nothing.
 - Run `just status` once. Delete the listed state files in a commit, and run
   `just work-prune` in each tree.
 
+### Fixed — `Shipped` and flaky-test quarantine stay with the human
+
+Two installed assets let an agent settle what `agent/autonomy.md` reserves to the
+human. `/prd` wrote a capability's `Shipped` from the git log without asking; it now
+proposes it with its evidence and writes it once the human confirms.
+`testing/strategy.md` told the agent to quarantine a flaky test with a skip, then
+delete it past its date; both are hard bypasses, so the agent now escalates and the
+human applies the skip or the deletion. Nothing to merge by hand.
+
 ### Fixed — at L4, a phase merges on a current Tier 3 report that is not `CRITICAL`
 
 `agent/autonomy.md` § L4 and `/rfc` said a phase merges on "Tier 3 clean", which reads
