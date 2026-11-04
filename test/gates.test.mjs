@@ -1961,6 +1961,26 @@ test('publish-summary: a real diff renders a diffstat line, an unresolvable base
   })
 })
 
+test('publish-summary: the scope report is appended, and a base it cannot diff is declared', () => {
+  withTmpRepo((dir) => {
+    const [first] = commits(dir, 2)
+    write(dir, '.work/demo/rfc.md', '# RFC — demo\n\n- **Status**: implementing\n\n## Steps\n\n'
+      + '- [x] write it — touches `f1.txt`, `src/` → proof: `npm test`\n')
+
+    assert.equal(run(PUBLISH_SUMMARY, ['demo', 'COMPLETED', first], dir).status, 0)
+    let summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.ok(summary.indexOf('## Blocked on the human') < summary.indexOf(`## Scope report — \`${first}...HEAD\``),
+      'appended after the run summary, not instead of it')
+    assert.match(summary, /Declared by: \.work\/demo\/rfc\.md \(local RFC\)/)
+    assert.match(summary, /^\| `\.` \| \+1 \| -0 \| yes \|$/m)
+    assert.match(summary, /^\| `src` \| 0 \| 0 \| declared, untouched \|$/m)
+
+    assert.equal(run(PUBLISH_SUMMARY, ['demo', 'COMPLETED', 'origin/does-not-exist'], dir).status, 0)
+    summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    assert.match(summary, /## Scope report\n\n— not available: git cannot diff against `origin\/does-not-exist`/)
+  })
+})
+
 test('publish-summary: all three statuses are accepted', () => {
   withTmpRepo((dir) => {
     commits(dir)

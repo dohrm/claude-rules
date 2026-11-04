@@ -531,7 +531,8 @@ work-prune:
 # (the setup skills' completion/escalation outcomes, mapped straight onto the
 # three statuses below). Reads `.work/<slug>/loop.md`
 # (else `rfc.md`) plus what only git knows — branch, commits
-# ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
+# ahead of `{{base}}`, a one-line diffstat, the scope report below — into
+# `.work/<slug>/SUMMARY.md`, so
 # catching up on a parallel loop means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something
 # to summarize — `status` is validated here AND inside the script, because a
