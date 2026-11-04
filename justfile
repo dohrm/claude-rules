@@ -9,7 +9,7 @@ import 'kit/common/gate.just'
 
 # The library defaults to an installed copy and to origin/main as the trunk.
 kit  := "kit/common"
-base := "origin/next"
+base := "origin/main"
 
 # The local loop. CI runs the same suite (npm test) per job.
 check: test adr-check docs-check
