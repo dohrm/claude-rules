@@ -241,6 +241,16 @@ pointing at nothing.
 - Run `just status` once. Delete the listed state files in a commit, and run
   `just work-prune` in each tree.
 
+### Fixed — at L4, a phase merges on a current Tier 3 report that is not `CRITICAL`
+
+`agent/autonomy.md` § L4 and `/rfc` said a phase merges on "Tier 3 clean", which reads
+as the verdict `CLEAN` ([#90](https://github.com/dohrm/claude-rules/issues/90)). The
+gate (`review-guard`) and the loop block only on `CRITICAL`. Read the strict way, an
+orchestrator sent `WARNINGS` back round after round, and each review found a new edge
+case. The condition now names a Tier 3 report on the phase's head whose verdict is not
+`CRITICAL`; no report is not a pass. `WARNINGS` are logged with the merge and listed in
+the final report for the human. Nothing to merge by hand.
+
 ### Fixed — `remove <language>` takes that language's overlays with it
 
 `remove go` left `.claude/rules/hexagonal/go.md` (and the Cursor `.mdc`) installed and

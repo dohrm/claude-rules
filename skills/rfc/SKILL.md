@@ -169,16 +169,18 @@ a gate bypass) and on a hold.
    `rfc/<slug>` and puts its report in the description. To run phases in parallel,
    first write the dependency graph you rely on under `## Log`.
 4. **Judge the artifacts.** Re-run `just check` on the phase branch, read the diff and
-   the review report, wait for CI. If the board delegates phase merges, merge on gates
-   green, Tier 3 clean and Tier 4 green. Otherwise stop as at L3. A rejected phase goes
-   back to its executor, up to the board's cap.
+   the review report, wait for CI. If the board delegates phase merges, merge on the
+   condition of `agent/autonomy.md` § L4 and log the review's `WARNINGS` with the
+   merge. Otherwise stop as at L3. A rejected phase goes back to its executor, up to
+   the board's cap.
 5. **Settle what the board covers** (a hold with a command, a `changed:` decision), and
    log each one with its proof. Stop on everything else: that is the minimal-risk
    condition.
 6. **Hand back one PR**, `rfc/<slug>` → `**Base branch**`. Its description is the final
    report: every delegated decision with its proof and reversibility, the assumptions,
-   the `changed:` lines, each hold with its check output, and the divergences from the
-   plan. Record it under `## Blocked on the human` and stop. The human merges it.
+   the `changed:` lines, each hold with its check output, each phase's Tier 3
+   `WARNINGS`, and the divergences from the plan. Record it under `## Blocked on the
+   human` and stop. The human merges it.
 
 **Briefed as an L4 executor**, you implement one phase and nothing else: never edit
 `rfc.md`, never merge, and never take the RFC. Your report is your PR's description.
