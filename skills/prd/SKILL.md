@@ -58,9 +58,10 @@ the whole product, and, once work starts, where the project actually stands.
 **Status**: `Not started` / `In progress` / `Shipped <date>`. Set by re-running
 `/prd`, which reconciles `Not started` / `In progress` against `.work/<slug>/` and
 the git log rather than asking — the plan and the code already know. `Shipped` is
-a hard checkpoint (`agent/autonomy.md`): `/prd` asks for it with its evidence before
-writing the index, and writes it only once the human confirms. This is the one place that keeps
-saying "done" after `.work/<slug>/` is gone (`product/documents.md`).
+a hard checkpoint (`agent/autonomy.md`): `/prd` proposes it with its evidence
+before writing the index, and writes it only once the human confirms. This is the
+one place that keeps saying "done" after `.work/<slug>/` is gone
+(`product/documents.md`).
 
 ## Success Criteria
 
