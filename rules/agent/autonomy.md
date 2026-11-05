@@ -143,9 +143,9 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   the phase branch's head whose verdict is not `CRITICAL`, and Tier 4 green in CI. No
   report is not a pass (§ Detect, never assume). `WARNINGS` do not block: log them with
   the merge, for the final report, never into another fix round. The executor's report
-  is a claim. `just scope-report` on the phase branch names the packages its steps did
-  not declare: each one is justified by a `changed:` or `## Assumptions` line, or the
-  phase is rejected or escalated. A rejected round is re-briefed with `review_cap` =
+  is a claim. `just base=origin/rfc/<slug> scope-report` on the phase branch names the
+  packages its steps did not declare: each one is justified by a `changed:` or
+  `## Assumptions` line, or the phase is rejected or escalated. A rejected round is re-briefed with `review_cap` =
   the passes already spent plus the board's cap.
 - **It never writes in an executor's tree** while that executor runs.
 

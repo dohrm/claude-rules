@@ -185,7 +185,7 @@ a gate bypass) and on a hold.
    report: every delegated decision with its proof and reversibility, the assumptions,
    the `changed:` lines, each hold with its check output, each phase's Tier 3
    `WARNINGS`, the divergences from the plan, and the RFC-wide scope report
-   (`just base=<Base branch> scope-report` on `rfc/<slug>`). Record it under
+   (`just base=origin/<Base branch> scope-report` on `rfc/<slug>`). Record it under
    `## Blocked on the human` and stop. The human merges it.
 
 **Briefed as an L4 executor**, you implement one phase and nothing else: never edit

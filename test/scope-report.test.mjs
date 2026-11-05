@@ -85,6 +85,20 @@ test('scope-report: no RFC still reports the packages, with nothing declared', (
   })
 })
 
+test('scope-report: a defect diagnosis declares nothing, so nothing reads as overflow', () => {
+  withTmpRepo((dir) => {
+    repo(dir, 'fix/x')
+    write(dir, '.work/x/defect.md', '# Defect — X\n\n- **Branch**: fix/x\n\n## Root cause\n\n`src/a.rs` drops the error.\n')
+    write(dir, 'src/a.rs', 'x\n')
+    commit(dir)
+    const r = run(dir, 'trunk')
+    assert.equal(r.status, 0, r.err)
+    assert.match(r.out, /\.work\/x\/defect\.md is a defect diagnosis: no steps declare/)
+    assert.equal(row(r.out, 'src'), '| `src` | +1 | -0 | — |')
+    assert.doesNotMatch(r.out, /overflow/)
+  })
+})
+
 test('scope-report: a ticket pointer with no cache is declared, never read as none', () => {
   withTmpRepo((dir) => {
     repo(dir)
@@ -130,6 +144,36 @@ test('scope-report: symbols and patterns in touches are ignored, only paths decl
     assert.match(r.out, /1 package in the steps' `touches`/)
     assert.equal(row(r.out, 'src'), '| `src` | +1 | -0 | yes |')
     for (const ghost of ['*', 'kit', 'justfile', 'base']) assert.equal(row(r.out, ghost), undefined, ghost)
+  })
+})
+
+test('scope-report: a dotted symbol is not a path — only an existing root file declares without a `/`', () => {
+  withTmpRepo((dir) => {
+    repo(dir)
+    write(dir, '.work/x/rfc.md', RFC('- [ ] a — touches `err.message`, `self.state`, `v1.2`, `README.md`, `src/a.rs`'))
+    write(dir, 'src/a.rs', 'x\n')
+    write(dir, 'README.md', 'y\n')
+    write(dir, 'lib/b.rs', 'x\n')
+    commit(dir)
+    const r = run(dir, 'trunk')
+    assert.equal(r.status, 0, r.err)
+    assert.match(r.out, /2 packages in the steps' `touches`/, '`.` (README.md) and `src`, nothing else')
+    assert.equal(row(r.out, '.'), '| `.` | +1 | -1 | yes |', 'a root file that exists declares')
+    assert.match(row(r.out, 'lib'), /overflow/)
+    for (const ghost of ['err.message', 'self.state', 'v1.2']) assert.equal(row(r.out, ghost), undefined, ghost)
+  })
+})
+
+test('scope-report: a dotted symbol cannot hide a root-file overflow', () => {
+  withTmpRepo((dir) => {
+    repo(dir)
+    write(dir, '.work/x/rfc.md', RFC('- [ ] a — touches `src/a.rs`, reads `err.message`'))
+    write(dir, 'src/a.rs', 'x\n')
+    write(dir, 'CLAUDE.md', 'x\n')
+    commit(dir)
+    const r = run(dir, 'trunk')
+    assert.equal(r.status, 0, r.err)
+    assert.match(row(r.out, '.'), /\*\*no — overflow\*\*/)
   })
 })
 
