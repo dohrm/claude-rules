@@ -90,6 +90,12 @@ review_paths   := review_exclude + " " + review_secrets
 work_slug   := ""
 incremental := "1"
 
+# `review_cap` — review passes allowed on this branch, counted in
+# `.work/<slug>/.review_passes`; past it `code-review` refuses and says to escalate.
+# Empty (the default) is no cap. An L4 brief passes the board's cap
+# (rules/agent/autonomy.md § L4).
+review_cap  := ""
+
 diff_since  := "node " + kit + "/diff-since.mjs"
 since_scope := "--slug " + quote(work_slug) + " --incremental " + quote(incremental)
 review_from := diff_since + " review --base " + quote(base) + " " + since_scope
@@ -310,6 +316,7 @@ code-review reviewer=reviewer:
     git diff "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} >> {{review_in}}
     git -c core.quotePath=false diff --name-only -z "$({{review_from}} 2>/dev/null)"...HEAD -- . {{review_paths}} > .work/review-files.txt
     n=$(wc -c < {{review_in}}); [ "$n" -le {{quote(review_max_bytes)}} ] || { printf {{quote(review_too_large)}} "$n" {{quote(review_max_bytes)}} >&2; exit 2; }
+    {{diff_since}} review --count-pass --cap {{quote(review_cap)}} {{since_scope}}
     just review-{{reviewer}}
     rc=0; node {{kit}}/review-guard.mjs {{review_out}} --require-report --expect-files .work/review-files.txt || rc=$?; if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then mv {{review_out}} .work/review-incomplete.md; exit 1; fi; mv {{review_out}} .work/review-report.md || exit 1; [ "$rc" -eq 0 ]
     node {{kit}}/review-guard.mjs --require-report
@@ -524,7 +531,8 @@ work-prune:
 # (the setup skills' completion/escalation outcomes, mapped straight onto the
 # three statuses below). Reads `.work/<slug>/loop.md`
 # (else `rfc.md`) plus what only git knows — branch, commits
-# ahead of `{{base}}`, a one-line diffstat — into `.work/<slug>/SUMMARY.md`, so
+# ahead of `{{base}}`, a one-line diffstat, the scope report below — into
+# `.work/<slug>/SUMMARY.md`, so
 # catching up on a parallel loop means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something
 # to summarize — `status` is validated here AND inside the script, because a
@@ -532,6 +540,18 @@ work-prune:
 publish-summary slug status base=base:
     case '{{status}}' in COMPLETED|BLOCKED|BUDGET_EXHAUSTED) ;; *) echo "unknown status: {{status}}" >&2; exit 2 ;; esac
     node {{kit}}/publish-summary.mjs {{slug}} {{status}} {{base}}
+
+# ── Scope report (indicator, never a gate) ──────────────────────────────────
+# Per package — the nearest manifest below the root, else the top-level directory —
+# the lines this branch added and removed against `{{base}}`, and whether the RFC's
+# steps declared that package in their `touches`: an undeclared one is marked
+# overflow, a declared one the diff never reached is listed as untouched. On an L4
+# phase branch only that phase's steps declare. It reads the RFC the way the review
+# does (review-context.mjs). Always exits 0 once there is a diff to report: it answers
+# "where did this go beyond its plan?", and the human or the orchestrator judges why.
+# At L4: `just base=origin/rfc/<slug> scope-report` (skills/rfc § L4).
+scope-report:
+    @node {{kit}}/scope-report.mjs --slug {{quote(work_slug)}} {{quote(base)}}
 
 # ── CI: the base a gate job compares against ─────────────────────────────────
 # `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),

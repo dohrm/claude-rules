@@ -103,7 +103,7 @@ export function resolveSlug({ slug = '', cwd = '.' } = {}) {
 // so must a ticket RFC's cached `review-context.md` (it holds the ticket's comments), so
 // the patterns are written where they hold in both cases, and only what is missing is
 // appended — a `.gitignore` the repo already owns is never rewritten.
-const PATTERNS = ['*/.latest_review', '*/.latest_mutate', '*/review-context.md']
+const PATTERNS = ['*/.latest_review', '*/.latest_mutate', '*/.review_passes', '*/review-context.md']
 export function ensureWorkIgnored(cwd = '.') {
   const file = join(cwd, '.work', '.gitignore')
   const have = existsSync(file) ? readFileSync(file, 'utf8') : null

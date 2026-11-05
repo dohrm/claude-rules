@@ -110,7 +110,11 @@ prerequisite and log one `ODD:` line per check:
 - every delegated hold has a check command;
 - every executor on the board is installed and answers;
 - `.work/<slug>/rfc.md` is committed on `rfc/<slug>`, so every phase tree has it;
-- the caps are written.
+- every cap is written — the budget per executor, review passes per phase, rejected
+  rounds per phase. An empty one fails;
+- every phase that rewrites state or touches concurrency, given to an executor model
+  other than the orchestrator's, has a `## Model` covering its steps. Write it first,
+  or keep that phase on the orchestrator's model.
 
 One failure → rewrite `**Autonomy**` to L3, log `dropped to L3: <why>`, and go on at L3.
 
@@ -127,13 +131,22 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
 - **It delegates only what it received.** An executor runs at L3 at most, picked for
   its model, and merges nothing. Its escalation goes to the orchestrator, which settles
   it if the board covers it and escalates to the human otherwise.
+- **A review finding is not a requirement.** Once its phase reaches the board's
+  review-pass cap, the executor escalates to the orchestrator instead of running
+  another pass; the brief passes the cap as `review_cap`, and `just code-review`
+  refuses past it. A review-driven fix that adds a persisted event, a command, an
+  aggregate state, a worker or a lease the RFC does not name is a scope escalation,
+  whatever the review says: the executor escalates it and does not build it.
 - **The brief is the RFC and the phase number**, never a summary rewritten from it.
 - **It judges artifacts, not accounts.** It re-runs `just check` on the phase branch,
   reads the diff and the review report, and merges on gates green, a Tier 3 report on
   the phase branch's head whose verdict is not `CRITICAL`, and Tier 4 green in CI. No
   report is not a pass (§ Detect, never assume). `WARNINGS` do not block: log them with
   the merge, for the final report, never into another fix round. The executor's report
-  is a claim.
+  is a claim. `just scope-report` on the phase branch names the packages its steps did
+  not declare: each one is justified by a `changed:` or `## Assumptions` line, or the
+  phase is rejected or escalated. A rejected round is re-briefed with `review_cap` =
+  the passes already spent plus the board's cap.
 - **It never writes in an executor's tree** while that executor runs.
 
 Reviewers are unrestricted: a stronger or different model reviewing is where
@@ -142,7 +155,7 @@ independence is cheapest.
 **The human merges the RFC.** The `rfc/<slug>` → base PR carries the final report:
 every delegated decision with its proof and reversibility, the assumptions, the
 `changed:` lines, each hold with its check output, each phase's Tier 3 `WARNINGS`,
-and where the run diverged from the plan. A hold that needs production is a merge
+the RFC-wide scope report, and where the run diverged from the plan. A hold that needs production is a merge
 point: the human merges what precedes it, and the run resumes from the new base once
 the hold's check passes.
 

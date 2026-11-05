@@ -165,26 +165,35 @@ a gate bypass) and on a hold.
    tree. Pull `rfc/<slug>` first, then cut the tree from yours
    (`just tree <slug>-p<n> phase/<slug>/<n>`), so the phase starts after the merged ones.
    The brief is the path of this RFC, the phase number, the executor's level (L3 at
-   most), the gate base (`just base=origin/rfc/<slug> code-review`), and this clause. The executor opens its PR against
+   most), the gate base and the board's review-pass cap
+   (`just base=origin/rfc/<slug> review_cap=<n> code-review`), and this clause. The executor opens its PR against
    `rfc/<slug>` and puts its report in the description. To run phases in parallel,
    first write the dependency graph you rely on under `## Log`.
 4. **Judge the artifacts.** Re-run `just check` on the phase branch, read the diff and
-   the review report, wait for CI. If the board delegates phase merges, merge on the
-   condition of `agent/autonomy.md` § L4 and log the review's `WARNINGS` with the
-   merge. Otherwise stop as at L3. A rejected phase goes back to its executor, up to
-   the board's cap.
+   the review report, wait for CI. Run `just base=origin/rfc/<slug> scope-report` on
+   the phase branch: log each package it marks as overflow with the `changed:` or
+   `## Assumptions` line that justifies it, else reject the phase or escalate. If the
+   board delegates phase merges, merge on the condition of `agent/autonomy.md` § L4
+   and log the review's `WARNINGS` with the merge. Otherwise stop as at L3. A rejected
+   phase goes back to its executor, up to the board's cap, re-briefed with
+   `review_cap` = the passes already spent plus the board's cap: a branch's count
+   never resets.
 5. **Settle what the board covers** (a hold with a command, a `changed:` decision), and
    log each one with its proof. Stop on everything else: that is the minimal-risk
    condition.
 6. **Hand back one PR**, `rfc/<slug>` → `**Base branch**`. Its description is the final
    report: every delegated decision with its proof and reversibility, the assumptions,
    the `changed:` lines, each hold with its check output, each phase's Tier 3
-   `WARNINGS`, and the divergences from the plan. Record it under `## Blocked on the
-   human` and stop. The human merges it.
+   `WARNINGS`, the divergences from the plan, and the RFC-wide scope report
+   (`just base=<Base branch> scope-report` on `rfc/<slug>`). Record it under
+   `## Blocked on the human` and stop. The human merges it.
 
 **Briefed as an L4 executor**, you implement one phase and nothing else: never edit
 `rfc.md`, never merge, and never take the RFC. Your report is your PR's description.
-Escalate in it, then stop.
+Escalate in it, then stop. Run `code-review` with the `review_cap` you were given, and
+escalate when it refuses instead of looking for another pass. A review-driven fix that
+adds a persisted event, a command, an aggregate state, a worker or a lease the RFC does
+not name is a scope escalation, not a fix, whatever the review says.
 
 **At a hold**, stop with the RFC still `implementing` and yours: record the hold and
 its check under `## Blocked on the human`. `/rfc implement` resumes it: run the
@@ -245,7 +254,7 @@ carry it onto the base branch; the last one takes it away. A round after the han
 
 - Delegated: <phase merges into `rfc/<slug>` | holds with a command | `changed:` decisions>
 - Executors: <coding agent · model, one per line>
-- Caps: <token or wall-time budget per executor; rejected rounds per phase>
+- Caps: <token or wall-time budget per executor>; <review passes per phase, default 3>; <rejected rounds per phase> — all three required
 
 ## Steps
 

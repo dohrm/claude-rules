@@ -157,6 +157,51 @@ Four behaviours change:
   `--force` deletes it anyway. An edited Codex rule that `remove` must keep and
   rescope stops it even under `--force`: restore it with `update --force` first.
 
+### Added — at L4, review-driven drift has a stop
+
+One L4 executor ran `code-review` 17 times on a phase and, to clear one finding, built
+a reservation mechanism the RFC never named
+([#87](https://github.com/dohrm/claude-rules/issues/87)). The rules asked it to stop;
+nothing made it.
+
+- **`review_cap`** (`kit/common/gate.just`, empty by default). When set, `code-review`
+  counts its passes per branch in `.work/<slug>/.review_passes` and, once the cap is
+  spent, refuses before dispatch with "escalate to the orchestrator". Empty keeps
+  today's behavior. `.work/.gitignore` gains `*/.review_passes` on the next run.
+- **`agent/autonomy.md` § L4.** An executor escalates once its phase reaches the
+  board's review-pass cap. A review-driven fix that adds a persisted event, a command,
+  an aggregate state, a worker or a lease the RFC does not name is a scope escalation.
+  Two launch checks fail the domain: an empty cap (budget, review passes, rejected
+  rounds), and a phase that rewrites state or touches concurrency given to a model
+  other than the orchestrator's without a `## Model` covering it.
+- **`/rfc`.** The L4 brief passes `review_cap=<n>` to `code-review`; the board's
+  `Caps` line names all three caps, with 3 review passes per phase as the default.
+
+Nothing to merge by hand. An orchestrator on an older `/rfc` keeps briefing without
+`review_cap`, so its executors run uncapped until it updates.
+
+### Added — `just scope-report`: where a branch went beyond its plan
+
+Reviewing an L4 PR, the human checks which packages it touched and how much, against
+what the issue named ([#87](https://github.com/dohrm/claude-rules/issues/87)). That is
+now one command.
+
+- **`just scope-report`** (`kit/common/scope-report.mjs`). Per package — the nearest
+  `Cargo.toml`, `go.mod`, `package.json`, `pyproject.toml`, `*.csproj` or
+  `project.godot` below the root, else the top-level directory — the lines added and
+  removed against `base`, and whether the RFC's steps declared it in their `touches`:
+  `yes`, `no — overflow`, or `declared, untouched`. On a `phase/<slug>/<n>` branch only
+  phase `<n>` declares. It reads the RFC as the review does (local `rfc.md`, else the
+  ticket cache). An indicator: it exits 0 whenever there is a diff to report.
+- **`publish-summary`** appends the same table to `SUMMARY.md`.
+- **`/rfc` and `agent/autonomy.md` § L4.** The orchestrator runs it on each phase
+  branch and justifies every overflow package from a `changed:` or `## Assumptions`
+  line, or rejects the phase. A rejected round is re-briefed with `review_cap` = the
+  passes already spent plus the board's cap. The final report carries the RFC-wide
+  table.
+
+Nothing to merge by hand.
+
 ### Changed — `/adr-review` shrinks the decision corpus
 
 A decision log grew by keeping every record it ever held

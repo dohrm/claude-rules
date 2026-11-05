@@ -39,7 +39,7 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
 `docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs`,
-`review-context.mjs`, `ocr-candidates.mjs`, `publish-summary.mjs`, `landed.mjs` and `work-stale.mjs` all run on it (that's the reason they're Node rather
+`review-context.mjs`, `ocr-candidates.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `landed.mjs` and `work-stale.mjs` all run on it (that's the reason they're Node rather
 than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
 shell out to `npx`.
 
@@ -47,13 +47,13 @@ shell out to `npx`.
 
 | File | Holds |
 |---|---|
-| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `work-prune`, `publish-summary`, `dup-check`, `adr-check`, `adr-retired`, `docs-check`, `rules-check`, `ci-base`, `base`, `worktree_root` |
+| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `work-prune`, `publish-summary`, `scope-report`, `dup-check`, `adr-check`, `adr-retired`, `docs-check`, `rules-check`, `ci-base`, `base`, `worktree_root` |
 | `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-4 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
-`worktree-status.mjs`, `publish-summary.mjs`, `diff-since.mjs`, `review-context.mjs`,
+`worktree-status.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `diff-since.mjs`, `review-context.mjs`,
 `work-slug.mjs`, `landed.mjs`, `work-stale.mjs`, `ocr-candidates.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
@@ -98,6 +98,30 @@ marker lands next to its RFC; else, for an L4 phase branch `phase/<slug>/<n>`, t
 `<slug>` when `.work/<slug>/rfc.md` exists; else the branch name (`work-slug.mjs`). Both files are per
 developer — `.work/.gitignore` is kept carrying the patterns, so they stay private even
 in a repo that commits its `.work/` RFCs.
+
+## A cap on review passes
+
+`just review_cap=<n> code-review` allows `<n>` review passes on the current branch,
+counted in `.work/<slug>/.review_passes` (per developer, gitignored like the markers).
+Past them it refuses before calling the reviewer and says to escalate. A run refused
+for size, or for having nothing new, does not count; another branch in the same tree
+starts from zero. Empty, the default, is no cap. An L4 orchestrator passes the
+delegation board's cap in each executor's brief (`rules/agent/autonomy.md` § L4).
+
+## Scope report
+
+`just scope-report` prints, per package, the lines the branch added and removed
+against `base` and whether the RFC's steps declared that package in their `touches`.
+A package is the nearest directory below the root holding a manifest (`Cargo.toml`,
+`go.mod`, `package.json`, `pyproject.toml`, `*.csproj`, `project.godot`), else the
+top-level directory; a root file is `.`. Declared paths are the backticked tokens of a
+step's `touches` that contain a `/` or a file extension — symbols and glob patterns are
+ignored. On an L4 phase branch `phase/<slug>/<n>`, only phase `<n>`'s steps declare.
+`.work/` is never counted. The RFC is read like the review reads it (local `rfc.md`,
+else the ticket cache `review-context.md`); with none, the table still lists the
+packages, with nothing declared. Rows read `yes`, `no — overflow`, or
+`declared, untouched`. An indicator, never a gate: it exits 0 whenever git can diff
+against `base`. `publish-summary` appends the same table to `SUMMARY.md`.
 
 ## What the reviewer never sees
 
