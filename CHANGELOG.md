@@ -286,6 +286,26 @@ pointing at nothing.
 - Run `just status` once. Delete the listed state files in a commit, and run
   `just work-prune` in each tree.
 
+### Fixed — `scope-report` stops inventing and hiding overflow
+
+Four rough edges of `just scope-report`, left as review warnings on
+[#98](https://github.com/dohrm/claude-rules/pull/98).
+
+- **The L4 command names its base.** `agent/autonomy.md` § L4 now says
+  `just base=origin/rfc/<slug> scope-report`, as `/rfc` does: against the default
+  `origin/main`, phases already merged into `rfc/<slug>` read as overflow. `/rfc`'s
+  final report uses `origin/<Base branch>`.
+- **A `defect.md` frame declares nothing.** A diagnosis has no `## Steps`, so every
+  package read as overflow. It now reports like a branch with no RFC: the table, no
+  verdict.
+- **A dotted symbol is no longer a path.** `err.message`, `self.state` or `v1.2` in a
+  step's `touches` declared the root package (or a fake one) and hid real overflow. A
+  token without a `/` now declares only when it names a file at the repo root.
+- **`publish-summary` keeps one line** when the scope report fails:
+  `not available: <first stderr line>`, never the whole stack trace.
+
+Nothing to merge by hand.
+
 ### Fixed — `Shipped` and flaky-test quarantine stay with the human
 
 Two installed assets let an agent settle what `agent/autonomy.md` reserves to the

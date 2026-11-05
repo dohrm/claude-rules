@@ -1981,6 +1981,21 @@ test('publish-summary: the scope report is appended, and a base it cannot diff i
   })
 })
 
+test('publish-summary: a crashed scope report is one line, never its whole stderr', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    write(dir, '.work/demo/rfc.md', '# RFC — demo\n\n- **Status**: implementing\n')
+    // publish-summary runs the scope-report.mjs that ships beside it: a copy beside a
+    // script that throws gets a multi-line stack trace on stderr.
+    write(dir, 'kit/publish-summary.mjs', readFileSync(PUBLISH_SUMMARY, 'utf8'))
+    write(dir, 'kit/scope-report.mjs', "throw new Error('boom')\n")
+    assert.equal(run(join(dir, 'kit/publish-summary.mjs'), ['demo', 'COMPLETED', 'HEAD'], dir).status, 0)
+    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
+    const section = summary.slice(summary.indexOf('## Scope report'))
+    assert.match(section, /^## Scope report\n\n— not available: [^\n]+ —\n$/, section)
+  })
+})
+
 test('publish-summary: all three statuses are accepted', () => {
   withTmpRepo((dir) => {
     commits(dir)

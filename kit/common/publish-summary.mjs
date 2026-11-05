@@ -119,7 +119,8 @@ function scopeReport() {
     return execFileSync(process.execPath, [script, '--slug', slug, base],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (err) {
-    const why = String(err.stderr ?? '').trim().replace(/^scope-report: /, '') || err.message
+    // One line: a crashed child's stack trace belongs in its own stderr, not in the summary.
+    const why = String(err.stderr ?? '').trim().split('\n')[0].replace(/^scope-report: /, '') || err.message
     return `## Scope report\n\n— not available: ${why} —\n`
   }
 }
