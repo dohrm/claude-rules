@@ -914,7 +914,7 @@ test('review-context --brief: a Stakes line outside the header never reaches the
   withTmpRepo((dir) => {
     commits(dir, 1)
     git(dir, 'checkout', '-q', '-b', 'work')
-    // No header Stakes (so production); a fenced `# ` line must not reopen the header.
+    // No header Stakes (so production); a `# ` line that is not a title must not reopen it.
     write(dir, '.work/x/rfc.md', '# RFC — Y\n\n- **Status**: implementing\n- **Branch**: work\n\n'
       + '## Goal\n\nGOAL_TEXT\n\n## Steps\n\n```bash\n# run the migration\n```\n\n'
       + '- **Stakes**: demo: QUOTED_STAKES\n')
