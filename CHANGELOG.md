@@ -12,6 +12,22 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### `/rfc`: the model covers the lifecycle and access, the header declares the stakes
+
+Measured on a four-phase RFC run at L4 with a Sonnet executor and a Codex reviewer:
+2, 8, 13 and 5 review passes. Every burst of `CRITICAL` was one dimension of state the
+`## Model` did not write — who may read and act, then a claimed value's lifecycle, then
+an account already on the machine, a kept home, a reused uid. Once written, that family
+of findings stopped. The executor never broke a written decision. The reviewer, given
+no stakes, judged demo recipes as production security.
+
+- **`## Model` is written per resource across its lifecycle**: created, already there,
+  removed, reused after removal — each kept or refused.
+- **`### Access`** when the change decides who may do what: closed caller list, read
+  surfaces as an inventory, actions, where the privilege is spent.
+- **`**Stakes**: demo | internal | production`** in the RFC header, read by the review.
+- Hand-merge: none; existing RFCs keep working, the new header is optional.
+
 ### Breaking — `<tech>-check` audits only a changed lock
 
 A vulnerability audit reads an advisory database that moves on its own schedule, not

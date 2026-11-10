@@ -112,6 +112,23 @@ keeps, and the states it **refuses** rather than handles. A review finding that 
 handle a refused state is answered by the refusal, not by new code. Without the model,
 each review round discovers one more combination of old and new state.
 
+Write the model per resource the change touches, across its whole lifecycle: created by
+this change, **already there before it** (made by someone or something else), removed,
+and **reused after removal** (a name, an id, a path freed then taken again). Each stage
+is kept or refused, never left to the code. A model that covers creation and removal
+only is the one a review spends its passes completing.
+
+**When the change decides who may do what** — a role, a visibility, an owner, a
+privilege spent on a machine — add `### Access` to the model: the callers as a closed
+list, every read surface the code exposes (an inventory, not examples), what each caller
+may do, and where the privilege is spent, the one invariant the checks derive from. A
+caller or a surface missing from it is a gap in the RFC, not a case for the executor to
+improvise.
+
+**Declare the stakes** in the header: `demo`, `internal` or `production`. The review
+reads the RFC, and without it judges a demo recipe as a production security component.
+The stakes calibrate severity; they never waive what the model refuses.
+
 **Holds** are pauses the change itself needs — a migration that must finish, a
 deploy, a date, an external sign-off — before the next phase may start (a dismantling
 cleans the code only after the migration). Write each as a `⏸ hold` step with the
@@ -223,6 +240,7 @@ carry it onto the base branch; the last one takes it away. A round after the han
 - **Stopping condition**: `<command, test or observable state>` — the end of the whole request
 - **Serves**: <PRD capability / acceptance criterion, if any>
 - **Constrained by**: <ADR-NNNN § section, shared decision — only those that bind>
+- **Stakes**: demo | internal | production — how hard the review judges a defect
 
 ## Request
 
@@ -247,6 +265,16 @@ carry it onto the base branch; the last one takes it away. A round after the han
 
 - Keeps: <invariant, e.g. "only what the inventory records is ever deleted">
 - Refuses: <state the change rejects with an error instead of handling>
+- Lifecycle, per resource: <created · already there · removed · reused after removal — each kept or refused>
+
+### Access
+
+<!-- Only when the change decides who may do what. -->
+
+- Callers: <closed list>
+- Read surfaces: <every route, list, total, error message that can show the resource>
+- Actions: <action → callers allowed>
+- Where the privilege is spent: <the one invariant every check derives from>
 
 ## Delegation board
 
