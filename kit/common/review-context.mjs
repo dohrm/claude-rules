@@ -161,11 +161,15 @@ function brief(text, max) {
   const title = lines.find((l) => /^#\s+RFC\b/.test(l))
   if (title) out.push(title, '')
   // Without them, a second reviewer judges a demo path as production. Only a header's
-  // line counts — between a `# ` title and the first `## ` — never one quoted in a
-  // section or a ticket comment, which the human never confirmed at `ready`.
+  // line counts — the section's start, or a `# RFC` title (the ticket body's, after its
+  // pointer), up to the next `## ` — never one quoted in a section, a code fence or a
+  // ticket comment, which the human never confirmed at `ready`.
   let header = true
+  let fence = false
   const stakes = lines.find((l) => {
-    if (/^#\s/.test(l)) header = true
+    if (/^\s*(```|~~~)/.test(l)) fence = !fence
+    if (fence) return false
+    if (/^#\s+RFC\b/.test(l)) header = true
     else if (/^##\s/.test(l)) header = false
     return header && /^[ \t]*-[ \t]*\*\*Stakes\*\*:/.test(l)
   })

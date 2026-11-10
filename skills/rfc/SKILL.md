@@ -230,7 +230,7 @@ executor's report), by its `**Model**` line: `budget:
 <finding> — <the model line, or none>` when the RFC already decides it, `spec-gap:
 <finding> — <what the RFC missed>` when it is `gap`. A spec gap is a hard checkpoint at
 every level: record it under `## Blocked on the human` and stop; once answered, write
-the line into `## Model`, then fix. The final report counts both: spec gaps per RFC are
+the line into `## Model` or its `### Access`, then fix. The final report counts both: spec gaps per RFC are
 how `/rfc` is measured.
 
 Set `done` when the last phase is merged and the stopping condition passes on a

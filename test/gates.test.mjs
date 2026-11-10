@@ -910,6 +910,20 @@ test('review-context --brief: the frame OCR can take — title, Stakes, Goal, de
   })
 })
 
+test('review-context --brief: a Stakes line outside the header never reaches the brief', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    // No header Stakes (so production); a fenced `# ` line must not reopen the header.
+    write(dir, '.work/x/rfc.md', '# RFC — Y\n\n- **Status**: implementing\n- **Branch**: work\n\n'
+      + '## Goal\n\nGOAL_TEXT\n\n## Steps\n\n```bash\n# run the migration\n```\n\n'
+      + '- **Stakes**: demo: QUOTED_STAKES\n')
+    const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
+    assert.ok(out.includes('GOAL_TEXT'), out)
+    assert.ok(!out.includes('QUOTED_STAKES'), out)
+  })
+})
+
 test('review-context: work_slug overrides the Branch header', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)
