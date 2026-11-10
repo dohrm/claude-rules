@@ -129,7 +129,7 @@ improvise.
 `production; demo: recipes/sudo-user/**`. The review reads them, and without them judges
 a demo recipe as a production security component. They calibrate severity; they never
 waive what the model keeps or refuses. They lower a gate, so the human confirms them
-with `ready`.
+with `ready`, and changing them afterwards is a hard checkpoint.
 
 **Holds** are pauses the change itself needs — a migration that must finish, a
 deploy, a date, an external sign-off — before the next phase may start (a dismantling
@@ -228,9 +228,10 @@ A discovery that changes a local decision is recorded as `changed: <decision> �
 **Log each 🔴 a review reports** under `## Log` (at L4, the orchestrator does, from the
 executor's report), by its `**Model**` line: `budget:
 <finding> — <the model line, or none>` when the RFC already decides it, `spec-gap:
-<finding> — <what the RFC missed>` when it is `gap`. Close a spec gap in the RFC before
-the code: write the missing line into `## Model` (under L2+, also in `## Assumptions`),
-then fix. The final report counts both: spec gaps per RFC are how `/rfc` is measured.
+<finding> — <what the RFC missed>` when it is `gap`. A spec gap is a hard checkpoint at
+every level: record it under `## Blocked on the human` and stop; once answered, write
+the line into `## Model`, then fix. The final report counts both: spec gaps per RFC are
+how `/rfc` is measured.
 
 Set `done` when the last phase is merged and the stopping condition passes on a
 fresh run. At L4, the run ends at the hand-back. The human's merge of `rfc/<slug>`

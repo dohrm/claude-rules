@@ -160,8 +160,15 @@ function brief(text, max) {
   const out = []
   const title = lines.find((l) => /^#\s+RFC\b/.test(l))
   if (title) out.push(title, '')
-  // Without them, a second reviewer judges a demo path as production.
-  const stakes = lines.find((l) => /^[ \t]*-[ \t]*\*\*Stakes\*\*:/.test(l))
+  // Without them, a second reviewer judges a demo path as production. Only a header's
+  // line counts — between a `# ` title and the first `## ` — never one quoted in a
+  // section or a ticket comment, which the human never confirmed at `ready`.
+  let header = true
+  const stakes = lines.find((l) => {
+    if (/^#\s/.test(l)) header = true
+    else if (/^##\s/.test(l)) header = false
+    return header && /^[ \t]*-[ \t]*\*\*Stakes\*\*:/.test(l)
+  })
   if (stakes) out.push(stakes, '')
   const seen = new Set()
   let keep = false

@@ -73,7 +73,8 @@ at the next one. A skill that runs another passes its resolved level as the argu
 | **L4 — orchestrated** | the hard checkpoints the RFC's delegation board does not delegate, and the final merge | L3, plus the checkpoints on the board, inside a domain checked at launch (§ L4) |
 
 **Hard checkpoints — identical at every level:** an ADR status (`agent/decisions.md`);
-a new acceptance criterion, User Story or scope change; an RFC's `ready`, a
+a new acceptance criterion, User Story or scope change; a spec gap (a review 🔴 whose
+fix decides what the RFC does not); an RFC's `**Stakes**` changed after `ready`; an RFC's `ready`, a
 capability's `Shipped` and the merge; a hard bypass (below); a tree that contradicts the state file.
 At L4 only, an RFC's delegation board may take a few of them off this list (§ L4).
 
@@ -99,7 +100,7 @@ L4 as L3.
 | a phase merge into the RFC's integration branch `rfc/<slug>` | an ADR status; a new acceptance criterion, User Story or scope change |
 | a hold whose check is a command (a date included) | a hold that needs production, or someone else's sign-off |
 | a `changed:` local decision | a hard bypass; the merge of `rfc/<slug>` into the base branch; `Shipped` |
-| review passes from the board's pass envelope, while every open 🔴 is one the RFC decides | a spec gap: a 🔴 whose fix decides what the RFC does not |
+| review passes from the board's pass envelope, while every open 🔴 is one the RFC decides | a spec gap; a change to `**Stakes**` |
 
 **The domain is checked at launch, never assumed.** Before the first phase, prove each
 prerequisite and log one `ODD:` line per check:
@@ -141,6 +142,7 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   written, and asking the human only buys a rubber stamp. A `**Model**: gap` is a
   `spec-gap:`, escalated by the executor without fixing it and by the orchestrator to the
   human, whatever the envelope holds: improvising it is how an executor invents policy.
+  An envelope spent to 0 is a cap reached.
   A review-driven fix that adds a persisted event, a command, an
   aggregate state, a worker or a lease the RFC does not name is a scope escalation,
   whatever the review says: the executor escalates it and does not build it.

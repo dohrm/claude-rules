@@ -35,7 +35,8 @@ no stakes, judged demo recipes as production security.
   them. Spec gaps per RFC are how `/rfc` is measured.
 - **L4 pass envelope** (`agent/autonomy.md` § L4): the board may declare extra review
   passes for the whole RFC. The orchestrator spends them alone while every open 🔴 is
-  `budget:`; a `spec-gap:` goes to the human at once. The same run spent ten human turns
+  `budget:`. A `spec-gap:` is a hard checkpoint at every level, and so is a change to
+  `**Stakes**` after `ready`. The same run spent ten human turns
   answering "+N passes" to findings the RFC already decided.
 - Hand-merge: none. Existing RFCs and boards keep working: no `**Stakes**` is
   `production`, no envelope is 0.
