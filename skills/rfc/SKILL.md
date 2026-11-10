@@ -125,9 +125,11 @@ may do, and where the privilege is spent, the one invariant the checks derive fr
 caller or a surface missing from it is a gap in the RFC, not a case for the executor to
 improvise.
 
-**Declare the stakes** in the header: `demo`, `internal` or `production`. The review
-reads the RFC, and without it judges a demo recipe as a production security component.
-The stakes calibrate severity; they never waive what the model refuses.
+**Declare the stakes** in the header, per path when the change mixes them:
+`production; demo: recipes/sudo-user/**`. The review reads them, and without them judges
+a demo recipe as a production security component. They calibrate severity; they never
+waive what the model keeps or refuses. They lower a gate, so the human confirms them
+with `ready`.
 
 **Holds** are pauses the change itself needs — a migration that must finish, a
 deploy, a date, an external sign-off — before the next phase may start (a dismantling
@@ -194,7 +196,10 @@ a gate bypass) and on a hold.
    and log the review's `WARNINGS` with the merge. Otherwise stop as at L3. A rejected
    phase goes back to its executor, up to the board's cap, re-briefed with
    `review_cap` = the passes already spent plus the board's cap: a branch's count
-   never resets.
+   never resets. An executor stopped at its cap is re-briefed from the board's pass
+   envelope, without the human, only when every open 🔴 is `budget:` (below); log
+   `envelope: +<n>, <left> left — <findings>`. One `spec-gap:` goes to the human,
+   whatever the envelope holds.
 5. **Settle what the board covers** (a hold with a command, a `changed:` decision), and
    log each one with its proof. Stop on everything else: that is the minimal-risk
    condition.
@@ -206,9 +211,11 @@ a gate bypass) and on a hold.
    `## Blocked on the human` and stop. The human merges it.
 
 **Briefed as an L4 executor**, you implement one phase and nothing else: never edit
-`rfc.md`, never merge, and never take the RFC. Your report is your PR's description.
+`rfc.md`, never merge, and never take the RFC. Your report is your PR's description,
+and lists each 🔴 the review reported with its `**Model**` line.
 Escalate in it, then stop. Run `code-review` with the `review_cap` you were given, and
-escalate when it refuses instead of looking for another pass. A review-driven fix that
+escalate when it refuses instead of looking for another pass. A 🔴 marked
+`**Model**: gap` is escalated, not fixed: its fix decides what the RFC does not. A review-driven fix that
 adds a persisted event, a command, an aggregate state, a worker or a lease the RFC does
 not name is a scope escalation, not a fix, whatever the review says.
 
@@ -217,6 +224,13 @@ its check under `## Blocked on the human`. `/rfc implement` resumes it: run the
 hold's check first, and go on only if it passes — otherwise say so and stop again.
 A discovery that changes a local decision is recorded as `changed: <decision> —
 <why>`. One that changes the scope sends the RFC back to `draft`.
+
+**Log each 🔴 a review reports** under `## Log` (at L4, the orchestrator does, from the
+executor's report), by its `**Model**` line: `budget:
+<finding> — <the model line, or none>` when the RFC already decides it, `spec-gap:
+<finding> — <what the RFC missed>` when it is `gap`. Close a spec gap in the RFC before
+the code: write the missing line into `## Model` (under L2+, also in `## Assumptions`),
+then fix. The final report counts both: spec gaps per RFC are how `/rfc` is measured.
 
 Set `done` when the last phase is merged and the stopping condition passes on a
 fresh run. At L4, the run ends at the hand-back. The human's merge of `rfc/<slug>`
@@ -240,7 +254,7 @@ carry it onto the base branch; the last one takes it away. A round after the han
 - **Stopping condition**: `<command, test or observable state>` — the end of the whole request
 - **Serves**: <PRD capability / acceptance criterion, if any>
 - **Constrained by**: <ADR-NNNN § section, shared decision — only those that bind>
-- **Stakes**: demo | internal | production — how hard the review judges a defect
+- **Stakes**: <demo | internal | production>[; <level>: <paths>] — how hard the review judges a defect, confirmed at `ready`
 
 ## Request
 
@@ -283,6 +297,7 @@ carry it onto the base branch; the last one takes it away. A round after the han
 - Delegated: <phase merges into `rfc/<slug>` | holds with a command | `changed:` decisions>
 - Executors: <coding agent · model, one per line>
 - Caps: <token or wall-time budget per executor>; <review passes per phase, default 3>; <rejected rounds per phase> — all three required
+- Pass envelope: <extra review passes for the whole RFC, spent only on findings the model decides; absent is 0>
 
 ## Steps
 

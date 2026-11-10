@@ -12,7 +12,7 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
-### `/rfc`: the model covers the lifecycle and access, the header declares the stakes
+### `/rfc` and the review: lifecycle, access, stakes — and spec gaps escalate, budget does not
 
 Measured on a four-phase RFC run at L4 with a Sonnet executor and a Codex reviewer:
 2, 8, 13 and 5 review passes. Every burst of `CRITICAL` was one dimension of state the
@@ -25,8 +25,20 @@ no stakes, judged demo recipes as production security.
   removed, reused after removal — each kept or refused.
 - **`### Access`** when the change decides who may do what: closed caller list, read
   surfaces as an inventory, actions, where the privilege is spent.
-- **`**Stakes**: demo | internal | production`** in the RFC header, read by the review.
-- Hand-merge: none; existing RFCs keep working, the new header is optional.
+- **`**Stakes**`** in the RFC header, per path when the change mixes them
+  (`production; demo: recipes/**`), confirmed by the human at `ready`. The review prompt
+  now calibrates severity on them (never on a breach of the model, an exposed secret or
+  a privilege escalation), and `review-context --brief` passes them to a second reviewer.
+- **The review honours `Refuses`**, and every 🔴 under an RFC carries a `**Model**`
+  line: the RFC line it breaks, `gap — <undecided>`, or `none`.
+- **Each 🔴 is logged** `budget:` or `spec-gap:` under `## Log`; the final report counts
+  them. Spec gaps per RFC are how `/rfc` is measured.
+- **L4 pass envelope** (`agent/autonomy.md` § L4): the board may declare extra review
+  passes for the whole RFC. The orchestrator spends them alone while every open 🔴 is
+  `budget:`; a `spec-gap:` goes to the human at once. The same run spent ten human turns
+  answering "+N passes" to findings the RFC already decided.
+- Hand-merge: none. Existing RFCs and boards keep working: no `**Stakes**` is
+  `production`, no envelope is 0.
 
 ### Breaking — `<tech>-check` audits only a changed lock
 
