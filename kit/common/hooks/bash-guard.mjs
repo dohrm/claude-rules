@@ -91,7 +91,19 @@ const DENY = [
     'the review report is written by a review and by nothing else — a CRITICAL is answered by a fix, not by deleting the file'],
   [new RegExp(REDIRECT + String.raw`review-report\.md`),
     'writing the review report by hand forges the verdict review-guard reads'],
+  // The L4 journal is the record of every verdict a merge is checked against: only
+  // l4.mjs appends to it, the way only a review writes the report.
+  [new RegExp(MUTATOR + String.raw`l4\.jsonl`),
+    'the L4 journal is written by `just l4-judge` / `just l4-merge` and by nothing else'],
+  [new RegExp(REDIRECT + String.raw`l4\.jsonl`),
+    'writing the L4 journal by hand forges the verdict `just l4-merge` checks'],
+  // A phase merges on a verdict bound to its sha, and nobody legitimately hand-merges one.
+  [new RegExp(String.raw`\bgit\s+(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
+    'a phase merges through `just l4-merge`, on `just l4-judge`\'s verdict — never by hand'],
 ]
+
+// A forge merge is the human's act, and the human sometimes asks for one: ask, not deny.
+const FORGE_MERGE = /\b(?:gh\s+pr|glab\s+mr|tea\s+(?:pulls?|pr))\s+merge(?![\w-])/
 
 // The gate layer's own files. Reading them is normal; rewriting them is a
 // decision. The list is deliberately short — every entry is a file whose content
@@ -108,7 +120,7 @@ const DENY = [
 // `*.just` is in the list because the recipes live in an IMPORTED library now, not in
 // the justfile: guarding only the file that holds the `import` lines would leave the
 // commands the gate actually runs unguarded.
-const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard)\.mjs|review-prompt\.md)`
+const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard|l4)\.mjs|review-prompt\.md)`
 
 /** A redirect whose target is a gate file, and a mutating command carrying one in the
  *  SAME segment. Both halves come from the shared REDIRECT/MUTATOR sources above, so
@@ -152,6 +164,9 @@ function main() {
   if (REDIRECT_TO_GATE.test(command) || MUTATOR_ON_GATE.test(command)) {
     ask(input, 'This command writes to the gate layer (a hook, a workflow, a justfile, a baseline). '
       + 'Editing the gates is sometimes the task — a human confirms it.')
+  } else if (FORGE_MERGE.test(command)) {
+    ask(input, 'This merges a pull request on the forge — the human\'s act, unless they asked for it. '
+      + 'A phase of an L4 RFC merges through `just l4-merge` instead.')
   }
   return 0
 }
