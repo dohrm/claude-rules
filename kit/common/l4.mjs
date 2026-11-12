@@ -258,9 +258,11 @@ function reviewFacts(tree, head) {
   if (verdict === 'CRITICAL') reject.push('review verdict CRITICAL')
   if (!head.startsWith(sha)) reject.push(`review report is stale: it reviewed ${sha.slice(0, 7)}, the phase HEAD is ${head.slice(0, 7)}`)
   const critical = section(text, '🔴')
-  if (/\*\*Model\*\*:?\s*:?\s*`?gap\b/i.test(critical)) escalate.push('a 🔴 whose **Model** line is `gap` — a spec gap is the human\'s')
-  const warnings = section(text, '🟡').split('\n').filter((l) => /^([-*]|\d+[.)])\s/.test(l)).map((l) => l.trim())
-  return { reject, escalate, warnings }
+  if (/\*\*Model:?\*\*:?\s*`?gap\b/i.test(critical)) escalate.push('a 🔴 whose **Model** line is `gap` — a spec gap is the human\'s')
+  // One entry per top-level item; a section written as prose is kept whole.
+  const yellow = section(text, '🟡').trim()
+  const items = yellow.split('\n').filter((l) => /^([-*]|\d+[.)])\s/.test(l)).map((l) => l.trim())
+  return { reject, escalate, warnings: items.length || !yellow ? items : [yellow] }
 }
 
 /** `green`, `running`, `red` or `not-wired`, from the CI command run with the branch. */
