@@ -12,6 +12,32 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — `/loop-setup` is removed
+
+`/rfc` is the only execution path ([ADR-0011](docs/adr/0011-rfc-only-path-no-loop.md)):
+a repeated chore with a measurable end is an RFC whose stopping condition is that
+command. The skill had no user left, and its accepted audit finding (a done-command
+neither frozen nor run first) would have been fixed in an asset nobody runs.
+
+- **The `loop-setup` profile is retired.** `update` drops it from the lock and says
+  why; the installed `.claude/skills/loop-setup/` is purged.
+- **`.work/<slug>/loop.md` is no longer read.** `just status` does not report it,
+  `just publish-summary` refuses a slug without an `rfc.md`, and no kit command
+  deletes it.
+- **`just publish-summary` reads `rfc.md` only.** `SUMMARY.md` loses its
+  `## Guardrails` section (an iteration cap and a token budget only a `loop.md` had);
+  `## Remaining work` counts the RFC's `## Steps`.
+- **`agent/autonomy.md`** no longer mentions a loop's caps: the state files are
+  `rfc.md` and `defect.md`.
+
+Hand-merge:
+
+- A `just publish-summary` caller (a script, a prompt) that pointed at a loop slug:
+  point it at an RFC slug, or drop the call.
+- A `loop.md` in flight: finish it by hand, or rewrite it as an RFC
+  (`/rfc`, its stopping condition the loop's done-command). Delete the file in a
+  commit once it is over.
+
 ### `/rfc` and the review: lifecycle, access, stakes — and spec gaps escalate, budget does not
 
 Measured on a four-phase RFC run at L4 with a Sonnet executor and a Codex reviewer:

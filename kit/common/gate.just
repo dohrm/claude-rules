@@ -85,7 +85,7 @@ review_paths   := review_exclude + " " + review_secrets
 #
 # `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` (or `defect.md`) whose
 # `**Branch**` header is the current branch (`/rfc` writes it per phase), else the branch
-# name (`work-slug.mjs`). Set it to a `/loop-setup` slug to park the marker next to its
+# name (`work-slug.mjs`). Set it to another slug to park the marker next to that
 # state file.
 work_slug   := ""
 incremental := "1"
@@ -525,15 +525,15 @@ work-prune:
     node {{kit}}/work-stale.mjs --prune {{base}}
 
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
-# The per-loop counterpart to `just status`: that one is read-only across every
-# worktree at a glance, this one is one worktree, once, at the moment a
-# `/loop-setup` or `/rfc` run stops — objective met, blocked, or cap/budget exhausted
-# (the setup skills' completion/escalation outcomes, mapped straight onto the
-# three statuses below). Reads `.work/<slug>/loop.md`
-# (else `rfc.md`) plus what only git knows — branch, commits
+# The per-run counterpart to `just status`: that one is read-only across every
+# worktree at a glance, this one is one worktree, once, at the moment an
+# `/rfc` run stops — objective met, blocked, or cap/budget exhausted
+# (its completion/escalation outcomes, mapped straight onto the
+# three statuses below). Reads `.work/<slug>/rfc.md`
+# plus what only git knows — branch, commits
 # ahead of `{{base}}`, a one-line diffstat, the scope report below — into
 # `.work/<slug>/SUMMARY.md`, so
-# catching up on a parallel loop means one short file, not the whole state file
+# catching up on a parallel run means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something
 # to summarize — `status` is validated here AND inside the script, because a
 # test calls the script directly, past this guard.

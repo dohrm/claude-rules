@@ -139,8 +139,7 @@ docs/
 
 .work/<slug>/            # committed, ephemeral — dies once its PR merges
 ├── intent.md            # what is still open while framing — /interview
-├── rfc.md               # one feature: decisions, steps, stopping condition — /rfc
-└── loop.md              # a repeated chore with a done-command — /loop-setup
+└── rfc.md               # one feature: decisions, steps, stopping condition — /rfc
 ```
 
 ---
@@ -198,7 +197,7 @@ exact command. Install `product` first, or read the table in
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` `devstack` | **in production**: SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` — **on your machine**: `devstack`, the contract between an agent and a running app (no foreground server, no orphan, the log file is the truth) plus the `process-compose` lifecycle at `--level gates` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
-| **Practice** | `product` `defect` `loop-setup` | lifecycle skills, `/rfc` included · bug diagnosis and fix · repeated-loop framing |
+| **Practice** | `product` `defect` | lifecycle skills, `/rfc` included · bug diagnosis and fix |
 
 **Aliases** unpack on `add` / `remove`; the lock keeps the merged sources' alias map, so an offline `remove` unpacks one an overlay defined: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
@@ -491,7 +490,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 |---|---|
 | `product` | `/interview` `/domain-modeling` `/onboard` `/update` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/rfc` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
-| `defect` (alias `investigate`) `loop-setup` | `/defect` `/loop-setup` |
+| `defect` (alias `investigate`) | `/defect` |
 
 **3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
 or the agent, and CI. No command is defined twice — and the recipes themselves live
