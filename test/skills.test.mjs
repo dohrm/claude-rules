@@ -172,7 +172,7 @@ test('document-producing skills name a path under docs/', () => {
 // document this repo used to have — /rfc writes one RFC per feature under
 // .work/<slug>/, and a bare name invites that confusion back.
 test('working-memory skills write under .work/, never a bare PLAN.md', () => {
-  for (const name of ['rfc', 'loop-setup', 'onboard', 'migrate']) {
+  for (const name of ['rfc', 'onboard', 'migrate']) {
     const text = read(join(REPO, 'skills', name, 'SKILL.md'))
     assert.match(text, /`\.work\//, `skills/${name}: must state its output path under .work/`)
     assert.doesNotMatch(text, /`(?:PLAN|MEMORY)\.md`/,

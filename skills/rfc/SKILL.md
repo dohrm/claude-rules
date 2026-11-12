@@ -1,6 +1,6 @@
 ---
 name: rfc
-description: "Frame ONE request for change as an iterated RFC — the whole request, decomposed into phases and steps with proofs, local decisions, holds, stopping condition — then implement it to the end once the human marks it ready. Kept in `.work/` (local) or on a ticket in the project's tracker. Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed feature to execution; repeated chores are /loop-setup."
+description: "Frame ONE request for change as an iterated RFC — the whole request, decomposed into phases and steps with proofs, local decisions, holds, stopping condition — then implement it to the end once the human marks it ready. Kept in `.work/` (local) or on a ticket in the project's tracker. Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed change to execution, a repeated chore with a measurable end included."
 ---
 
 You and the human engineer **one request for change** in one document, round after

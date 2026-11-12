@@ -76,7 +76,6 @@ slash-command notation.
 | Explore a proposed solution or architectural limit | `/solution-exploration`: assess options before reading affected ADRs |
 | Shrink a large ADR corpus | `/adr-review`: one verdict per record, move then delete, references rewritten, size before and after |
 | Engineer a change, then let the agent build it | `/rfc`: iterate on one document until you mark it ready; a large change is decomposed into phases and holds inside it, then run to the end at L3, or orchestrated at L4 within a delegation board |
-| Run a repeated chore to a measurable end | `/loop-setup` |
 | Adjust behavior or UX | Discuss the target, implement, review and iterate; update the affected documents |
 | Explore or retain a UI flow | `/experience`, scoped to the journey and actor being reviewed |
 | Run a local monorepo | `devstack`; [setup and commands](kit/devstack/README.md) |

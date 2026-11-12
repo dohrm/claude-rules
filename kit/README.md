@@ -175,7 +175,7 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    changed file, so nothing goes missing silently. `review_max_bytes` fails the gate on
    a diff too big to review rather than letting the reviewer see a random subset of it.
    Successive runs review only what the last passing one did not clear (the marker
-   above); `work_slug` parks that marker next to a `/loop-setup` or `/rfc` state file
+   above); `work_slug` parks that marker next to another `/rfc` state file
    instead of under the branch name. Doctrine: `../rules/agent/autonomy.md`.
 6. **Parallel sessions** (only if you run more than one at a time): `just status`.
    The reason it exists is
@@ -185,13 +185,12 @@ Run **`claude-rules init`** to write the justfile + lefthook, or do it by hand:
    dirty, phase worklist, verdict, `## Blocked on the human`). It reports and never
    gates, so it belongs in neither `check` nor a hook.
    Doctrine: `../rules/agent/autonomy.md` ("One tree, one writer").
-7. **Run summaries** (only if you use `/loop-setup`): nothing to move — the script
+7. **Run summaries** (optional): nothing to move — the script
    ships with the library like the rest of `common/`. `just publish-summary
-   slug=<slug> status=<COMPLETED|BLOCKED|BUDGET_EXHAUSTED>` is the loop's own last
-   step (see `../skills/loop-setup/SKILL.md`) and is best-effort there — a host
-   without this kit wired just skips it, the loop still stops and escalates from
-   `loop.md` alone. Writes `.work/<slug>/SUMMARY.md` next to the state file it
-   read. Reports and never gates, so — like `status` — it belongs in neither
+   slug=<slug> status=<COMPLETED|BLOCKED|BUDGET_EXHAUSTED>` snapshots an `/rfc`
+   run when it stops, and is best-effort — a host without this kit wired just
+   skips it, the run still stops and escalates from `rfc.md` alone. Writes
+   `.work/<slug>/SUMMARY.md` next to the `rfc.md` it read. Reports and never gates, so — like `status` — it belongs in neither
    `check` nor a hook.
 8. **Harness hooks** (optional, per tool): merge `common/hooks/settings.snippet.json`
    into `.claude/settings.json` — or the cursor snippet beside it.
@@ -219,7 +218,7 @@ kit/
 │   ├── experience-check.mjs    # docs-check helper: experience metadata and references
 │   ├── review-guard.mjs        # OPT-IN gate: a CRITICAL review blocks the push until a new one clears it
 │   ├── worktree-status.mjs     # OPT-IN report, never a gate: every worktree at a glance — `just status`
-│   ├── publish-summary.mjs     # OPT-IN report, never a gate: one loop's terminal state → SUMMARY.md
+│   ├── publish-summary.mjs     # OPT-IN report, never a gate: one RFC run's terminal state → SUMMARY.md
 │   └── hooks/                  # OPT-IN harness layer: what git never gets to see — see its README
 │       ├── bash-guard.mjs      #   deny --no-verify/hooksPath/force-push-to-trunk; ask on writes to the gates
 │       ├── edit-guard.mjs      #   deny the report + .git/hooks/, ask the rest
