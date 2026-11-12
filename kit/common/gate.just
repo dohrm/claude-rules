@@ -553,6 +553,27 @@ publish-summary slug status base=base:
 scope-report:
     @node {{kit}}/scope-report.mjs --slug {{quote(work_slug)}} {{quote(base)}}
 
+# ── L4 referee (rules/agent/autonomy.md § L4) ────────────────────────────────
+# Run from the integration tree, on `rfc/<slug>`. `l4-judge` reads the facts of phase
+# <n> — `just check` in its tree, its review report, CI, the scope report — prints one
+# line and exits 0 merge, 1 reject, 3 escalate, 4 wait; every verdict is appended to
+# `.work/<slug>/l4.jsonl` and committed. `justify` clears overflow packages, one
+# `<package>=<text>` per line, each text quoted from a `changed:` or `## Assumptions`
+# line of the RFC. `l4-merge` merges the exact sha a `merge` verdict was given for, if
+# the board delegates `phase-merge`, and pushes.
+#
+# `l4_ci` is the CI state of a branch, run with the branch as its last argument: exit 0
+# green, 8 still running (`gh pr checks`' "pending"), anything else red. Empty means
+# Tier 4 is not wired: the journal records it as declared, never as green. Override it
+# for another forge.
+l4_ci := "gh pr checks --required"
+
+l4-judge n justify="":
+    node {{kit}}/l4.mjs judge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
+
+l4-merge n:
+    node {{kit}}/l4.mjs merge {{quote(n)}} --slug {{quote(work_slug)}}
+
 # ── CI: the base a gate job compares against ─────────────────────────────────
 # `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),
 # so a PR's gate job needs the PR's target branch. The job passes it through `env:`
