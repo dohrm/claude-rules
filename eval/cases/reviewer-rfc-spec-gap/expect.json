@@ -1,0 +1,12 @@
+{
+  "agent": "code-reviewer",
+  "rules": ["common", "agent", "product"],
+  "fixture": "tasks",
+  "prompt": "You MUST use the code-reviewer subagent to review the file `{file}` in this directory: it is the working change of the RFC in `.work/archive/rfc.md`, whose **Branch** is the branch under review. Return its full review verbatim, including the trailing CI_VERDICT and REVIEWED comment lines.",
+  "ci_verdict_in": ["CRITICAL"],
+  "stdout_matches": [
+    "\\*\\*Model:?\\*\\*:?\\s*`?gap\\b",
+    "(?i)\\bre-?us|collid|collision|duplicate"
+  ],
+  "judge": "Is the 🔴 the id an archived task loses to the next `add` (nextId counts `tasks` only), with a Model line that says the RFC never decided whether a removed id may be reused — rather than quoting a line the RFC does not contain, or inventing the policy as the fix?"
+}
