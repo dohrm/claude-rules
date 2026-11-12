@@ -56,7 +56,7 @@ A green gate never settles a **decision** — that line is `agent/decisions.md`.
 ## Levels
 
 How often the agent stops to ask is a per-run choice, declared once in the state
-file header — `.work/<slug>/rfc.md` or `loop.md`:
+file header — `.work/<slug>/rfc.md` or `defect.md`:
 `**Autonomy**: L1 | L2 | L3 | L4`.
 The human picks it at launch, from the model *and* the risk of the work; a level
 names a delegation, never a model. **Absent or unreadable → L1.**
@@ -69,7 +69,7 @@ at the next one. A skill that runs another passes its resolved level as the argu
 |---|---|---|
 | **L1 — guided** | every checkpoint a skill marks, before the next step | nothing a skill marks as a checkpoint |
 | **L2 — delegated** | each skill's written output, once | the open questions the code answers, each one recorded |
-| **L3 — autonomous** | only the hard checkpoints below | the RFC's local decisions and steps, the loop's caps, launching once `ready` (a Codex `/goal` included), sub-agents |
+| **L3 — autonomous** | only the hard checkpoints below | the RFC's local decisions and steps, launching once `ready` (a Codex `/goal` included), sub-agents |
 | **L4 — orchestrated** | the hard checkpoints the RFC's delegation board does not delegate, and the final merge | L3, plus the checkpoints on the board, inside a domain checked at launch (§ L4) |
 
 **Hard checkpoints — identical at every level:** an ADR status (`agent/decisions.md`);
@@ -79,10 +79,8 @@ capability's `Shipped` and the merge; a hard bypass (below); a tree that contrad
 At L4 only, an RFC's delegation board may take a few of them off this list (§ L4).
 
 A level moves *when* the human is asked, never *what* counts as done. The gate,
-escalation channel and one-tree-one-writer hold at L3 exactly as at L1. A loop
-retains its caps and divergence guard; at L3 the agent sets their values itself
-and writes them before the first turn. An RFC retains its stopping condition and
-the proof of each step at every level. Under L2+, every question settled without asking is written
+escalation channel and one-tree-one-writer hold at L3 exactly as at L1. An RFC
+retains its stopping condition and the proof of each step at every level. Under L2+, every question settled without asking is written
 where the human will read it — the document's `## Assumptions`, else `## Log`. An
 unrecorded assumption is a silent scope change.
 
@@ -92,8 +90,7 @@ ambiguity the code cannot settle asks, which is escalation, not failure.
 ## L4 — delegation inside a checked domain
 
 L4 is L3 plus the checkpoints an RFC's `## Delegation board` delegates. No
-board, or an empty list, means L3. A loop has no delegable checkpoint: `loop.md` reads
-L4 as L3.
+board, or an empty list, means L3.
 
 | The board may delegate | Never delegable |
 |---|---|
@@ -203,12 +200,12 @@ the branch is merged — a squash merge included — so a forest of detached bra
 something you have to build on purpose. `just status` reports every tree, and the
 `.work/` left behind by work that is over; it never gates.
 
-The human is a writer too. When they edit the tree a loop or an RFC owns — legitimate, and
-declared as a `human:` line in `## Log` (`skills/loop-setup` or `skills/rfc`) — that line is a
+The human is a writer too. When they edit the tree an RFC owns — legitimate, and
+declared as a `human:` line in `## Log` (`skills/rfc`) — that line is a
 **fact about the tree**, not an item to redo or undo. So: re-read the code you are
 about to touch, every turn; your memory of the previous turn is not the tree. And
 **never revert a change you cannot explain** — a tree that contradicts the
-RFC or loop is an escalation, not a merge conflict to resolve on your own.
+RFC is an escalation, not a merge conflict to resolve on your own.
 
 ## Never fake green
 
@@ -227,5 +224,5 @@ make bypass expensive and loud, not impossible. Wiring:
 
 **Declare every bypass.** No silent TODO, skipped test, placeholder, or stub.
 
-**Escalate in that tree's `.work/<slug>/rfc.md` or `loop.md` → `## Blocked on the human`** —
+**Escalate in that tree's `.work/<slug>/rfc.md` or `defect.md` → `## Blocked on the human`** —
 what `just status` surfaces. Never in the review report.
