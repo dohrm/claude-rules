@@ -264,6 +264,36 @@ test('l4: an RFC not at L4 is refused by both verbs — the level is the human\'
   }
 })
 
+test('l4 judge: a check that rewrites a tracked file is a reject — it judged another tree', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    write(fx.bin, 'just', '#!/bin/sh\necho fixed > src/a.txt\n')
+    const r = l4(fx, ['judge', '1'])
+    assert.equal(r.status, 1, r.out + r.err)
+    assert.match(r.out, /just check modified tracked files/)
+  })
+})
+
+test('l4 merge: a merge already in progress is refused and left intact', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    assert.equal(l4(fx, ['judge', '1']).status, 0)
+    fixtureGit(fx.main, ['checkout', '-q', '-b', 'side'])
+    write(fx.main, 'README.md', 'side\n')
+    commitIn(fx.main)
+    fixtureGit(fx.main, ['checkout', '-q', 'rfc/x'])
+    write(fx.main, 'README.md', 'mine\n')
+    commitIn(fx.main)
+    spawnSync('git', ['merge', 'side'], { cwd: fx.main })
+    write(fx.main, 'README.md', 'resolved\n')
+    const r = l4(fx, ['merge', '1'])
+    assert.equal(r.status, 3, r.out)
+    assert.match(r.out, /a merge is already in progress/)
+    assert.equal(readFileSync(join(fx.main, 'README.md'), 'utf8'), 'resolved\n', 'the resolution is untouched')
+    assert.ok(existsSync(join(fx.main, '.git', 'MERGE_HEAD')), 'and the merge is still in progress')
+  })
+})
+
 test('l4 judge: CI still running is wait — exit 4, and it does not count as a rejected round', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir)
