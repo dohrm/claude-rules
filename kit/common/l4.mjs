@@ -312,6 +312,11 @@ export function judge({ n, slug = '', ci: ciCmd = '', justify = [], cwd = '.' })
   if (ci === 'red') reject.push('CI is red')
   if (ci === 'unpushed') reject.push(`origin does not hold ${head.slice(0, 7)} on ${ctx.phase} — CI never checked the judged commit`)
 
+  // The facts are about `head` only if the tree still is: a check that rewrites tracked
+  // files judged something else, and a commit landing mid-judge voids the whole run.
+  if (git(tree, 'rev-parse', 'HEAD') !== head) refuse(EXIT.usage, `${ctx.phase} moved while it was judged — judge it again`)
+  if (git(tree, 'status', '--porcelain', '--untracked-files=no')) reject.push('just check modified tracked files — it did not judge the committed HEAD')
+
   const scope = scopeData({ base: ctx.integration, slug: ctx.slug, cwd: tree, rfc: ctx.rfc })
   if (!scope) refuse(EXIT.usage, `git cannot diff ${ctx.phase} against ${ctx.integration}`)
   const quotable = justifyingLines(ctx.rfc.text)
@@ -358,6 +363,10 @@ export function merge({ n, slug = '', cwd = '.' }) {
     refuse(EXIT.escalate, `the merge verdict is for ${verdict.sha.slice(0, 7)}, ${ctx.phase} is now at ${head.slice(0, 7)} — judge it again`)
   }
 
+  // A merge already in progress is someone's work: never merged over, never aborted.
+  if (tryGit(cwd, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')) {
+    refuse(EXIT.escalate, 'a merge is already in progress in the integration tree — finish or abort it first')
+  }
   // The sha, not the branch name: a commit pushed between the check above and this line
   // would otherwise be merged without a verdict.
   const merged = spawnSync('git', ['merge', '--quiet', '--no-ff', '-m', `Merge ${ctx.phase} (l4 verdict at ${head.slice(0, 7)})`, head],
