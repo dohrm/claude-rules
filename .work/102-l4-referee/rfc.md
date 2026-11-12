@@ -6,7 +6,3 @@
 - **Base branch**: main
 - **Branch**: rfc/102-l4-referee
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/102
-
-## Blocked on the human
-
-- Phase 2 stopped, unmerged (PR #105): the `## Model` line on the journal guard cannot be kept by a pattern guard. Decision needed — see the ticket body.
