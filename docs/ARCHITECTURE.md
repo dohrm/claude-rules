@@ -94,3 +94,4 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 - [ADR-0008](./adr/0008-layered-sources.md) — Install from layered sources, last path wins
 - [ADR-0009](./adr/0009-l4-delegated-checkpoints.md) — L4 delegates named checkpoints inside a verified domain
 - [ADR-0010](./adr/0010-installer-refuses-unexplained-tree.md) — The installer writes only over what it owns, and refuses a tree it cannot explain
+- [ADR-0011](./adr/0011-rfc-only-path-no-loop.md) — The RFC is the only execution path, with no separate loop skill (Proposed; supersedes ADR-0007 once accepted)
