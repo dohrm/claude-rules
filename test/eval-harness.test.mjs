@@ -137,3 +137,10 @@ test('a test command already red before any mutant fails the oracle, instead of 
   assert.match(r.out, /oracle test `grep -q 'a line the runbook never has' docs\/runbook\/checkout\.md` exited 1 before any mutant/)
   assert.doesNotMatch(r.out, /mutant drop-killswitch/)
 })
+
+test('a test run that does not complete under a mutant is not a kill', () => {
+  // The test command SIGKILLs itself when the mutant is in: no exit code, no verdict.
+  const r = oracle('oracle-crashed-test')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /mutant drop-killswitch not judged: .* did not complete \(killed by SIGKILL\)/)
+})

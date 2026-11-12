@@ -333,11 +333,15 @@ function assertCase(ws, out, expect, fileText, fileBefore) {
 // inherits its NODE_TEST_CONTEXT, skips every file and exits 0: when `npm test` drives
 // this harness, every mutant would survive and every oracle command pass. The
 // workspace's commands run as they would from a terminal.
+// `status` is the exit code only of a run that completed; a timeout, a signal or an
+// overflowed buffer leaves it null and says why in `incomplete`.
 function sh(ws, command) {
   const env = { ...process.env }
   delete env.NODE_TEST_CONTEXT
-  const r = spawnSync(command, { cwd: ws, shell: true, encoding: 'utf8', env, timeout: timeoutMs })
-  return { status: r.status ?? r.signal, out: ((r.stdout || '') + (r.stderr || '')).trim() }
+  const r = spawnSync(command, { cwd: ws, shell: true, encoding: 'utf8', env, timeout: timeoutMs,
+    maxBuffer: 64 * 1024 * 1024 })
+  const incomplete = r.error ? r.error.code || r.error.message : (r.signal ? `killed by ${r.signal}` : null)
+  return { status: incomplete ? null : r.status, incomplete, out: ((r.stdout || '') + (r.stderr || '')).trim() }
 }
 
 /** The oracle of an implementation case: what the agent built, judged without its word. */
@@ -352,7 +356,7 @@ function runOracle(ws, caseDir, oracle) {
   // against a suite that passes unmutated — a broken test command fails every mutant.
   const baseline = oracle.mutants?.length ? sh(ws, oracle.test) : { status: 0 }
   if (baseline.status !== 0) {
-    fails.push(`oracle test \`${oracle.test}\` exited ${baseline.status} before any mutant — no mutant judged:\n     ${tail(baseline.out)}`)
+    fails.push(`oracle test \`${oracle.test}\` exited ${baseline.incomplete || baseline.status} before any mutant — no mutant judged:\n     ${tail(baseline.out)}`)
   }
   for (const rel of baseline.status === 0 ? oracle.mutants || [] : []) {
     const patch = resolve(caseDir, rel)   // git runs in the workspace
@@ -364,13 +368,15 @@ function runOracle(ws, caseDir, oracle) {
     }
     const r = sh(ws, oracle.test)
     if (git('apply', '-R', patch).status !== 0) throw new Error(`mutant ${name} could not be reverted`)
-    if (r.status === 0) fails.push(`mutant ${name} survived: \`${oracle.test}\` exited 0 under it`)
+    // Only a test run that completed and failed kills a mutant.
+    if (r.incomplete) fails.push(`mutant ${name} not judged: \`${oracle.test}\` did not complete (${r.incomplete})`)
+    else if (r.status === 0) fails.push(`mutant ${name} survived: \`${oracle.test}\` exited 0 under it`)
   }
 
   if (oracle.files) cpSync(join(caseDir, oracle.files), ws, { recursive: true })
   for (const command of oracle.commands || []) {
     const r = sh(ws, command)
-    if (r.status !== 0) fails.push(`oracle \`${command}\` exited ${r.status}:\n     ${tail(r.out)}`)
+    if (r.status !== 0) fails.push(`oracle \`${command}\` exited ${r.incomplete || r.status}:\n     ${tail(r.out)}`)
   }
   return fails
 }
