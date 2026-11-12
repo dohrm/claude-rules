@@ -183,7 +183,8 @@ skill, the report is only what it *says* it did — the files are the truth
 (`file_*`, `artifacts`).
 
 **The oracle judges an implementation.** Mutants run first, before the hidden files
-arrive, so each one tests whether the *agent's* tests assert. A surviving mutant fails
+arrive, so each one tests whether the *agent's* tests assert — and only once `test`
+passes on the unmutated workspace: a red suite fails the case. A surviving mutant fails
 the case by name. So does one that does not apply. Mutants are patches written against
 the case's reference solution, so a real implementation that differs in text from that
 solution will usually not take them, and the case says so instead of passing. Each case

@@ -1,0 +1,9 @@
+{
+  "skill": "runbook",
+  "rules": ["agent"],
+  "prompt": "Write the runbook for the checkout fast-burn alert.",
+  "oracle": {
+    "test": "grep -q 'a line the runbook never has' docs/runbook/checkout.md",
+    "mutants": ["mutants/drop-killswitch.patch"]
+  }
+}

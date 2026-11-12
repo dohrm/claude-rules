@@ -348,8 +348,13 @@ function runOracle(ws, caseDir, oracle) {
   if (oracle.mutants?.length && !oracle.test) throw new Error('oracle.mutants needs oracle.test, the command they must fail')
 
   // Mutants first, under the workspace's own tests only: a mutant the hidden tests
-  // kill says nothing about whether the agent's tests assert.
-  for (const rel of oracle.mutants || []) {
+  // kill says nothing about whether the agent's tests assert. A kill counts only
+  // against a suite that passes unmutated — a broken test command fails every mutant.
+  const baseline = oracle.mutants?.length ? sh(ws, oracle.test) : { status: 0 }
+  if (baseline.status !== 0) {
+    fails.push(`oracle test \`${oracle.test}\` exited ${baseline.status} before any mutant — no mutant judged:\n     ${tail(baseline.out)}`)
+  }
+  for (const rel of baseline.status === 0 ? oracle.mutants || [] : []) {
     const patch = resolve(caseDir, rel)   // git runs in the workspace
     const name = basename(rel).replace(/\.(patch|diff)$/, '')
     const applied = git('apply', patch)

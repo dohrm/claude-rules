@@ -130,3 +130,10 @@ test('rfc-implement-l3: the reference patch meets the oracle', () => {
   assert.equal(r.status, 0, r.out)
   assert.match(r.out, /✓ PASS {2}rfc-implement-l3/)
 })
+
+test('a test command already red before any mutant fails the oracle, instead of killing every mutant', () => {
+  const r = oracle('oracle-broken-test')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /oracle test `grep -q 'a line the runbook never has' docs\/runbook\/checkout\.md` exited 1 before any mutant/)
+  assert.doesNotMatch(r.out, /mutant drop-killswitch/)
+})
