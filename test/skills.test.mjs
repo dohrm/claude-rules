@@ -212,8 +212,20 @@ test('eval cases are well formed', () => {
 
     // Assertions that can never fire are worse than none.
     const hasAssertion = ['stdout_matches', 'stdout_not_matches', 'file_matches', 'file_not_matches',
-      'artifacts', 'gates', 'ci_verdict_in', 'file_changed'].some(k => expect[k] !== undefined)
+      'artifacts', 'gates', 'ci_verdict_in', 'file_changed', 'oracle'].some(k => expect[k] !== undefined)
     assert.ok(hasAssertion, `${where}: asserts nothing`)
+
+    if (expect.fixture)
+      assert.ok(existsSync(join(casesDir, '_fixtures', expect.fixture)), `${where}: fixture "${expect.fixture}" is not in eval/cases/_fixtures/`)
+
+    const oracle = expect.oracle
+    if (oracle) {
+      assert.ok(oracle.commands?.length || oracle.mutants?.length, `${where}: an oracle with neither commands nor mutants judges nothing`)
+      if (oracle.files) assert.ok(existsSync(join(dir, oracle.files)), `${where}: oracle files "${oracle.files}" do not exist`)
+      if (oracle.mutants?.length) assert.ok(oracle.test, `${where}: oracle mutants need "test", the command they must fail`)
+      for (const m of oracle.mutants || [])
+        assert.ok(existsSync(join(dir, m)), `${where}: mutant "${m}" does not exist`)
+    }
 
     for (const pattern of Object.keys(expect.artifacts || {}))
       assert.doesNotMatch(pattern, /^\//, `${where}: artifact "${pattern}" must be workspace-relative`)

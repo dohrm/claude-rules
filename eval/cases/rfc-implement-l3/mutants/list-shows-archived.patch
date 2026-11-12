@@ -1,0 +1,13 @@
+diff --git a/bin/tasks.mjs b/bin/tasks.mjs
+index 8d46b69..4079ea0 100644
+--- a/bin/tasks.mjs
++++ b/bin/tasks.mjs
+@@ -29,7 +29,7 @@ function run(argv, file) {
+     }
+     case 'list': {
+       const archived = args[0] === '--archived'
+-      const tasks = load(file).tasks.filter(t => t.archived === archived)
++      const tasks = load(file).tasks.filter(t => !archived || t.archived)
+       return renderList(tasks, archived ? 'no archived tasks' : 'no tasks')
+     }
+     case 'done': {

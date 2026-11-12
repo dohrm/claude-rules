@@ -1,0 +1,26 @@
+{
+  "skill": "rfc",
+  "rules": ["common", "agent", "product"],
+  "fixture": "tasks",
+  "prompt": "/rfc L3 archive with restore, move the file to v2, drop v1 support once migrated",
+  "answers": [
+    "Settle what the code answers yourself, record it under Assumptions, and finish the draft. Do not mark it ready."
+  ],
+  "artifacts": {
+    ".work/*/rfc.md": {
+      "matches": [
+        "(?i)^###\\s*Phase\\b[\\s\\S]*^###\\s*Phase\\b",
+        "⏸\\s*hold[^\\n]*check:\\s*`[^`\\n]+`",
+        "^## Model\\s*$",
+        "(?i)^## Model\\s*$(?:(?!^## )[\\s\\S])*\\b(?:re-?us|recycl)",
+        "\\*\\*Stopping condition\\*\\*:\\s*[^<\\s]",
+        "\\*\\*Status\\*\\*:\\s*draft"
+      ],
+      "not_matches": [
+        "(?i)(^###\\s*Phase\\b[\\s\\S]*){3}",
+        "\\*\\*Status\\*\\*:\\s*(ready|implementing|done)"
+      ]
+    }
+  },
+  "judge": "Does the hold wait for every v1 file to be migrated before the phase that drops v1 reading, and does the model say what happens to an archived task's id — kept, never reused — rather than leaving it to the code?"
+}

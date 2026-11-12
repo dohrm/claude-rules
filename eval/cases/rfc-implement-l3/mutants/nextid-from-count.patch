@@ -1,0 +1,13 @@
+diff --git a/src/store.mjs b/src/store.mjs
+index caed254..a6c2d9d 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -34,7 +34,7 @@ export function load(file) {
+ 
+   if (data.version === 1) {
+     const tasks = data.tasks.map(t => ({ id: t.id, title: t.title, done: t.done, archived: false }))
+-    return { version: VERSION, nextId: nextId(tasks), tasks }
++    return { version: VERSION, nextId: tasks.length + 1, tasks }
+   }
+   // A counter at or below an existing id would hand that id out a second time.
+   if (!Number.isInteger(data.nextId) || data.nextId < nextId(data.tasks)) {

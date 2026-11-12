@@ -1,0 +1,13 @@
+diff --git a/src/tasks.mjs b/src/tasks.mjs
+index 0411f28..9ff0c38 100644
+--- a/src/tasks.mjs
++++ b/src/tasks.mjs
+@@ -24,7 +24,7 @@ export function findTask(state, id) {
+ export function addTask(state, title) {
+   const clean = (title || '').trim()
+   if (!clean) throw new TaskError('a task needs a title')
+-  const task = { id: state.nextId, title: clean, done: false, archived: false }
++  const task = { id: nextId(state.tasks.filter(t => !t.archived)), title: clean, done: false, archived: false }
+   return { state: { ...state, nextId: state.nextId + 1, tasks: [...state.tasks, task] }, task }
+ }
+ 

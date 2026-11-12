@@ -17,7 +17,7 @@
 // Usage:
 //   node eval/run.mjs                      # all cases, default runner (claude), default model
 //   node eval/run.mjs --model <alias|id>   # re-run against a candidate model
-//   node eval/run.mjs runbook-commands     # a single case
+//   node eval/run.mjs runbook-commands     # a single case (or several: a b c)
 //   node eval/run.mjs --runner cursor      # Cursor's agent CLI (see eval/runners.mjs)
 //   node eval/run.mjs --bin ./my-claude    # same preset, a different binary
 //   node eval/run.mjs --cmd "agy run {prompt}" --format text   # any other command
@@ -29,7 +29,7 @@
 //   node eval/run.mjs --judge              # (v2, not yet implemented — stubbed)
 import { mkdtempSync, mkdirSync, cpSync, readFileSync, writeFileSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join, dirname, basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
 import { LAYOUTS, resolveRunner, unsupported } from './runners.mjs'
@@ -47,7 +47,7 @@ const setupOnly = argv.includes('--setup-only')   // spends no tokens: check a n
 const answersInline = argv.includes('--answers-inline')
 const CASES = flag('--cases') || join(REPO, 'eval', 'cases')
 const values = new Set(VALUE_FLAGS.map(f => flag(f)).filter(Boolean))
-const only = argv.find(a => !a.startsWith('--') && !values.has(a))
+const only = argv.filter(a => !a.startsWith('--') && !values.has(a))
 
 const runner = resolveRunner({
   runner: flag('--runner'), bin: flag('--bin'), cmd: flag('--cmd'),
@@ -104,19 +104,33 @@ function setupWorkspace(caseDir, expect) {
     cpSync(src, join(ws, layout.skills, expect.skill), { recursive: true })
   }
 
-  // A whole fixture tree (a justfile, docs/, manifests…) — the repo the skill reads.
+  // A shared fixture repo (eval/cases/_fixtures/<name>), then the case's own `files/`
+  // tree over it (a justfile, docs/, manifests, an RFC…) — the repo the target reads.
+  if (expect.fixture) {
+    const shared = join(CASES, '_fixtures', expect.fixture)
+    if (!existsSync(shared)) throw new Error(`case uses fixture "${expect.fixture}", which is not in _fixtures/`)
+    cpSync(shared, ws, { recursive: true })
+  }
   const filesDir = join(caseDir, 'files')
   if (existsSync(filesDir)) cpSync(filesDir, ws, { recursive: true })
 
   // A git baseline, so the workspace behaves like a real repo: the reviewer has a
-  // diff to review, and adr-check has a HEAD to compare against.
+  // diff to review, and adr-check has a HEAD to compare against. The branch is `main`
+  // whatever the machine's init.defaultBranch, so a fixture RFC can name it. The
+  // baseline's author, `eval`, is never the agent's: the workspace's own identity is
+  // `eval-agent`, so a skill that checks who committed a line (`/rfc`'s `ready` guard)
+  // sees a human's commit. `eval-baseline` tags it for the oracle's diffs.
   const git = (...args) => spawnSync('git', args, { cwd: ws, stdio: 'ignore' })
   git('init', '-q')
+  git('symbolic-ref', 'HEAD', 'refs/heads/main')
+  git('config', 'user.name', 'eval-agent')
+  git('config', 'user.email', 'eval-agent@example.com')
   git('-c', 'user.email=eval@example.com', '-c', 'user.name=eval', 'commit', '-q', '--allow-empty', '-m', 'baseline')
-  if (existsSync(filesDir)) {
+  if (expect.fixture || existsSync(filesDir)) {
     git('add', '-A')
     git('-c', 'user.email=eval@example.com', '-c', 'user.name=eval', 'commit', '-q', '-m', 'fixture')
   }
+  git('tag', 'eval-baseline')
 
   // The single-file fixture stays UNCOMMITTED: it is the working change under review.
   let file = null
@@ -245,13 +259,20 @@ function rx(pattern) {
   return new RegExp(body, flags.includes('m') ? flags : flags + 'm')
 }
 
-/** Files matching a path that may end in a `*` glob, relative to the workspace. */
+// Files matching a workspace-relative path, any segment of which may hold a `*` glob:
+// `docs/runbook/*.md`, `.work/*/rfc.md`.
 function resolveArtifact(ws, pattern) {
-  if (!pattern.includes('*')) return existsSync(join(ws, pattern)) ? [join(ws, pattern)] : []
-  const dir = join(ws, dirname(pattern))
-  if (!existsSync(dir)) return []
-  const re = new RegExp('^' + pattern.split('/').pop().replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
-  return readdirSync(dir).filter(n => re.test(n)).map(n => join(dir, n)).filter(f => statSync(f).isFile())
+  let paths = ['']
+  for (const seg of pattern.split('/')) {
+    if (!seg.includes('*')) { paths = paths.map(p => join(p, seg)); continue }
+    const re = new RegExp('^' + seg.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
+    paths = paths.flatMap(p => {
+      const dir = join(ws, p)
+      return existsSync(dir) && statSync(dir).isDirectory()
+        ? readdirSync(dir).filter(n => re.test(n)).map(n => join(p, n)) : []
+    })
+  }
+  return paths.map(p => join(ws, p)).filter(f => existsSync(f) && statSync(f).isFile())
 }
 
 /** The kit gate we ship to consumers, run against what the skill just wrote. */
@@ -308,10 +329,64 @@ function assertCase(ws, out, expect, fileText, fileBefore) {
   return fails
 }
 
+// A shell command in the workspace. A `node --test` started under another test runner
+// inherits its NODE_TEST_CONTEXT, skips every file and exits 0: when `npm test` drives
+// this harness, every mutant would survive and every oracle command pass. The
+// workspace's commands run as they would from a terminal.
+// `status` is the exit code only of a run that completed; a timeout, a signal or an
+// overflowed buffer leaves it null and says why in `incomplete`.
+function sh(ws, command) {
+  const env = { ...process.env }
+  delete env.NODE_TEST_CONTEXT
+  const r = spawnSync(command, { cwd: ws, shell: true, encoding: 'utf8', env, timeout: timeoutMs,
+    maxBuffer: 64 * 1024 * 1024 })
+  const incomplete = r.error ? r.error.code || r.error.message : (r.signal ? `killed by ${r.signal}` : null)
+  return { status: incomplete ? null : r.status, incomplete, out: ((r.stdout || '') + (r.stderr || '')).trim() }
+}
+
+/** The oracle of an implementation case: what the agent built, judged without its word. */
+function runOracle(ws, caseDir, oracle) {
+  const fails = []
+  const tail = (out) => out.split('\n').slice(-15).join('\n     ')
+  const git = (...args) => spawnSync('git', args, { cwd: ws, encoding: 'utf8' })
+  if (oracle.mutants?.length && !oracle.test) throw new Error('oracle.mutants needs oracle.test, the command they must fail')
+
+  // Mutants first, under the workspace's own tests only: a mutant the hidden tests
+  // kill says nothing about whether the agent's tests assert. A kill counts only
+  // against a suite that passes unmutated — a broken test command fails every mutant.
+  const baseline = oracle.mutants?.length ? sh(ws, oracle.test) : { status: 0 }
+  if (baseline.status !== 0) {
+    fails.push(`oracle test \`${oracle.test}\` exited ${baseline.incomplete || baseline.status} before any mutant — no mutant judged:\n     ${tail(baseline.out)}`)
+  }
+  for (const rel of baseline.status === 0 ? oracle.mutants || [] : []) {
+    const patch = resolve(caseDir, rel)   // git runs in the workspace
+    const name = basename(rel).replace(/\.(patch|diff)$/, '')
+    const applied = git('apply', patch)
+    if (applied.status !== 0) {
+      fails.push(`mutant ${name} does not apply — the oracle cannot judge it:\n     ${tail(applied.stderr)}`)
+      continue
+    }
+    const r = sh(ws, oracle.test)
+    if (git('apply', '-R', patch).status !== 0) throw new Error(`mutant ${name} could not be reverted`)
+    // Only a test run that completed and failed kills a mutant.
+    if (r.incomplete) fails.push(`mutant ${name} not judged: \`${oracle.test}\` did not complete (${r.incomplete})`)
+    else if (r.status === 0) fails.push(`mutant ${name} survived: \`${oracle.test}\` exited 0 under it`)
+  }
+
+  if (oracle.files) cpSync(join(caseDir, oracle.files), ws, { recursive: true })
+  for (const command of oracle.commands || []) {
+    const r = sh(ws, command)
+    if (r.status !== 0) fails.push(`oracle \`${command}\` exited ${r.incomplete || r.status}:\n     ${tail(r.out)}`)
+  }
+  return fails
+}
+
 // --------------------------------------------------------------------------- run
-const names = readdirSync(CASES).filter(n => existsSync(join(CASES, n, 'expect.json')))
-                                .filter(n => !only || n === only)
-if (!names.length) { console.error(only ? `no such case: ${only}` : 'no cases found'); process.exit(2) }
+const all = readdirSync(CASES).filter(n => existsSync(join(CASES, n, 'expect.json')))
+const unknown = only.filter(n => !all.includes(n))
+if (unknown.length) { console.error(`no such case: ${unknown.join(', ')}`); process.exit(2) }
+const names = only.length ? all.filter(n => only.includes(n)) : all
+if (!names.length) { console.error('no cases found'); process.exit(2) }
 
 let failed = 0, skipped = 0
 for (const name of names) {
@@ -352,6 +427,8 @@ for (const name of names) {
           ? [`${pre}${n}/`, ...tree(join(dir, n), pre + '  ')] : [`${pre}${n}`])
       console.log(`· SETUP ${name} → ${target}\n   ${tree(ws).join('\n   ')}\n   prompt: ${prompt.slice(0, 100)}…`)
       console.log(`   ${(expect.answers || []).length} scripted answer(s), gates: ${(expect.gates || []).join(', ') || 'none'}`)
+      if (expect.oracle) console.log(`   oracle: ${(expect.oracle.commands || []).length} command(s),`
+        + ` ${(expect.oracle.mutants || []).length} mutant(s)${expect.oracle.files ? `, files from ${expect.oracle.files}/` : ''}`)
       continue
     }
 
@@ -375,6 +452,8 @@ for (const name of names) {
     }
     const after = file ? readFileSync(join(ws, file), 'utf8') : null
     const fails = assertCase(ws, text, expect, after, before)
+    // Last: it patches the workspace and copies hidden files into it.
+    if (expect.oracle) fails.push(...runOracle(ws, caseDir, expect.oracle))
     if (fails.length) { console.log(`✗ FAIL  ${name}${note}\n   - ${fails.join('\n   - ')}`); failed++ }
     else console.log(`✓ PASS  ${name}${note}`)
     if (judge && expect.judge) console.log(`   judge (skipped): ${expect.judge}`)
