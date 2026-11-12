@@ -119,3 +119,14 @@ test('several cases run by name, and an unknown name is refused rather than igno
   assert.equal(typo.status, 2)
   assert.match(typo.out, /no such case: oracle-gren/)
 })
+
+// The real run of rfc-implement-l3 spends tokens and is the human's call. What is
+// free is proving its oracle can be met: the case's reference patch, applied by a
+// stand-in agent, must pass every hidden test and kill every mutant.
+test('rfc-implement-l3: the reference patch meets the oracle', () => {
+  const patch = join(REPO, 'eval', 'cases', 'rfc-implement-l3', 'reference.patch')
+  const agent = join(REPO, 'test', 'fixtures', 'patch-agent.mjs')
+  const r = run(['rfc-implement-l3', '--cmd', `node ${agent} ${patch} {prompt}`, '--format', 'text'])
+  assert.equal(r.status, 0, r.out)
+  assert.match(r.out, /✓ PASS {2}rfc-implement-l3/)
+})

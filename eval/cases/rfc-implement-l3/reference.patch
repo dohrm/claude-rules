@@ -1,0 +1,273 @@
+diff --git a/bin/tasks.mjs b/bin/tasks.mjs
+index cc9479b..8d46b69 100644
+--- a/bin/tasks.mjs
++++ b/bin/tasks.mjs
+@@ -2,19 +2,22 @@
+ // tasks — a to-do list in one JSON file.
+ //
+ //   tasks add <title…>   add a task
+-//   tasks list           every task
++//   tasks list           the tasks not archived
++//   tasks list --archived  the archived tasks
+ //   tasks done <id>      mark a task done
+ //   tasks rm <id>        delete a task
++//   tasks archive <id>   hide a task from the list
++//   tasks restore <id>   bring an archived task back
+ //   tasks report         progress summary
+ //
+ // The file is `TASKS_FILE`, else ./tasks.json. Exit codes: 0 ok, 1 refused (a task
+ // or file error), 2 usage.
+ import { dataFile, load, save, StoreError } from '../src/store.mjs'
+-import { addTask, completeTask, removeTask, parseId, TaskError } from '../src/tasks.mjs'
++import { addTask, completeTask, removeTask, archiveTask, restoreTask, parseId, TaskError } from '../src/tasks.mjs'
+ import { renderList, renderTask } from '../src/format.mjs'
+ import { renderReport } from '../src/report.mjs'
+ 
+-const USAGE = 'usage: tasks <add <title…> | list | done <id> | rm <id> | report>'
++const USAGE = 'usage: tasks <add <title…> | list [--archived] | done <id> | rm <id> | archive <id> | restore <id> | report>'
+ 
+ function run(argv, file) {
+   const [command, ...args] = argv
+@@ -24,8 +27,11 @@ function run(argv, file) {
+       save(file, state)
+       return `added ${renderTask(task)}`
+     }
+-    case 'list':
+-      return renderList(load(file).tasks)
++    case 'list': {
++      const archived = args[0] === '--archived'
++      const tasks = load(file).tasks.filter(t => t.archived === archived)
++      return renderList(tasks, archived ? 'no archived tasks' : 'no tasks')
++    }
+     case 'done': {
+       const { state, task } = completeTask(load(file), parseId(args[0]))
+       save(file, state)
+@@ -36,6 +42,16 @@ function run(argv, file) {
+       save(file, state)
+       return `removed #${task.id}`
+     }
++    case 'archive': {
++      const { state, task } = archiveTask(load(file), parseId(args[0]))
++      save(file, state)
++      return `archived #${task.id}`
++    }
++    case 'restore': {
++      const { state, task } = restoreTask(load(file), parseId(args[0]))
++      save(file, state)
++      return `restored ${renderTask(task)}`
++    }
+     case 'report':
+       return renderReport(load(file).tasks)
+     default:
+diff --git a/src/store.mjs b/src/store.mjs
+index 6f8fbcf..caed254 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -1,12 +1,14 @@
+-// Persistence of the task list: one JSON file, format version 1.
++// Persistence of the task list: one JSON file, format version 2.
+ //
+-//   { "version": 1, "tasks": [ { "id": 1, "title": "…", "done": false } ] }
++//   { "version": 2, "nextId": 4, "tasks": [ { "id": 1, "title": "…", "done": false, "archived": false } ] }
+ //
+-// A missing file is an empty list; any other unreadable file is an error, never
+-// silently replaced — it holds the user's tasks.
++// A version 1 file (no `nextId`, no `archived`) is still read, and written back as
++// version 2 by the next command that saves. A missing file is an empty list; any other
++// unreadable file is an error, never silently replaced — it holds the user's tasks.
+ import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs'
++import { nextId } from './tasks.mjs'
+ 
+-export const VERSION = 1
++export const VERSION = 2
+ 
+ /** The data file: `TASKS_FILE`, else `tasks.json` in the current directory. */
+ export function dataFile(env = process.env) {
+@@ -16,7 +18,7 @@ export function dataFile(env = process.env) {
+ export class StoreError extends Error {}
+ 
+ export function load(file) {
+-  if (!existsSync(file)) return { version: VERSION, tasks: [] }
++  if (!existsSync(file)) return { version: VERSION, nextId: 1, tasks: [] }
+   let data
+   try {
+     data = JSON.parse(readFileSync(file, 'utf8'))
+@@ -24,24 +26,34 @@ export function load(file) {
+     throw new StoreError(`${file}: not valid JSON (${e.message})`)
+   }
+   if (data === null || typeof data !== 'object') throw new StoreError(`${file}: not a task list`)
+-  if (data.version !== VERSION) {
+-    throw new StoreError(`${file}: unsupported format version ${JSON.stringify(data.version)} (expected ${VERSION})`)
++  if (data.version !== 1 && data.version !== 2) {
++    throw new StoreError(`${file}: unsupported format version ${JSON.stringify(data.version)} (expected 1 or 2)`)
+   }
+   if (!Array.isArray(data.tasks)) throw new StoreError(`${file}: "tasks" must be an array`)
+-  data.tasks.forEach((t, i) => validateTask(t, `${file}: tasks[${i}]`))
+-  return { version: VERSION, tasks: data.tasks }
++  data.tasks.forEach((t, i) => validateTask(t, `${file}: tasks[${i}]`, data.version))
++
++  if (data.version === 1) {
++    const tasks = data.tasks.map(t => ({ id: t.id, title: t.title, done: t.done, archived: false }))
++    return { version: VERSION, nextId: nextId(tasks), tasks }
++  }
++  // A counter at or below an existing id would hand that id out a second time.
++  if (!Number.isInteger(data.nextId) || data.nextId < nextId(data.tasks)) {
++    throw new StoreError(`${file}: "nextId" ${JSON.stringify(data.nextId)} is not above every task id`)
++  }
++  return { version: VERSION, nextId: data.nextId, tasks: data.tasks }
+ }
+ 
+-function validateTask(task, where) {
++function validateTask(task, where, version) {
+   if (task === null || typeof task !== 'object') throw new StoreError(`${where}: not an object`)
+   if (!Number.isInteger(task.id) || task.id < 1) throw new StoreError(`${where}: "id" must be a positive integer`)
+   if (typeof task.title !== 'string' || !task.title.trim()) throw new StoreError(`${where}: "title" must be a non-empty string`)
+   if (typeof task.done !== 'boolean') throw new StoreError(`${where}: "done" must be a boolean`)
++  if (version === 2 && typeof task.archived !== 'boolean') throw new StoreError(`${where}: "archived" must be a boolean`)
+ }
+ 
+ /** Writes through a temporary file and a rename: a crash mid-write leaves the previous file whole. */
+ export function save(file, data) {
+   const tmp = `${file}.tmp`
+-  writeFileSync(tmp, JSON.stringify({ version: VERSION, tasks: data.tasks }, null, 2) + '\n')
++  writeFileSync(tmp, JSON.stringify({ version: VERSION, nextId: data.nextId, tasks: data.tasks }, null, 2) + '\n')
+   renameSync(tmp, file)
+ }
+diff --git a/src/tasks.mjs b/src/tasks.mjs
+index f49c054..0411f28 100644
+--- a/src/tasks.mjs
++++ b/src/tasks.mjs
+@@ -3,7 +3,8 @@
+ 
+ export class TaskError extends Error {}
+ 
+-/** One past the highest id in the list — 1 for an empty list. */
++/** One past the highest id in the list — 1 for an empty list. Only a v1 file's
++ *  migration uses it: from then on `nextId` is a counter that never goes down. */
+ export function nextId(tasks) {
+   return tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1
+ }
+@@ -23,8 +24,8 @@ export function findTask(state, id) {
+ export function addTask(state, title) {
+   const clean = (title || '').trim()
+   if (!clean) throw new TaskError('a task needs a title')
+-  const task = { id: nextId(state.tasks), title: clean, done: false }
+-  return { state: { ...state, tasks: [...state.tasks, task] }, task }
++  const task = { id: state.nextId, title: clean, done: false, archived: false }
++  return { state: { ...state, nextId: state.nextId + 1, tasks: [...state.tasks, task] }, task }
+ }
+ 
+ export function completeTask(state, id) {
+@@ -38,3 +39,18 @@ export function removeTask(state, id) {
+   const task = findTask(state, id)
+   return { state: { ...state, tasks: state.tasks.filter(t => t.id !== id) }, task }
+ }
++
++function setArchived(state, id, archived) {
++  const task = { ...findTask(state, id), archived }
++  return { state: { ...state, tasks: state.tasks.map(t => (t.id === id ? task : t)) }, task }
++}
++
++export function archiveTask(state, id) {
++  if (findTask(state, id).archived) throw new TaskError(`task #${id} is already archived`)
++  return setArchived(state, id, true)
++}
++
++export function restoreTask(state, id) {
++  if (!findTask(state, id).archived) throw new TaskError(`task #${id} is not archived`)
++  return setArchived(state, id, false)
++}
+diff --git a/test/archive.test.mjs b/test/archive.test.mjs
+new file mode 100644
+index 0000000..e8a4650
+--- /dev/null
++++ b/test/archive.test.mjs
+@@ -0,0 +1,66 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { mkdtempSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs'
++import { tmpdir } from 'node:os'
++import { join, dirname } from 'node:path'
++import { fileURLToPath } from 'node:url'
++import { spawnSync } from 'node:child_process'
++import { archiveTask, restoreTask, TaskError } from '../src/tasks.mjs'
++
++const HERE = dirname(fileURLToPath(import.meta.url))
++const BIN = join(dirname(HERE), 'bin', 'tasks.mjs')
++const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'tasks-')), 'tasks.json')
++const ids = (out) => [...out.matchAll(/#(\d+)/g)].map(m => Number(m[1]))
++
++function cli(file, ...args) {
++  const r = spawnSync(process.execPath, [BIN, ...args], { encoding: 'utf8', env: { ...process.env, TASKS_FILE: file } })
++  return { status: r.status, out: r.stdout.trim(), err: r.stderr.trim() }
++}
++
++test('archive hides a task from the list, restore brings it back', () => {
++  const file = tmpFile()
++  cli(file, 'add', 'a'); cli(file, 'add', 'b')
++  assert.equal(cli(file, 'archive', '1').status, 0)
++  assert.deepEqual(ids(cli(file, 'list').out), [2])
++  assert.deepEqual(ids(cli(file, 'list', '--archived').out), [1])
++  assert.equal(cli(file, 'restore', '1').status, 0)
++  assert.deepEqual(ids(cli(file, 'list').out), [1, 2])
++  assert.equal(cli(file, 'list', '--archived').out, 'no archived tasks')
++})
++
++test('an id is never handed out twice — not after archive, not after rm', () => {
++  const file = tmpFile()
++  for (const t of ['a', 'b', 'c']) cli(file, 'add', t)
++  cli(file, 'archive', '3')
++  assert.match(cli(file, 'add', 'd').out, /#4\b/)
++  cli(file, 'rm', '4')
++  assert.match(cli(file, 'add', 'e').out, /#5\b/)
++})
++
++test('a v1 file migrates on the first save: ids, done states and the counter carry over', () => {
++  const file = tmpFile()
++  copyFileSync(join(HERE, 'v1-sample.json'), file)
++  assert.match(cli(file, 'add', 'new').out, /#4\b/, 'ids 1 and 3 exist: the next one is 4')
++  const data = JSON.parse(readFileSync(file, 'utf8'))
++  assert.equal(data.version, 2)
++  assert.equal(data.nextId, 5)
++  assert.deepEqual(data.tasks.map(t => [t.id, t.done, t.archived]), [[1, true, false], [3, false, false], [4, false, false]])
++})
++
++test('archive and restore refuse a task in the wrong state', () => {
++  const state = { nextId: 2, tasks: [{ id: 1, title: 'a', done: false, archived: false }] }
++  assert.throws(() => restoreTask(state, 1), /not archived/)
++  const archived = archiveTask(state, 1).state
++  assert.throws(() => archiveTask(archived, 1), /already archived/)
++  assert.throws(() => archiveTask(state, 9), TaskError)
++})
++
++test('a file of an unknown version, or with a counter behind its ids, is refused', () => {
++  const file = tmpFile()
++  writeFileSync(file, JSON.stringify({ version: 3, tasks: [] }))
++  assert.equal(cli(file, 'list').status, 1)
++  writeFileSync(file, JSON.stringify({ version: 2, nextId: 2, tasks: [{ id: 2, title: 'a', done: false, archived: false }] }))
++  const r = cli(file, 'add', 'b')
++  assert.equal(r.status, 1)
++  assert.match(r.err, /nextId/)
++})
+diff --git a/test/tasks.test.mjs b/test/tasks.test.mjs
+index db5aaba..ce5cce6 100644
+--- a/test/tasks.test.mjs
++++ b/test/tasks.test.mjs
+@@ -18,13 +18,14 @@ function cli(file, ...args) {
+ const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'tasks-')), 'tasks.json')
+ 
+ test('a task gets the next id and starts open', () => {
+-  const { state, task } = addTask({ tasks: [{ id: 4, title: 'a', done: false }] }, '  write tests ')
+-  assert.deepEqual(task, { id: 5, title: 'write tests', done: false })
++  const { state, task } = addTask({ nextId: 5, tasks: [{ id: 4, title: 'a', done: false, archived: false }] }, '  write tests ')
++  assert.deepEqual(task, { id: 5, title: 'write tests', done: false, archived: false })
++  assert.equal(state.nextId, 6)
+   assert.equal(state.tasks.length, 2)
+ })
+ 
+ test('an empty title is refused', () => {
+-  assert.throws(() => addTask({ tasks: [] }, '   '), TaskError)
++  assert.throws(() => addTask({ nextId: 1, tasks: [] }, '   '), TaskError)
+ })
+ 
+ test('completing twice is refused', () => {
