@@ -90,3 +90,32 @@ test('--setup-only builds every real case and spends nothing', () => {
   assert.match(r.out, /· SETUP architect-adr-budget → \/architect/)
   assert.match(r.out, /· SETUP reviewer-utf8 → code-reviewer/)
 })
+
+// The oracle judges what an implementation case built, without the agent's word:
+// hidden files copied in after the run, commands that must pass, and mutants the
+// workspace's own tests must kill. Driven by the fake agent, so it costs nothing.
+const oracle = (...names) => run([...names, '--cases', CASES, '--cmd', `node ${FAKE} {prompt}`, '--format', 'text'])
+
+test('a passing oracle passes the case: hidden checks green, every mutant killed', () => {
+  const r = oracle('oracle-green')
+  assert.equal(r.status, 0, r.out)
+  assert.match(r.out, /✓ PASS {2}oracle-green/)
+})
+
+test('a failing oracle fails the case, and names the survivor and the red command', () => {
+  const r = oracle('oracle-red')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /✗ FAIL {2}oracle-red/)
+  assert.match(r.out, /mutant reword-do-not survived/)
+  assert.doesNotMatch(r.out, /mutant drop-killswitch/, 'a killed mutant is not a failure')
+  assert.match(r.out, /oracle `node check-rollback\.mjs` exited 1/)
+  assert.match(r.out, /no rollback step in the runbook/)
+})
+
+test('several cases run by name, and an unknown name is refused rather than ignored', () => {
+  const both = oracle('oracle-green', 'oracle-red')
+  assert.match(both.out, /1\/2 passed/)
+  const typo = oracle('oracle-green', 'oracle-gren')
+  assert.equal(typo.status, 2)
+  assert.match(typo.out, /no such case: oracle-gren/)
+})

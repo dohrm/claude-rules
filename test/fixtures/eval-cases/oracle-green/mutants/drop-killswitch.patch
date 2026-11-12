@@ -1,0 +1,13 @@
+diff --git a/docs/runbook/checkout.md b/docs/runbook/checkout.md
+index 719caef..f24a3d4 100644
+--- a/docs/runbook/checkout.md
++++ b/docs/runbook/checkout.md
+@@ -5,7 +5,7 @@
+ ## First move — mitigate now
+ 
+ ```
+-just checkout-killswitch-off
++just checkout-logs
+ ```
+ 
+ ## Do NOT

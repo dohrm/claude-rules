@@ -1,0 +1,6 @@
+# The gate the agent must not edit.
+check:
+    @echo ok
+
+checkout-killswitch-off:
+    kubectl -n shop-prod set env deploy/checkout-api CHECKOUT_V2_ENABLED=false
