@@ -38,7 +38,7 @@ gives the skill a fixture repo to read and asserts on what it wrote. The runner:
 ```bash
 node eval/run.mjs                     # all cases, current model
 node eval/run.mjs --model <candidate> # re-run against a new model (the point)
-node eval/run.mjs runbook-commands    # a single case
+node eval/run.mjs runbook-commands    # a single case (or several, by name)
 node eval/run.mjs --setup-only        # build the workspaces and stop — spends nothing
 node eval/run.mjs --keep              # keep the workspaces, print their paths
 node eval/run.mjs --timeout 900       # per-case seconds (default 600)
@@ -133,8 +133,14 @@ eval/cases/<name>/
                   #   a justfile, docs/, manifests, sibling sources… whatever the target must read
 ```
 
-The workspace is a real git repo: a baseline commit, then `input.*` on top as the
-change under review. That is what gives the reviewer a diff and `adr-check` a `HEAD`.
+Several cases can share one fixture repo: `eval/cases/_fixtures/<name>/` (no
+`expect.json`, so it is not a case), named by `"fixture"`. The case's own `files/`
+lands on top of it.
+
+The workspace is a real git repo on `main`: a baseline commit by `eval`, tagged
+`eval-baseline`, then `input.*` on top as the change under review. That is what gives
+the reviewer a diff and `adr-check` a `HEAD`. The agent commits as `eval-agent`, never
+as the baseline's author.
 
 `expect.json`:
 ```json
@@ -158,6 +164,13 @@ change under review. That is what gives the reviewer a diff and `adr-check` a `H
   "file_not_matches":   ["\\.clone\\(\\)"],
   "file_changed":       true,                  // the agent must (or must not) have edited it
   "ci_verdict_in":      ["CRITICAL", "WARNINGS"], // the CI_VERDICT line must be one of these
+  "fixture":            "tasks",               // a shared fixture repo, eval/cases/_fixtures/tasks
+  "oracle": {                                  // an implementation case: judge what was built
+    "files":    "hidden",                      // copied into the workspace AFTER the run (hidden tests)
+    "commands": ["node --test", "git diff --quiet eval-baseline -- justfile"],  // each must exit 0
+    "test":     "node --test",                 // the workspace's own test command…
+    "mutants":  ["mutants/off-by-one.patch"]   // …must exit non-zero under each patch
+  },
   "judge": "Does the review identify the UTF-8/byte-indexing hazard on &str?"
 }
 ```
@@ -168,6 +181,15 @@ just its fixture + a couple of expectations.
 the artifact (`stdout_*`, `ci_verdict_in`). For an editing agent, and for every
 skill, the report is only what it *says* it did — the files are the truth
 (`file_*`, `artifacts`).
+
+**The oracle judges an implementation.** Mutants run first, before the hidden files
+arrive, so each one tests whether the *agent's* tests assert. A surviving mutant fails
+the case by name. So does one that does not apply. Mutants are patches written against
+the case's reference solution, so a real implementation that differs in text from that
+solution will usually not take them, and the case says so instead of passing. Each case
+ships its `reference.patch`, and `npm test` applies it through a stand-in agent
+(`test/fixtures/patch-agent.mjs`), which proves the oracle can be met without spending
+a token.
 
 **Let the gates be the oracle.** `gates` runs a `kit/common/*` script against the
 workspace and requires exit 0. `/architect` is judged by `adr-check --strict`,
@@ -197,6 +219,12 @@ Each case guards **one claim that would be expensive to lose**.
 | `runbook-commands` | `/runbook` | the commands come from the fixture's justfile and manifests, **not** from plausible invention — its central promise |
 | `architect-adr-budget` | `/architect` | one decision per ADR, under budget, `Proposed` — judged by `adr-check --strict` |
 | `postmortem-blameless` | `/postmortem` | detect/mitigate/resolve separated, no name anywhere, action items owned and dated |
+| `rfc-draft-lifecycle` | `/rfc` | a request that rewrites a file format comes back as a `draft` with two phases, a hold with a check command, and a `## Model` that settles an id reused after removal |
+| `reviewer-rfc-spec-gap` | `code-reviewer` | a defect whose fix needs a decision the RFC never made is 🔴 with `**Model**: gap`, not a fix the reviewer invents |
+| `rfc-implement-l3` | `/rfc` | a `ready` RFC is implemented to its stopping condition: hidden tests green, mutants killed, gate and out-of-scope files untouched, the missing `code-review` recipe declared. Its real run is the human's call (cost) |
+
+The three `rfc` cases share the `tasks` fixture and are staged: one run never replays
+the whole chain from draft to review.
 
 Keep it at that unless a new case guards a behavior a real change depended on. The
 skills that are pure dialogue (`/interview`) or whose output is a judgment call
