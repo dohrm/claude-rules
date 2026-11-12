@@ -79,6 +79,7 @@ test('l4 board: each malformed line is named, never guessed', () => {
     [{ caps: '- Caps: budget=lots; review-passes=3; rejected-rounds=1' }, /budget=lots is not a valid cap/],
     [{ caps: '- Caps: budget=1 minutes; review-passes=0; rejected-rounds=1' }, /review-passes=0 is not a valid cap/],
     [{ caps: '- Caps: budget=1 minutes; review-passes=3; rejected-rounds=1; speed=9' }, /unknown cap `speed`/],
+    [{ caps: '- Caps: budget=1 minutes; review-passes=3=9; rejected-rounds=1' }, /review-passes=\(empty\) is not a valid cap/],
     [{ envelope: '- Pass envelope: some' }, /`- Pass envelope: some` — the pass envelope is a non-negative integer/],
     [{ envelope: '- Reviewers: anyone' }, /`- Reviewers: anyone` — expected one of/],
     [{ envelope: BOARD.caps }, /Caps is given twice/],

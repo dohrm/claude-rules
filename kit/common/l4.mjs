@@ -117,7 +117,8 @@ function parseBoardValue(key, value, where) {
   if (key === 'caps') {
     const caps = {}
     for (const part of value.split(';').map((s) => s.trim()).filter(Boolean)) {
-      const [name, v = ''] = part.split('=').map((s) => s.trim())
+      const [name, ...rest] = part.split('=').map((s) => s.trim())
+      const v = rest.length === 1 ? rest[0] : ''
       if (!CAPS.includes(name)) refuse(EXIT.escalate, `${where} — unknown cap \`${name}\` (${CAPS.join(', ')})`)
       if (name in caps) refuse(EXIT.escalate, `${where} — cap \`${name}\` is given twice`)
       const ok = name === 'budget' ? /^[1-9]\d*\s+(minutes|tokens)$/.test(v)

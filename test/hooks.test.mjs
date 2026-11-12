@@ -80,6 +80,11 @@ const DENIED = [
   ['git merge origin/phase/x/2', /just l4-merge/],
   ['git pull origin phase/x/2', /just l4-merge/],
   ['git fetch && git merge refs/heads/phase/x/2; git push', /just l4-merge/],
+  // Quoting an operand does not hide it.
+  ["rm '.work/x/l4.jsonl'", /L4 journal/],
+  ['echo "{}" >> ".work/x/l4.jsonl"', /forges the verdict/],
+  ["git merge 'phase/x/2'", /just l4-merge/],
+  ['git merge --no-ff "origin/phase/x/2"', /just l4-merge/],
 ]
 for (const [command, why] of DENIED) {
   test(`bash-guard denies: ${command}`, () => {
@@ -142,6 +147,9 @@ const ALLOWED = [
   'git merge --abort',
   'git pull --rebase origin rfc/x',
   'just l4-merge 2',
+  // A quote holding a space is data, not an operand.
+  'git commit -m "never git merge phase/x/2 by hand"',
+  'git commit -m "fix: rm .work/x/l4.jsonl is denied"',
 ]
 for (const command of ALLOWED) {
   test(`bash-guard stays out of the way: ${command}`, () => {
