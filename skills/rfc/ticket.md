@@ -111,8 +111,9 @@ the RFC, and a sub-ticket event is an event on the RFC.
 
 At L4, the `ODD:` lines (or `dropped to L3: <why>`), the dependency graph before any
 parallel phases, and each delegated decision with its proof are comments, like any
-other history. The verdicts live in `.work/<slug>/l4.jsonl` on `rfc/<slug>`, written
-and committed by `just l4-judge` / `just l4-merge` only; after each `l4-merge`, post one
+other history. The verdicts are recorded in `.work/<slug>/l4.jsonl` on `rfc/<slug>`,
+written and committed by `just l4-judge` / `just l4-merge` — a record, not the
+authority: `l4-merge` merges on its own fresh verdict. After each `l4-merge`, post one
 comment with its `l4:` line and the merged sha. The referee reads the board from the
 ticket cache, so refresh `review-context.md` before each judge. The final report is the
 `rfc/<slug>` PR's description, linked in a comment.

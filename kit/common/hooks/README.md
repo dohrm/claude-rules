@@ -51,6 +51,12 @@ merge. Do not sell more than that.
   the task, so a human decides. A forge merge (`gh pr merge`, `glab mr merge`,
   `tea pulls merge`) asks too: it is the human's act, and sometimes what they asked for.
 
+The L4 entries — `l4.jsonl` and `git merge`/`git pull` naming `phase/*` — are depth,
+not the authority: `l4-merge` re-judges and merges on its fresh verdict alone, so a
+forged journal line or a hand merge buys nothing the referee would not give. They deny
+the spellings their tests list and fail open, like the `review-report.md` entries; a
+spelling that gets past them is not a hole to plug with another pattern.
+
 Quoted text is scrubbed before matching, so `git commit -m "drop the -n flag"` is
 not a bypass. Matching stays inside the current `|;&` segment, and the write and the
 gate file must be *correlated* — the redirect has to target the gate file, or the
@@ -65,7 +71,7 @@ only the `justfile` that holds the `import` lines would leave the commands ungua
 
 - **deny** for the paths with no legitimate hand-edit: `.work/review-report.md`
   (hand-writing it forges the verdict `review-guard` reads), `.work/<slug>/l4.jsonl`
-  (the verdicts `just l4-merge` checks) and `.git/hooks/`
+  (the L4 journal — the rejected rounds the referee counts) and `.git/hooks/`
   (`lefthook install` owns those files). `autonomy.md` calls both a HARD bypass, and
   `bash-guard` denies the shell spelling — an ask here would leave the strongest rule
   in the doctrine enforced by the weaker half.

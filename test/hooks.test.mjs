@@ -73,7 +73,7 @@ const DENIED = [
   ['chmod 000 .git/hooks/pre-push', /git floor/],
   ['sed --in-place -e 1d .git/hooks/pre-commit', /git floor/],
   // The L4 journal and a phase merge belong to l4.mjs (rules/agent/autonomy.md § L4).
-  ['echo "{}" >> .work/x/l4.jsonl', /forges the verdict/],
+  ['echo "{}" >> .work/x/l4.jsonl', /forges the record/],
   ['rm .work/x/l4.jsonl', /L4 journal/],
   ['sed -i "" 1d .work/x/l4.jsonl', /L4 journal/],
   ['git merge --no-ff phase/x/2', /just l4-merge/],
@@ -82,12 +82,12 @@ const DENIED = [
   ['git fetch && git merge refs/heads/phase/x/2; git push', /just l4-merge/],
   // Quoting an operand does not hide it.
   ["rm '.work/x/l4.jsonl'", /L4 journal/],
-  ['echo "{}" >> ".work/x/l4.jsonl"', /forges the verdict/],
+  ['echo "{}" >> ".work/x/l4.jsonl"', /forges the record/],
   ["git merge 'phase/x/2'", /just l4-merge/],
   ['git merge --no-ff "origin/phase/x/2"', /just l4-merge/],
   // A path with a space, and git's global options before the subcommand.
   ['rm "/tmp/my repo/.work/x/l4.jsonl"', /L4 journal/],
-  ["echo '{}' >> '/tmp/my repo/.work/x/l4.jsonl'", /forges the verdict/],
+  ["echo '{}' >> '/tmp/my repo/.work/x/l4.jsonl'", /forges the record/],
   ['git -C /tmp/repo merge phase/x/2', /just l4-merge/],
   ['git -c core.editor=true --no-pager pull origin phase/x/2', /just l4-merge/],
 ]

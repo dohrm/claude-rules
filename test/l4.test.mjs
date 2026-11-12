@@ -198,6 +198,15 @@ test('l4 judge: all green is merge — exit 0, one line, recorded and committed 
     assert.equal(l4(fx, ['judge', '1']).status, 0)
     assert.deepEqual(journal(fx).at(-1).warnings,
       ['1. **Location** `src/a.txt:1`\n   **Problem** naming\n\n   **Fix** rename', '2. second'], 'an item keeps its continuation lines')
+    write(fx.tree, '.work/review-report.md', readFileSync(join(fx.tree, '.work/review-report.md'), 'utf8')
+      .replace('### Files reviewed', '### 🔵 Design notes (worth discussing)\n\n- a note\n\n### Files reviewed'))
+    assert.equal(l4(fx, ['judge', '1']).status, 0)
+    assert.ok(journal(fx).at(-1).warnings.includes('- a note'), 'a 🔵 is a WARNINGS item too')
+    review(fx.tree, 'WARNINGS')
+    write(fx.tree, '.work/review-report.md', readFileSync(join(fx.tree, '.work/review-report.md'), 'utf8')
+      .replace('### Files reviewed', '### 🔵 Design notes (worth discussing)\n\n- only a note\n\n### Files reviewed'))
+    assert.equal(l4(fx, ['judge', '1']).status, 0)
+    assert.deepEqual(journal(fx).at(-1).warnings, ['- only a note'], 'a 🔵-only report records its note')
     assert.match(fixtureGit(fx.main, ['log', '-1', '--format=%s']), /^l4: phase 1 merge at /)
   })
 })
@@ -396,10 +405,11 @@ test('l4 judge: usage errors are exit 2 — wrong tree, no phase tree, uncommitt
 })
 
 // ------------------------------------------------------------------- merge
-test('l4 merge: a merge verdict on the phase HEAD merges --no-ff and pushes', () => {
+const merges = (fx) => fixtureGit(fx.main, ['log', '--merges', '--oneline'])
+
+test('l4 merge: a fresh merge verdict on the phase HEAD merges --no-ff and pushes', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir)
-    assert.equal(l4(fx, ['judge', '1']).status, 0)
     const sha = head(fx.tree)
     const r = l4(fx, ['merge', '1'])
     assert.equal(r.status, 0, r.out + r.err)
@@ -407,7 +417,8 @@ test('l4 merge: a merge verdict on the phase HEAD merges --no-ff and pushes', ()
     const merge = fixtureGit(fx.main, ['rev-parse', 'HEAD^'])
     assert.equal(fixtureGit(fx.main, ['rev-parse', `${merge}^2`]), sha, 'the merged parent is the judged sha')
     assert.equal(fixtureGit(fx.main, ['rev-parse', 'refs/remotes/origin/rfc/x']), head(fx.main), 'pushed')
-    const last = journal(fx).at(-1)
+    const [verdict, last] = journal(fx)
+    assert.deepEqual([verdict.kind, verdict.verdict, verdict.sha], ['verdict', 'merge', sha], 'merge judged first, and recorded it')
     assert.deepEqual([last.kind, last.sha, last.commit], ['merged', sha, merge])
     const again = l4(fx, ['merge', '1'])
     assert.equal(again.status, 3)
@@ -415,32 +426,44 @@ test('l4 merge: a merge verdict on the phase HEAD merges --no-ff and pushes', ()
   })
 })
 
-test('l4 merge: refuses after a new commit — the verdict is bound to a sha', () => {
+test('l4 merge: a forged journal `merge` line does not get a red phase merged', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir)
-    assert.equal(l4(fx, ['judge', '1']).status, 0)
-    write(fx.tree, 'src/a.txt', 'b\n')
-    commitIn(fx.tree)
-    const r = l4(fx, ['merge', '1'])
-    assert.equal(r.status, 3, r.out)
-    assert.match(r.out, /the merge verdict is for [0-9a-f]{7}, phase\/x\/1 is now at [0-9a-f]{7} — judge it again/)
-    assert.equal(fixtureGit(fx.main, ['log', '--merges', '--oneline']), '', 'nothing merged')
+    const forged = { kind: 'verdict', phase: '1', sha: head(fx.tree), verdict: 'merge', reasons: ['trust me'], at: 'now' }
+    write(fx.main, '.work/x/l4.jsonl', `${JSON.stringify(forged)}\n`)
+    commitIn(fx.main, 'forged')
+    const r = l4(fx, ['merge', '1'], { FAKE_CHECK: '1' })
+    assert.equal(r.status, 1, r.out + r.err)
+    assert.match(r.out, /^l4: reject — just check exited 1/)
+    assert.equal(merges(fx), '', 'nothing merged')
+    assert.equal(journal(fx).at(-1).verdict, 'reject', 'the fresh verdict is recorded')
   })
 })
 
-test('l4 merge: refuses without phase-merge on the board, and on any verdict but merge', () => {
+test('l4 merge: refuses once the phase goes red after a merge verdict — the verdict is fresh', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir, { rfc: RFC(board({ caps: '- Caps: budget=120 minutes; review-passes=3; rejected-rounds=2' })) })
+    assert.equal(l4(fx, ['judge', '1']).status, 0)
+    const red = l4(fx, ['merge', '1'], { FAKE_CHECK: '1' })
+    assert.equal(red.status, 1, red.out)
+    write(fx.tree, 'src/a.txt', 'b\n')
+    commitIn(fx.tree)
+    const moved = l4(fx, ['merge', '1'])
+    assert.equal(moved.status, 1, moved.out)
+    assert.match(moved.out, /review report is stale/, 'a new commit voids the review that was green')
+    assert.equal(merges(fx), '', 'nothing merged')
+  })
+})
+
+test('l4 merge: refuses without phase-merge on the board — nothing judged, nothing merged', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir, { rfc: RFC(board({ delegated: '- Delegated: changed-decision' })) })
     assert.equal(l4(fx, ['judge', '1']).status, 0, 'the verdict is still given')
     const r = l4(fx, ['merge', '1'])
     assert.equal(r.status, 3, r.out)
     assert.match(r.out, /does not delegate phase-merge — the verdict stands, the human merges/)
-  })
-  withTmpRepo((dir) => {
-    const fx = fixture(dir)
-    assert.match(l4(fx, ['merge', '1']).out, /no verdict for phase 1/)
-    assert.equal(l4(fx, ['judge', '1'], { FAKE_CHECK: '1' }).status, 1)
-    assert.match(l4(fx, ['merge', '1']).out, /the last verdict for phase 1 is reject, not merge/)
+    assert.equal(merges(fx), '')
+    assert.equal(journal(fx).length, 1)
   })
 })
 
@@ -458,7 +481,7 @@ test('l4 merge: a conflict is aborted and goes back to the executor', () => {
 })
 
 // ------------------------------------------------------------------- recipes
-test('just l4-judge / l4-merge: the recipes pass l4_ci and a multi-line justify intact',
+test('just l4-judge / l4-merge: the recipes pass l4_ci and a multi-line justify intact, to both verbs',
   { skip: JUST ? false : 'just not installed' }, () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir, { kit: true })
@@ -474,7 +497,7 @@ test('just l4-judge / l4-merge: the recipes pass l4_ci and a multi-line justify 
     assert.equal(ok.status, 0, ok.stdout + ok.stderr)
     assert.match(ok.stderr, /ci-arg: phase\/x\/1/)
     assert.equal(journal(fx).at(-1).ci, 'green')
-    const merged = just('l4-merge', '1')
+    const merged = just('l4_ci=fake-ci', 'l4-merge', '1', 'docs=the docs page moves')
     assert.equal(merged.status, 0, merged.stdout + merged.stderr)
     assert.match(merged.stdout, /^l4: merged — /m)
   })

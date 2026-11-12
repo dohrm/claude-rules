@@ -559,8 +559,10 @@ scope-report:
 # line and exits 0 merge, 1 reject, 3 escalate, 4 wait; every verdict is appended to
 # `.work/<slug>/l4.jsonl` and committed. `justify` clears overflow packages, one
 # `<package>=<text>` per line, each text quoted from a `changed:` or `## Assumptions`
-# line of the RFC. `l4-merge` merges the exact sha a `merge` verdict was given for, if
-# the board delegates `phase-merge`, and pushes.
+# line of the RFC. `l4-merge` (same arguments) requires `phase-merge` on the board,
+# re-runs the judge and merges the exact sha only on that fresh `merge` verdict, then
+# pushes; any other verdict exits with its code. The journal is a record, never read
+# back as a verdict.
 #
 # `l4_ci` is the CI state of a branch, run with the branch as its last argument: exit 0
 # green, 8 still running (`gh pr checks`' "pending"), anything else red. Empty means
@@ -571,8 +573,8 @@ l4_ci := "gh pr checks --required"
 l4-judge n justify="":
     node {{kit}}/l4.mjs judge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
 
-l4-merge n:
-    node {{kit}}/l4.mjs merge {{quote(n)}} --slug {{quote(work_slug)}}
+l4-merge n justify="":
+    node {{kit}}/l4.mjs merge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
 
 # ── CI: the base a gate job compares against ─────────────────────────────────
 # `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),

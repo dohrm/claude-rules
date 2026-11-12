@@ -139,11 +139,16 @@ integration tree, on `rfc/<slug>`:
   3 escalate (an RFC whose `**Autonomy**` is not L4, a 🔴 whose `**Model**` is `gap`, an overflow no justification quoted
   from a `changed:` or `## Assumptions` line clears, a reject past `rejected-rounds`, a
   board or journal that does not parse), 4 wait (CI exit 8), 2 usage.
-- `just l4-merge <n>` — only on a `merge` verdict for the phase's current HEAD, and
-  only if the board delegates `phase-merge`: `git merge --no-ff <that sha>`, then push.
+- `just l4-merge <n> ['<package>=<text>']` — only if the board delegates `phase-merge`:
+  runs the judge again on the phase HEAD and merges only on that fresh `merge` verdict,
+  `git merge --no-ff <the judged sha>`, then push. Any other fresh verdict exits with its
+  code and merges nothing.
 
-Every verdict and merge is appended to `.work/<slug>/l4.jsonl` and committed alone; the
-guards deny a hand write. `l4_ci` defaults to `gh pr checks --required`; empty means
+Every verdict and merge is appended to `.work/<slug>/l4.jsonl` and committed alone. The
+journal is a record, not the authority: no verdict is read back from it to merge, so a
+forged line buys nothing. It keeps what cannot be recomputed — the rejected rounds
+counted against the cap, each merge's `WARNINGS` (🟡 and 🔵). A line that does not
+parse is refused (exit 3). `l4_ci` defaults to `gh pr checks --required`; empty means
 Tier 4 is not wired, recorded as declared, never as green.
 
 ## What the reviewer never sees

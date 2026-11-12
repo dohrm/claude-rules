@@ -506,7 +506,7 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |
 | `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block (the RFC), before push; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
-| `just l4-judge <n>` · `just l4-merge <n>` | — the L4 referee: a phase's verdict from its check, review report, CI and scope report; the merge only on a `merge` verdict for its HEAD | L4 orchestrator, from the integration tree |
+| `just l4-judge <n>` · `just l4-merge <n>` | — the L4 referee: a phase's verdict from its check, review report, CI and scope report; the merge only on a fresh `merge` verdict `l4-merge` computes itself for that HEAD (the journal `l4.jsonl` is a record, never the authority) | L4 orchestrator, from the integration tree |
 | `just adr-retired [NNNN]` | — reads, never gates: the records deleted from `docs/adr/`, or one record's last version, from git history | on demand, with `docs/adr/` |
 | `just status` | — reports, never gates: every worktree at a glance (branch, dirty, RFC or loop, verdict, blockers) | opt-in, when sessions run in parallel trees |
 

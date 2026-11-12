@@ -105,14 +105,15 @@ const unquoteWords = (s) => scrub(s
 // `git` and the subcommand.
 const GIT = String.raw`\bgit(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+`
 const DENY_OPERANDS = [
-  // Only l4.mjs appends to the journal, the way only a review writes the report.
+  // Only l4.mjs appends to the journal, the way only a review writes the report. Depth,
+  // not the authority (l4-merge re-judges): these spellings are denied, the rest fails open.
   [new RegExp(MUTATOR + String.raw`l4\.jsonl`),
     'the L4 journal is written by `just l4-judge` / `just l4-merge` and by nothing else'],
   [new RegExp(REDIRECT + String.raw`l4\.jsonl`),
-    'writing the L4 journal by hand forges the verdict `just l4-merge` checks'],
-  // A phase merges on a verdict bound to its sha, and nobody legitimately hand-merges one.
+    'writing the L4 journal by hand forges the record of rejected rounds `just l4-judge` counts'],
+  // A phase merges on a fresh verdict for its sha, and nobody legitimately hand-merges one.
   [new RegExp(GIT + String.raw`(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
-    'a phase merges through `just l4-merge`, on `just l4-judge`\'s verdict — never by hand'],
+    'a phase merges through `just l4-merge`, on the verdict it computes — never by hand'],
 ]
 
 // A forge merge is the human's act, and the human sometimes asks for one: ask, not deny.
