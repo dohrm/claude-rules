@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "tasks": [
+    { "id": 1, "title": "renew passport", "done": true },
+    { "id": 3, "title": "book dentist", "done": false }
+  ]
+}
