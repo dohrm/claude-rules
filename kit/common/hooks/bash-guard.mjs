@@ -96,8 +96,14 @@ const DENY = [
 // The L4 journal and a phase ref are OPERANDS: quoting one (`rm '.work/x/l4.jsonl'`,
 // `git merge "phase/x/2"`) must not hide it, so these rules read the command with
 // one-word quotes unwrapped. A quote holding a space is still data — a commit message
-// that says "git merge phase/x/2" is not a merge.
-const unquoteWords = (s) => scrub(s.replace(/'([^'\s]*)'/g, '$1').replace(/"([^"\s]*)"/g, '$1'))
+// that says "git merge phase/x/2" is not a merge — unless it ENDS in the journal's name:
+// that is a path with a space in it, kept as one token so a redirect still reaches it.
+const unquoteWords = (s) => scrub(s
+  .replace(/(['"])([^'"]*l4\.jsonl)\1/g, (_, _q, path) => path.replace(/\s/g, '_'))
+  .replace(/'([^'\s]*)'/g, '$1').replace(/"([^"\s]*)"/g, '$1'))
+// git's global options (`-C <dir>`, `-c <k=v>`, `--git-dir=…`, `--no-pager`) sit between
+// `git` and the subcommand.
+const GIT = String.raw`\bgit(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+`
 const DENY_OPERANDS = [
   // Only l4.mjs appends to the journal, the way only a review writes the report.
   [new RegExp(MUTATOR + String.raw`l4\.jsonl`),
@@ -105,7 +111,7 @@ const DENY_OPERANDS = [
   [new RegExp(REDIRECT + String.raw`l4\.jsonl`),
     'writing the L4 journal by hand forges the verdict `just l4-merge` checks'],
   // A phase merges on a verdict bound to its sha, and nobody legitimately hand-merges one.
-  [new RegExp(String.raw`\bgit\s+(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
+  [new RegExp(GIT + String.raw`(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
     'a phase merges through `just l4-merge`, on `just l4-judge`\'s verdict — never by hand'],
 ]
 

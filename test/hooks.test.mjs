@@ -85,6 +85,11 @@ const DENIED = [
   ['echo "{}" >> ".work/x/l4.jsonl"', /forges the verdict/],
   ["git merge 'phase/x/2'", /just l4-merge/],
   ['git merge --no-ff "origin/phase/x/2"', /just l4-merge/],
+  // A path with a space, and git's global options before the subcommand.
+  ['rm "/tmp/my repo/.work/x/l4.jsonl"', /L4 journal/],
+  ["echo '{}' >> '/tmp/my repo/.work/x/l4.jsonl'", /forges the verdict/],
+  ['git -C /tmp/repo merge phase/x/2', /just l4-merge/],
+  ['git -c core.editor=true --no-pager pull origin phase/x/2', /just l4-merge/],
 ]
 for (const [command, why] of DENIED) {
   test(`bash-guard denies: ${command}`, () => {
@@ -150,6 +155,8 @@ const ALLOWED = [
   // A quote holding a space is data, not an operand.
   'git commit -m "never git merge phase/x/2 by hand"',
   'git commit -m "fix: rm .work/x/l4.jsonl is denied"',
+  'git -C /tmp/repo merge feat/hooks',
+  'git -C /tmp/repo merge-base rfc/x phase/x/2',
 ]
 for (const command of ALLOWED) {
   test(`bash-guard stays out of the way: ${command}`, () => {
