@@ -49,7 +49,7 @@ Spend your budget in that order. The lists are prompts, not a checklist to fill.
 
 **autonomy** — can an agent run with these assets unattended and still be right?
 - Trigger collisions: two skill `description`s that claim the same request
-  (e.g. `defect` / `rfc` / `loop-setup`, `architect` / `solution-exploration`).
+  (e.g. `defect` / `rfc`, `architect` / `solution-exploration`).
 - Contracts that contradict each other: a skill that skips a checkpoint of
   `rules/agent/autonomy.md`, two rules that disagree, a skill restating a rule.
 - Portability: constructs that only work in Claude Code (tool names, frontmatter
