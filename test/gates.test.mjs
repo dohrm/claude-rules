@@ -1643,15 +1643,15 @@ test('review-guard: with no commit yet there is nothing to compare against', () 
 // The counterpart of review-guard: that one is the gate in ONE tree, this one is
 // the report across ALL of them. So what gets pinned here is that it aggregates
 // faithfully (a CRITICAL in a sibling tree is visible from here), that the
-// escalation channel /rfc and /loop-setup define actually surfaces, and that it NEVER blocks —
+// escalation channel /rfc and /defect define actually surfaces, and that it NEVER blocks —
 // a dashboard with an exit code is a second gate nobody asked for.
 const WT_STATUS = join(REPO, 'kit', 'common', 'worktree-status.mjs')
 
-/** An rfc.md / loop.md, with the `## Blocked on the human` section
- *  /rfc and /loop-setup both write. */
+/** An rfc.md / defect.md, with the `## Blocked on the human` section
+ *  /rfc and /defect both write. */
 const worklist = (blockers) =>
   '# RFC — split\n\n## Steps\n\n- [ ] T1\n\n## Blocked on the human\n\n'
-  + '<!-- What the loop cannot decide or access. -->\n'
+  + '<!-- What the run cannot decide or access. -->\n'
   + (blockers.length ? blockers.map((b) => `- ${b}\n`).join('') : '- <blocker>\n')
 
 test('worktree-status: outside a repo it says so and still exits 0', () => {
@@ -1710,16 +1710,6 @@ test('worktree-status: an rfc.md and its blockers surface, placeholders do not',
   })
 })
 
-test('worktree-status: loop.md escalates the same way an rfc.md does', () => {
-  withTmpRepo((dir) => {
-    commits(dir)
-    write(dir, '.work/onboarding/loop.md', worklist(['waiting on the API key']))
-    const r = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(r.out, /onboarding\/loop/)
-    assert.match(r.out, /BLOCKED: waiting on the API key/)
-  })
-})
-
 test('worktree-status: a /defect escalation surfaces like an rfc.md one', () => {
   withTmpRepo((dir) => {
     commits(dir)
@@ -1773,17 +1763,6 @@ test('review-context: a slug holding a defect.md and an rfc.md reads the one nam
   })
 })
 
-test('worktree-status: an rfc.md outranks a loop.md under the same slug', () => {
-  withTmpRepo((dir) => {
-    commits(dir)
-    write(dir, '.work/split/loop.md', worklist(['stale — the RFC took over']))
-    write(dir, '.work/split/rfc.md', worklist([]))
-    const r = run(WT_STATUS, ['HEAD'], dir)
-    assert.match(r.out, /split\/rfc \(\+1\)/, 'the RFC sorts last and wins, the loop.md is only counted')
-    assert.doesNotMatch(r.out, /BLOCKED/, 'it reads the winning file, not the stale loop.md')
-  })
-})
-
 test('worktree-status: retired state files (PLAN.md, tasks/, goal.md) are not read', () => {
   withTmpRepo((dir) => {
     commits(dir)
@@ -1820,35 +1799,27 @@ test('worktree-status: an unknown base is a missing column, not a crash', () => 
 })
 
 // ── publish-summary ──────────────────────────────────────────────────────────
-// The per-loop counterpart of worktree-status: one worktree, once, at the moment a
-// loop stops. What gets pinned here: it resolves the same loop.md-then-newest-worklist
-// file worktree-status already sorts by, it reports mechanically (nothing it prints is
+// The per-run counterpart of worktree-status: one worktree, once, at the moment an
+// RFC run stops. What gets pinned here: it reads the slug's rfc.md and nothing else,
+// it reports mechanically (nothing it prints is
 // LLM-authored), a bad run never corrupts a prior SUMMARY.md, and status is enforced
 // even when called directly (the recipe's `case` guard is bypassed here on purpose).
 const PUBLISH_SUMMARY = join(REPO, 'kit', 'common', 'publish-summary.mjs')
 
-/** A `.work/<slug>/loop.md`, matching skills/loop-setup's `<loop-file-template>`. */
-const loopMd = ({
+/** A `.work/<slug>/rfc.md`, in the shape skills/rfc's `<rfc-body>` gives it. */
+const rfcMd = ({
   objective = 'ship the thing',
-  cap = '20 turns',
-  budget = '200k tokens',
   items = ['- [x] step one', '- [ ] step two'],
-  log = ['- turn 1: wired the client'],
+  log = ['- step 1: wired the client'],
   blocked = [],
 } = {}) =>
-  `# Loop — ${objective}\n\n`
-  + `- **Objective (bounded)**: ${objective}\n`
-  + '- **Done-command**: `npm test`\n'
-  + '- **Type**: closed\n\n'
-  + '## Guardrails\n\n'
-  + `- **Iteration cap**: ${cap}\n`
-  + `- **Token budget**: ${budget}\n`
-  + '- **Escalate when**: cap/budget hit\n'
-  + '- **Out of scope**: nothing else\n\n'
-  + '## Remaining work\n\n'
+  `# RFC — ${objective}\n\n`
+  + '- **Status**: implementing\n'
+  + '- **Stopping condition**: `npm test`\n\n'
+  + '## Steps\n\n'
   + `${items.join('\n')}\n\n`
   + '## Log\n\n'
-  + `${(log.length ? log : ['- <turn>: <win or dead end>']).join('\n')}\n\n`
+  + `${(log.length ? log : ['- <step>: <win or dead end>']).join('\n')}\n\n`
   + '## Blocked on the human\n\n'
   + `${(blocked.length ? blocked.map((b) => `- ${b}`) : ['- <blocker>']).join('\n')}\n`
 
@@ -1863,7 +1834,7 @@ test('publish-summary: a missing slug is a usage error', () => {
 test('publish-summary: an unknown status is rejected, by name', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/loop.md', loopMd())
+    write(dir, '.work/demo/rfc.md', rfcMd())
     const r = run(PUBLISH_SUMMARY, ['demo', 'DONE'], dir)
     assert.equal(r.status, 2)
     assert.match(r.out, /unknown status: DONE/)
@@ -1886,16 +1857,32 @@ test('publish-summary: a slug dir with no state file is a usage error', () => {
     write(dir, '.work/empty/goal.md', '# Goal — retired\n')
     const r = run(PUBLISH_SUMMARY, ['empty', 'COMPLETED'], dir)
     assert.equal(r.status, 2)
-    assert.match(r.out, /no loop\.md or rfc\.md/)
+    assert.match(r.out, /no rfc\.md/)
   })
 })
 
-test('publish-summary: loop.md happy path — status, objective, guardrails, checklist, blocked all land', () => {
+test('publish-summary and worktree-status: a .work/x/loop.md alone is not reported and not deleted', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/loop.md', loopMd({
+    write(dir, '.work/x/loop.md', '# Loop — retired\n\n## Blocked on the human\n\n- LOOP_BLOCKER\n')
+    const summary = run(PUBLISH_SUMMARY, ['x', 'COMPLETED'], dir)
+    assert.equal(summary.status, 2)
+    assert.match(summary.out, /no rfc\.md under \.work\/x\//)
+    const status = run(WT_STATUS, ['HEAD'], dir)
+    assert.equal(status.status, 0)
+    assert.doesNotMatch(status.out, /x\/loop|LOOP_BLOCKER/)
+    assert.equal(run(join(REPO, 'kit', 'common', 'work-stale.mjs'), ['--prune', 'HEAD'], dir).status, 0)
+    assert.ok(existsSync(join(dir, '.work/x/loop.md')), 'the kit never deletes a loop.md in flight')
+    assert.ok(!existsSync(join(dir, '.work/x/SUMMARY.md')))
+  })
+})
+
+test('publish-summary: rfc.md happy path — status, objective, checklist, log, blocked all land', () => {
+  withTmpRepo((dir) => {
+    commits(dir)
+    write(dir, '.work/demo/rfc.md', rfcMd({
       items: ['- [x] step one', '- [ ] step two'],
-      log: ['- turn 1: wired the client', '- turn 2: fixed the flaky test'],
+      log: ['- step 1: wired the client', '- step 2: fixed the flaky test'],
       blocked: ['the API key is missing'],
     }))
     const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
@@ -1903,8 +1890,6 @@ test('publish-summary: loop.md happy path — status, objective, guardrails, che
     const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
     assert.match(summary, /\*\*Status\*\*: COMPLETED/)
     assert.match(summary, /\*\*Objective\*\*: ship the thing/)
-    assert.match(summary, /\*\*Iteration cap\*\*: 20 turns/)
-    assert.match(summary, /\*\*Token budget\*\*: 200k tokens/)
     assert.match(summary, /## Remaining work \(1\/2 done\)/)
     assert.match(summary, /- \[x\] step one/)
     assert.match(summary, /- \[ \] step two/)
@@ -1913,7 +1898,7 @@ test('publish-summary: loop.md happy path — status, objective, guardrails, che
   })
 })
 
-test('publish-summary: rfc.md uses its Steps when no loop.md exists', () => {
+test('publish-summary: rfc.md uses its Steps, touches and proofs included', () => {
   withTmpRepo((dir) => {
     commits(dir)
     write(dir, '.work/demo/rfc.md',
@@ -1934,23 +1919,10 @@ test('publish-summary: rfc.md uses its Steps when no loop.md exists', () => {
   })
 })
 
-test('publish-summary: loop.md outranks rfc.md under the same slug', () => {
-  withTmpRepo((dir) => {
-    commits(dir)
-    write(dir, '.work/demo/rfc.md', worklist(['from the RFC']))
-    write(dir, '.work/demo/loop.md', loopMd({ blocked: ['from the loop'] }))
-    const r = run(PUBLISH_SUMMARY, ['demo', 'BLOCKED'], dir)
-    assert.equal(r.status, 0, r.out)
-    const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
-    assert.match(summary, /- from the loop/)
-    assert.doesNotMatch(summary, /from the RFC/)
-  })
-})
-
 test('publish-summary: an untouched Blocked-on-the-human placeholder prints as none', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/quiet/loop.md', loopMd({ blocked: [] }))
+    write(dir, '.work/quiet/rfc.md', rfcMd({ blocked: [] }))
     const r = run(PUBLISH_SUMMARY, ['quiet', 'COMPLETED'], dir)
     assert.equal(r.status, 0, r.out)
     const summary = readFileSync(join(dir, '.work/quiet/SUMMARY.md'), 'utf8')
@@ -1961,7 +1933,7 @@ test('publish-summary: an untouched Blocked-on-the-human placeholder prints as n
 test('publish-summary: a real diff renders a diffstat line, an unresolvable base renders —', () => {
   withTmpRepo((dir) => {
     const [first] = commits(dir, 2)
-    write(dir, '.work/demo/loop.md', loopMd())
+    write(dir, '.work/demo/rfc.md', rfcMd())
 
     const withDiff = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED', first], dir)
     assert.equal(withDiff.status, 0, withDiff.out)
@@ -2014,7 +1986,7 @@ test('publish-summary: a crashed scope report is one line, never its whole stder
 test('publish-summary: all three statuses are accepted', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/loop.md', loopMd())
+    write(dir, '.work/demo/rfc.md', rfcMd())
     for (const status of ['COMPLETED', 'BLOCKED', 'BUDGET_EXHAUSTED']) {
       const r = run(PUBLISH_SUMMARY, ['demo', status], dir)
       assert.equal(r.status, 0, `${status}: ${r.out}`)
@@ -2038,7 +2010,7 @@ test('publish-summary: an rfc.md with no Objective bullet falls back to its titl
 test('publish-summary: a rejected run never touches a previous SUMMARY.md', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/loop.md', loopMd())
+    write(dir, '.work/demo/rfc.md', rfcMd())
     write(dir, '.work/demo/SUMMARY.md', 'SENTINEL — do not overwrite\n')
     const r = run(PUBLISH_SUMMARY, ['demo', 'NOPE'], dir)
     assert.equal(r.status, 2)
@@ -2049,7 +2021,7 @@ test('publish-summary: a rejected run never touches a previous SUMMARY.md', () =
 test('publish-summary: an untouched Log placeholder counts as zero turns', () => {
   withTmpRepo((dir) => {
     commits(dir)
-    write(dir, '.work/demo/loop.md', loopMd({ log: [] }))
+    write(dir, '.work/demo/rfc.md', rfcMd({ log: [] }))
     const r = run(PUBLISH_SUMMARY, ['demo', 'COMPLETED'], dir)
     assert.equal(r.status, 0, r.out)
     const summary = readFileSync(join(dir, '.work/demo/SUMMARY.md'), 'utf8')
