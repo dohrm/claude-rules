@@ -1,6 +1,6 @@
 # ADR-0007: Make the feature RFC the only execution path
 
-- **Status**: Accepted
+- **Status**: Superseded by ADR-0011
 - **Date**: 2026-10-05
 
 ## Context
