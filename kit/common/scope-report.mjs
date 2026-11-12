@@ -27,8 +27,10 @@
 // refused — the table still says which packages moved. A `defect.md` frame reads as no
 // RFC: a diagnosis has no `## Steps`, so nothing it touches is overflow.
 //
-// Usage: node scope-report.mjs [--slug <s>] <base>    markdown on stdout, exit 0;
-//        exit 2 only when there is nothing to report (no base, git cannot diff).
+// Usage: node scope-report.mjs [--slug <s>] [--json] <base>    markdown (or, with
+//        `--json`, `scopeData`'s object) on stdout, exit 0; exit 2 only when there is
+//        nothing to report (no base, git cannot diff). `--json` is for a script that
+//        reads the verdict's inputs (l4.mjs): a markdown table is for people.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
@@ -142,14 +144,20 @@ function why(rfc) {
   return `RFC not available: ${rfc.message}`
 }
 
-function scopeReport({ base, slug = '', cwd = '.' }) {
+/** The report as data: `{ source, why, phase, declared, rows }`, one row per package
+ *  `{ package, added, removed, touched, declared, overflow }` (touched first, then the
+ *  declared ones the diff never reached), or null when git cannot diff against `base`. `rfc`
+ *  overrides the RFC read from `cwd`: the L4 referee judges a phase tree against the
+ *  integration tree's RFC, never against a copy the executor could have edited. */
+export function scopeData({ base, slug = '', cwd = '.', rfc = null }) {
   const files = numstat(base, cwd)
   if (!files) return null
-  let rfc
-  try {
-    rfc = resolveRfc({ slug, cwd })
-  } catch (err) {
-    rfc = { kind: 'error', message: err.message }
+  if (!rfc) {
+    try {
+      rfc = resolveRfc({ slug, cwd })
+    } catch (err) {
+      rfc = { kind: 'error', message: err.message }
+    }
   }
   const from = source(rfc)
   const steps = from ? stepsOf(rfc.text) : []
@@ -163,26 +171,43 @@ function scopeReport({ base, slug = '', cwd = '.' }) {
     const t = touched.get(pkg) ?? { add: 0, del: 0 }
     touched.set(pkg, { add: t.add + f.add, del: t.del + f.del })
   }
+  const rows = [...touched].sort(([a], [b]) => a.localeCompare(b)).map(([pkg, t]) => ({
+    package: pkg, added: t.add, removed: t.del, touched: true,
+    declared: declared.has(pkg), overflow: !!from && !declared.has(pkg),
+  }))
+  for (const pkg of [...declared].filter((p) => !touched.has(p)).sort()) {
+    rows.push({ package: pkg, added: 0, removed: 0, touched: false, declared: true, overflow: false })
+  }
+  return {
+    source: from, why: from ? null : why(rfc), phase: scoped !== steps ? phase : null,
+    declared: declared.size, rows,
+  }
+}
+
+function scopeReport({ base, slug = '', cwd = '.' }) {
+  const data = scopeData({ base, slug, cwd })
+  if (!data) return null
+  const { source: from, rows } = data
 
   const lines = [`## Scope report — \`${base}...HEAD\``, '']
   lines.push(from
-    ? `Declared by: ${scoped !== steps ? `Phase ${phase} of ` : ''}${from} — `
-      + `${declared.size} package${declared.size === 1 ? '' : 's'} in the steps' \`touches\`.`
-    : why(rfc), '')
-  if (touched.size === 0 && declared.size === 0) return [...lines, 'No change against the base.', ''].join('\n')
+    ? `Declared by: ${data.phase ? `Phase ${data.phase} of ` : ''}${from} — `
+      + `${data.declared} package${data.declared === 1 ? '' : 's'} in the steps' \`touches\`.`
+    : data.why, '')
+  if (rows.length === 0) return [...lines, 'No change against the base.', ''].join('\n')
 
   lines.push('| Package | + | − | Declared |', '|---|---:|---:|---|')
-  let overflow = 0
-  for (const [pkg, t] of [...touched].sort(([a], [b]) => a.localeCompare(b))) {
-    const mark = !from ? '—' : declared.has(pkg) ? 'yes' : '**no — overflow**'
-    if (from && !declared.has(pkg)) overflow++
-    lines.push(`| \`${pkg}\` | +${t.add} | -${t.del} | ${mark} |`)
+  const touched = rows.filter((r) => r.touched)
+  const untouched = rows.filter((r) => !r.touched)
+  for (const r of touched) {
+    const mark = !from ? '—' : r.declared ? 'yes' : '**no — overflow**'
+    lines.push(`| \`${r.package}\` | +${r.added} | -${r.removed} | ${mark} |`)
   }
-  const untouched = [...declared].filter((p) => !touched.has(p)).sort()
-  for (const pkg of untouched) lines.push(`| \`${pkg}\` | 0 | 0 | declared, untouched |`)
+  for (const r of untouched) lines.push(`| \`${r.package}\` | 0 | 0 | declared, untouched |`)
   lines.push('')
   if (from) {
-    lines.push(`${touched.size} touched, ${overflow} not declared, ${untouched.length} declared but untouched. `
+    lines.push(`${touched.length} touched, ${rows.filter((r) => r.overflow).length} not declared, `
+      + `${untouched.length} declared but untouched. `
       + 'An indicator, not a verdict: justify each overflow from the RFC, or reject it.', '')
   }
   return lines.join('\n')
@@ -192,9 +217,10 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const argv = process.argv.slice(2)
   const i = argv.indexOf('--slug')
   const slug = i === -1 ? '' : (argv.splice(i, 2)[1] ?? '')
-  const [base] = argv
-  if (!base) bail('missing base — usage: scope-report [--slug <s>] <base>')
-  const report = scopeReport({ base, slug })
+  const json = argv.includes('--json')
+  const [base] = argv.filter((a) => a !== '--json')
+  if (!base) bail('missing base — usage: scope-report [--slug <s>] [--json] <base>')
+  const report = json ? scopeData({ base, slug }) : scopeReport({ base, slug })
   if (report === null) bail(`git cannot diff against \`${base}\` — fetch it, or pass another base`)
-  process.stdout.write(report)
+  process.stdout.write(json ? `${JSON.stringify(report, null, 2)}\n` : report)
 }
