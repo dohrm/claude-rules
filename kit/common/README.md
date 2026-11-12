@@ -134,8 +134,9 @@ integration tree, on `rfc/<slug>`:
   found with `git worktree list`): `just check`, the review report read by
   `review-guard`'s parser, `l4_ci` run with the branch as last argument, and the scope
   report against the integration tree's RFC. One line `l4: <verdict> — <reasons>`;
-  exit 0 merge, 1 reject (red check, `CRITICAL`, missing or stale report, red CI),
-  3 escalate (a 🔴 whose `**Model**` is `gap`, an overflow no justification quoted
+  exit 0 merge, 1 reject (red check, `CRITICAL`, missing or stale report, red CI, or
+  `origin` not holding the judged HEAD, so CI never checked it),
+  3 escalate (an RFC whose `**Autonomy**` is not L4, a 🔴 whose `**Model**` is `gap`, an overflow no justification quoted
   from a `changed:` or `## Assumptions` line clears, a reject past `rejected-rounds`, a
   board or journal that does not parse), 4 wait (CI exit 8), 2 usage.
 - `just l4-merge <n>` — only on a `merge` verdict for the phase's current HEAD, and

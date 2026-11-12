@@ -139,6 +139,7 @@ function fixture(dir, { rfc = RFC(), kit = false } = {}) {
   fixtureGit(main, ['worktree', 'add', '-q', '-b', 'phase/x/1', tree])
   write(tree, 'src/a.txt', 'a\n')
   commitIn(tree)
+  pushPhase(tree)
   review(tree, 'CLEAN')
 
   // `just check` exits $FAKE_CHECK; the CI command exits $FAKE_CI and logs its argument.
@@ -153,6 +154,8 @@ function commitIn(dir, msg = 'change') {
   fixtureGit(dir, ['commit', '-q', '-m', msg])
 }
 const head = (dir) => fixtureGit(dir, ['rev-parse', 'HEAD'])
+/** The executor's push: a forge's CI answers about what `origin` holds. */
+const pushPhase = (tree) => fixtureGit(tree, ['push', '-q', 'origin', 'phase/x/1'])
 
 /** Writes the phase tree's review report, reviewing its HEAD unless `sha` says otherwise. */
 function review(tree, verdict, { sha = head(tree), critical = '', warnings = '' } = {}) {
@@ -190,6 +193,10 @@ test('l4 judge: all green is merge — exit 0, one line, recorded and committed 
     review(fx.tree, 'WARNINGS', { warnings: 'Naming could be clearer.' })
     assert.equal(l4(fx, ['judge', '1']).status, 0)
     assert.deepEqual(journal(fx).at(-1).warnings, ['Naming could be clearer.'], 'prose warnings are kept whole')
+    review(fx.tree, 'WARNINGS', { warnings: '1. **Location** `src/a.txt:1`\n   **Problem** naming\n\n   **Fix** rename\n2. second' })
+    assert.equal(l4(fx, ['judge', '1']).status, 0)
+    assert.deepEqual(journal(fx).at(-1).warnings,
+      ['1. **Location** `src/a.txt:1`\n   **Problem** naming\n\n   **Fix** rename', '2. second'], 'an item keeps its continuation lines')
     assert.match(fixtureGit(fx.main, ['log', '-1', '--format=%s']), /^l4: phase 1 merge at /)
   })
 })
@@ -222,6 +229,37 @@ test('l4 judge: each red fact is a reject — exit 1', () => {
       assert.equal(r.status, 1, `${name}: ${r.out}${r.err}`)
       assert.match(r.out, new RegExp(`^l4: reject — .*${why.source}`), name)
       assert.equal(journal(fx)[0].verdict, 'reject', name)
+    })
+  }
+})
+
+test('l4 judge: green CI about another commit is a reject — origin must hold the judged HEAD', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    write(fx.tree, 'src/a.txt', 'newer\n')
+    commitIn(fx.tree)
+    review(fx.tree, 'CLEAN')
+    const r = l4(fx, ['judge', '1', '--ci', 'fake-ci'])
+    assert.equal(r.status, 1, r.out + r.err)
+    assert.match(r.out, /origin does not hold [0-9a-f]{7} on phase\/x\/1 — CI never checked the judged commit/)
+    assert.doesNotMatch(r.err, /ci-arg/, 'the CI command is not even asked')
+    assert.equal(journal(fx)[0].ci, 'unpushed')
+    pushPhase(fx.tree)
+    assert.equal(l4(fx, ['judge', '1', '--ci', 'fake-ci']).status, 0, 'once pushed, the same commit merges')
+    assert.equal(l4(fx, ['judge', '1', '--ci', '']).status, 0, 'unwired CI asks nothing of origin')
+  })
+})
+
+test('l4: an RFC not at L4 is refused by both verbs — the level is the human\'s', () => {
+  for (const header of ['- **Autonomy**: L3\n', '']) {
+    withTmpRepo((dir) => {
+      const fx = fixture(dir, { rfc: RFC().replace('- **Autonomy**: L4\n', header) })
+      for (const verb of ['judge', 'merge']) {
+        const r = l4(fx, [verb, '1'])
+        assert.equal(r.status, 3, `${verb} ${header || '(no header)'}: ${r.out}`)
+        assert.match(r.out, /\*\*Autonomy\*\* header is not L4/)
+      }
+      assert.deepEqual(journal(fx), [])
     })
   }
 })
@@ -395,6 +433,7 @@ test('just l4-judge / l4-merge: the recipes pass l4_ci and a multi-line justify 
     const fx = fixture(dir, { kit: true })
     write(fx.tree, 'docs/a.md', 'x\n')
     commitIn(fx.tree)
+    pushPhase(fx.tree)
     review(fx.tree, 'CLEAN')
     const env = { ...process.env, PATH: `${fx.bin}:${process.env.PATH}`, FAKE_CI: '0' }
     const just = (...args) => spawnSync(JUST, args, { cwd: fx.main, encoding: 'utf8', env })

@@ -18,9 +18,10 @@
 // tree's RFC. It prints one line, `l4: <verdict> — <reasons>`, and exits:
 //
 //   0 merge     every fact is green (CI not wired is recorded as declared, never as green)
-//   1 reject    red check, CRITICAL, missing/malformed/stale report, red CI — the executor
+//   1 reject    red check, CRITICAL, missing/malformed/stale report, red CI, or CI about
+//               another commit than the judged HEAD (origin does not hold it) — the executor
 //               gets another round
-//   3 escalate  a 🔴 whose **Model** line is `gap`, an overflow package no `--justify`
+//   3 escalate  an RFC whose **Autonomy** is not L4, a 🔴 whose **Model** line is `gap`, an overflow package no `--justify`
 //               clears, a reject past the board's rejected-rounds cap — and the refusals:
 //               a board or a journal line that does not parse (nothing is written then)
 //   4 wait      CI still running (the CI command exited 8, `gh pr checks`' "pending")
@@ -46,7 +47,7 @@ import { fileURLToPath } from 'node:url'
 import { resolveRfc } from './review-context.mjs'
 import { readVerdict } from './review-guard.mjs'
 import { scopeData } from './scope-report.mjs'
-import { currentBranch, resolveSlug } from './work-slug.mjs'
+import { currentBranch, headerOf, resolveSlug } from './work-slug.mjs'
 
 const EXIT = { merge: 0, reject: 1, usage: 2, escalate: 3, wait: 4 }
 const VERDICTS = ['merge', 'reject', 'escalate', 'wait']
@@ -193,6 +194,11 @@ function context({ n, slug, cwd }) {
   if (rfc.kind !== 'local' && rfc.kind !== 'ticket') {
     refuse(EXIT.escalate, `board: the RFC for ${s} cannot be read (${rfc.kind}) — refresh the ticket cache, or check .work/${s}/`)
   }
+  // The level is the human's (autonomy.md § Levels): a board an L3 RFC kept from the
+  // template delegates nothing, and an absent header is L1.
+  if (!/^[ \t]*-[ \t]*\*\*Autonomy\*\*:[ \t]*L4\b/m.test(headerOf(rfc.text))) {
+    refuse(EXIT.escalate, `the RFC's **Autonomy** header is not L4 — the referee judges L4 phases only`)
+  }
   const board = parseBoard(rfc.text)
   const journalPath = join(cwd, '.work', s, 'l4.jsonl')
   return { n, slug: s, cwd, integration, phase: `phase/${s}/${n}`, rfc, board, journalPath, journal: readJournal(journalPath) }
@@ -260,15 +266,26 @@ function reviewFacts(tree, head) {
   const critical = section(text, '🔴')
   if (/\*\*Model:?\*\*:?\s*`?gap\b/i.test(critical)) escalate.push('a 🔴 whose **Model** line is `gap` — a spec gap is the human\'s')
   // One entry per top-level item; a section written as prose is kept whole.
-  const yellow = section(text, '🟡').trim()
-  const items = yellow.split('\n').filter((l) => /^([-*]|\d+[.)])\s/.test(l)).map((l) => l.trim())
-  return { reject, escalate, warnings: items.length || !yellow ? items : [yellow] }
+  // One entry per top-level item, its continuation lines included; prose is kept whole.
+  const items = []
+  for (const line of section(text, '🟡').split('\n')) {
+    if (/^([-*]|\d+[.)])\s/.test(line) || !items.length) items.push(line)
+    else items[items.length - 1] += `\n${line}`
+  }
+  return { reject, escalate, warnings: items.map((i) => i.trim()).filter(Boolean) }
 }
 
-/** `green`, `running`, `red` or `not-wired`, from the CI command run with the branch. */
-function ciState(cmd, branch, cwd) {
+/** The sha `origin` holds for `branch`, or null. */
+const remoteHead = (branch, cwd) => tryGit(cwd, 'ls-remote', 'origin', `refs/heads/${branch}`)?.split(/\s/)[0] || null
+
+/** `green`, `running`, `red`, `not-wired` or `unpushed`, from the CI command run with the
+ *  branch. A forge checks what it was pushed, so its answer is about `head` only while
+ *  `origin` holds `head` — before AND after the command, since a push can land between. */
+function ciState(cmd, branch, head, cwd) {
   if (!cmd.trim()) return 'not-wired'
+  if (remoteHead(branch, cwd) !== head) return 'unpushed'
   const r = spawnSync('sh', ['-c', `${cmd} "$1"`, 'sh', branch], { cwd, stdio: ['ignore', 2, 2] })
+  if (remoteHead(branch, cwd) !== head) return 'unpushed'
   return r.status === 0 ? 'green' : r.status === CI_PENDING ? 'running' : 'red'
 }
 
@@ -291,8 +308,9 @@ export function judge({ n, slug = '', ci: ciCmd = '', justify = [], cwd = '.' })
   reject.push(...review.reject)
   escalate.push(...review.escalate)
 
-  const ci = ciState(ciCmd, ctx.phase, tree)
+  const ci = ciState(ciCmd, ctx.phase, head, tree)
   if (ci === 'red') reject.push('CI is red')
+  if (ci === 'unpushed') reject.push(`origin does not hold ${head.slice(0, 7)} on ${ctx.phase} — CI never checked the judged commit`)
 
   const scope = scopeData({ base: ctx.integration, slug: ctx.slug, cwd: tree, rfc: ctx.rfc })
   if (!scope) refuse(EXIT.usage, `git cannot diff ${ctx.phase} against ${ctx.integration}`)
