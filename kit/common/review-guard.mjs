@@ -29,7 +29,8 @@
 // still parses. A fixed-size tail window did neither reliably.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const VERDICTS = ['CLEAN', 'WARNINGS', 'CRITICAL']
 const VERDICT_MARKER = /^<!--\s*CI_VERDICT:\s*(.*?)\s*-->\s*$/gm
@@ -90,6 +91,15 @@ function malformations(verdict, sha) {
   if (sha === null) out.push('no `<!-- REVIEWED: <sha> -->` marker — the report does not say what it reviewed.')
   else if (!SHA.test(sha)) out.push(`REVIEWED is "${sha}" — expected a commit sha.`)
   return out
+}
+
+/** The report's markers as this guard reads them: `{ verdict, sha, broken }`, `broken`
+ *  empty when both can be trusted. Exported for the L4 referee (l4.mjs), which must read
+ *  a verdict exactly the way the push gate does, never with a parser of its own. */
+export function readVerdict(text) {
+  const verdict = lastMarker(text, VERDICT_MARKER)
+  const sha = lastMarker(text, REVIEWED_MARKER)
+  return { verdict, sha, broken: malformations(verdict, sha) }
 }
 
 // ── Completeness (`--expect-files`) ─────────────────────────────────────────
@@ -215,10 +225,7 @@ function main() {
   // emits a second CI_VERDICT line at column 0 and would otherwise be rejected as
   // having two verdicts. A fixed-size TAIL window was the first attempt and it broke
   // both ways — see lastMarker().
-  const verdict = lastMarker(text, VERDICT_MARKER)
-  const sha = lastMarker(text, REVIEWED_MARKER)
-
-  const broken = malformations(verdict, sha)
+  const { verdict, sha, broken } = readVerdict(text)
   if (broken.length > 0) {
     console.error(`review-guard: ${reportPath} is malformed — a report nobody can parse cannot clear a push.`)
     for (const problem of broken) console.error(`  ${problem}`)
@@ -251,4 +258,5 @@ function main() {
   return 0
 }
 
-process.exit(main())
+// A script for the hook and the recipe; a module for l4.mjs, which imports readVerdict.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) process.exit(main())
