@@ -106,6 +106,23 @@ change was cut against. "No RFC for this branch" is not a finding. Then:
   🟡 at most — cite the decision — unless the RFC records the change (`changed:`)
   with its reason.
 
+### The RFC's model and stakes
+
+- **A state the RFC's `## Model` refuses is not a case to handle.** Asking the code to
+  handle it is not a finding; code that accepts it instead of refusing it is.
+- **Each 🔴 says where the RFC stands on it**, when an RFC frames the change, with a
+  `**Model**` line: the line of `## Model` or `### Access` it breaks, quoted; `gap — <what
+  the RFC does not decide>` when the fix needs a decision the RFC never made (a caller,
+  a read surface, a lifecycle stage, a role); `none` for a defect that decides nothing.
+  The reader acts on it: a quoted line is fixed, a `gap` goes to the human. Never quote
+  a line the RFC does not contain.
+- **The header's `**Stakes**` calibrate severity**, per path; a path it does not name
+  takes its first level, and no `**Stakes**` means `production`. `production`: as
+  written in this prompt. `internal`: a defect only the team running the system can
+  reach is 🟡 at most. `demo`: a defect whose harm stays inside the demo is 🟡 at most.
+  Never lowered: a breach of what the model keeps or refuses, an exposed secret, a
+  privilege escalation.
+
 ### Experience — preserve the selected journey, not an imagined uniform portal
 
 For UI changes, read `docs/EXPERIENCE.md` and the affected contracts under
@@ -199,7 +216,8 @@ judged stale. Both lines are mandatory and they go at the VERY END: `review-guar
 takes the LAST of each marker in the report, so a verdict quoted mid-report (in a fix
 suggestion, say) is prose about the contract, not a second verdict. Nothing after them.
 Each issue: **Location** `path:line` or `path:start-end`, as of the commit under review
-· **Problem** (what & why) · **Fix** (concrete, snippet if useful). Skip empty sections
+· **Problem** (what & why) · **Fix** (concrete, snippet if useful) · on a 🔴 under an
+RFC, **Model** (above). Skip empty sections
 — except **Files reviewed**, which is mandatory: a file of the diff it does not name,
 or a Location that does not exist, gets the report rejected as incomplete. Build it
 from the diff's own `diff --git` headers, one line per header, before you write the

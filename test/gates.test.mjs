@@ -888,24 +888,39 @@ test('review-context: only a recorded change survives, in any list shape', () =>
   })
 })
 
-test('review-context --brief: the frame OCR can take — title, Goal, decisions, capped', () => {
+test('review-context --brief: the frame OCR can take — title, Stakes, Goal, decisions, capped', () => {
   withTmpRepo((dir) => {
     commits(dir, 1)
     git(dir, 'checkout', '-q', '-b', 'work')
     // Ticket mode, shaped like the first real one: pointer, then the cached body, then
     // a long comment thread (27,530 characters there — OCR aborted at 8,000).
     write(dir, '.work/x/rfc.md', POINTER)
-    write(dir, '.work/x/review-context.md', '# RFC — Deliver it\n\n- **Status**: implementing\n\n'
+    write(dir, '.work/x/review-context.md', '# RFC — Deliver it\n\n- **Status**: implementing\n'
+      + '- **Stakes**: production; demo: STAKES_PATHS\n\n'
       + '## Request\n\nREQUEST_TEXT\n\n## Goal\n\nGOAL_TEXT\n\n## Scope\n\n- In: SCOPE_TEXT\n\n'
       + '## Local decisions\n\n- DECISION_TEXT\n\n## Model\n\n- Refuses: MODEL_TEXT\n\n'
-      + '## Steps\n\nSTEPS_TEXT\n\n' + 'comment '.repeat(5000))
+      + '## Steps\n\nSTEPS_TEXT\n\n- **Stakes**: demo: QUOTED_STAKES\n\n' + 'comment '.repeat(5000))
     const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
     assert.ok(Array.from(out.trim()).length <= 2000, `${Array.from(out).length} characters`)
-    for (const want of ['# RFC — X', 'GOAL_TEXT', 'DECISION_TEXT', 'MODEL_TEXT']) assert.ok(out.includes(want), want)
-    for (const not of ['REQUEST_TEXT', 'SCOPE_TEXT', 'STEPS_TEXT', 'comment comment']) assert.ok(!out.includes(not), not)
+    for (const want of ['# RFC — X', 'STAKES_PATHS', 'GOAL_TEXT', 'DECISION_TEXT', 'MODEL_TEXT']) assert.ok(out.includes(want), want)
+    for (const not of ['REQUEST_TEXT', 'SCOPE_TEXT', 'STEPS_TEXT', 'QUOTED_STAKES', 'comment comment']) assert.ok(!out.includes(not), not)
     // Over the cap: cut, never rejected.
     const cut = run(REVIEW_CONTEXT, ['--brief', '30'], dir).out
     assert.equal(Array.from(cut.trim()).length, 30)
+  })
+})
+
+test('review-context --brief: a Stakes line outside the header never reaches the brief', () => {
+  withTmpRepo((dir) => {
+    commits(dir, 1)
+    git(dir, 'checkout', '-q', '-b', 'work')
+    // No header Stakes (so production); a `# ` line that is not a title must not reopen it.
+    write(dir, '.work/x/rfc.md', '# RFC — Y\n\n- **Status**: implementing\n- **Branch**: work\n\n'
+      + '## Goal\n\nGOAL_TEXT\n\n## Steps\n\n```bash\n# run the migration\n```\n\n'
+      + '- **Stakes**: demo: QUOTED_STAKES\n')
+    const out = run(REVIEW_CONTEXT, ['--brief', '2000'], dir).out
+    assert.ok(out.includes('GOAL_TEXT'), out)
+    assert.ok(!out.includes('QUOTED_STAKES'), out)
   })
 })
 
