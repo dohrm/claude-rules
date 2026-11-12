@@ -366,6 +366,30 @@ test('update drops a retired profile from an old lock; its adoption purges retir
   })
 })
 
+test('a lock that installed `loop-setup` updates: the profile is dropped, the skill directory is gone', () => {
+  withTmpRepo(dir => {
+    // Rewrite a fresh `defect` install into what a release that still shipped `loop-setup` wrote.
+    ok(runCli(['add', 'product', 'defect', '--agent', 'claude'], dir))
+    const lock = JSON.parse(read(dir, '.claude-rules.lock')
+      .replace(/skills\/defect\b/g, 'skills/loop-setup').replace(/"defect"/g, '"loop-setup"'))
+    for (const name of ['investigate', 'bug']) delete lock.aliases?.[name]
+    writeFileSync(join(dir, '.claude-rules.lock'), JSON.stringify(lock, null, 2) + '\n')
+    mkdirSync(join(dir, '.claude/skills/loop-setup'), { recursive: true })
+    writeFileSync(join(dir, '.claude/skills/loop-setup/SKILL.md'), read(dir, '.claude/skills/defect/SKILL.md'))
+    rmSync(join(dir, '.claude/skills/defect'), { recursive: true })
+
+    const r = ok(runCli(['update'], dir))
+    const after = lockOf(dir)
+    assert.ok(!after.profiles.includes('loop-setup'), 'the profile left the lock')
+    assert.ok(!after.modules['.'].includes('loop-setup'))
+    assert.ok(!('loop-setup' in (after.levels || {})))
+    assert.ok(!after.installed.some(e => e.from === 'skills/loop-setup'), 'its inventory record left the lock')
+    assert.equal(r.stdout.match(/Dropped retired profile "loop-setup"/g)?.length, 1, 'the drop is printed once')
+    assert.ok(!has(dir, '.claude/skills/loop-setup'), 'the skill directory is gone')
+    assert.ok(has(dir, '.claude/skills/rfc/SKILL.md'))
+  })
+})
+
 // `investigate` was released; `bug` only lived on `next`. The rewrite below turns every
 // "defect" into the old name, aliases included, so `stale` lists the aliases that lock
 // could not have had: the next-era lock keeps `investigate: ['bug']`, as it did.

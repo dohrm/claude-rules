@@ -90,3 +90,57 @@ test('--setup-only builds every real case and spends nothing', () => {
   assert.match(r.out, /· SETUP architect-adr-budget → \/architect/)
   assert.match(r.out, /· SETUP reviewer-utf8 → code-reviewer/)
 })
+
+// The oracle judges what an implementation case built, without the agent's word:
+// hidden files copied in after the run, commands that must pass, and mutants the
+// workspace's own tests must kill. Driven by the fake agent, so it costs nothing.
+const oracle = (...names) => run([...names, '--cases', CASES, '--cmd', `node ${FAKE} {prompt}`, '--format', 'text'])
+
+test('a passing oracle passes the case: hidden checks green, every mutant killed', () => {
+  const r = oracle('oracle-green')
+  assert.equal(r.status, 0, r.out)
+  assert.match(r.out, /✓ PASS {2}oracle-green/)
+})
+
+test('a failing oracle fails the case, and names the survivor and the red command', () => {
+  const r = oracle('oracle-red')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /✗ FAIL {2}oracle-red/)
+  assert.match(r.out, /mutant reword-do-not survived/)
+  assert.doesNotMatch(r.out, /mutant drop-killswitch/, 'a killed mutant is not a failure')
+  assert.match(r.out, /oracle `node check-rollback\.mjs` exited 1/)
+  assert.match(r.out, /no rollback step in the runbook/)
+})
+
+test('several cases run by name, and an unknown name is refused rather than ignored', () => {
+  const both = oracle('oracle-green', 'oracle-red')
+  assert.match(both.out, /1\/2 passed/)
+  const typo = oracle('oracle-green', 'oracle-gren')
+  assert.equal(typo.status, 2)
+  assert.match(typo.out, /no such case: oracle-gren/)
+})
+
+// The real run of rfc-implement-l3 spends tokens and is the human's call. What is
+// free is proving its oracle can be met: the case's reference patch, applied by a
+// stand-in agent, must pass every hidden test and kill every mutant.
+test('rfc-implement-l3: the reference patch meets the oracle', () => {
+  const patch = join(REPO, 'eval', 'cases', 'rfc-implement-l3', 'reference.patch')
+  const agent = join(REPO, 'test', 'fixtures', 'patch-agent.mjs')
+  const r = run(['rfc-implement-l3', '--cmd', `node ${agent} ${patch} {prompt}`, '--format', 'text'])
+  assert.equal(r.status, 0, r.out)
+  assert.match(r.out, /✓ PASS {2}rfc-implement-l3/)
+})
+
+test('a test command already red before any mutant fails the oracle, instead of killing every mutant', () => {
+  const r = oracle('oracle-broken-test')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /oracle test `grep -q 'a line the runbook never has' docs\/runbook\/checkout\.md` exited 1 before any mutant/)
+  assert.doesNotMatch(r.out, /mutant drop-killswitch/)
+})
+
+test('a test run that does not complete under a mutant is not a kill', () => {
+  // The test command SIGKILLs itself when the mutant is in: no exit code, no verdict.
+  const r = oracle('oracle-crashed-test')
+  assert.equal(r.status, 1, r.out)
+  assert.match(r.out, /mutant drop-killswitch not judged: .* did not complete \(killed by SIGKILL\)/)
+})

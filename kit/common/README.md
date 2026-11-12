@@ -39,7 +39,7 @@ Needs **just >= 1.27** (`import` landed in 1.18; the duplicate-override settings
 
 Node is not optional even in a pure Rust/Go/Python repo: `adr-check.mjs`,
 `docs-check.mjs`, `review-guard.mjs`, `worktree-status.mjs`, `diff-since.mjs`,
-`review-context.mjs`, `ocr-candidates.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `landed.mjs` and `work-stale.mjs` all run on it (that's the reason they're Node rather
+`review-context.mjs`, `ocr-candidates.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `l4.mjs`, `landed.mjs` and `work-stale.mjs` all run on it (that's the reason they're Node rather
 than bash — see the parent `kit/README.md`), and `dup-check` / `rules-check`
 shell out to `npx`.
 
@@ -47,13 +47,13 @@ shell out to `npx`.
 
 | File | Holds |
 |---|---|
-| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `work-prune`, `publish-summary`, `scope-report`, `dup-check`, `adr-check`, `adr-retired`, `docs-check`, `rules-check`, `ci-base`, `base`, `worktree_root` |
+| `common/gate.just` | `code-review`, `review-with`, `review-guard`, `mutate-from`, `mutate-mark`, `tree`, `tree-rm`, `status`, `work-prune`, `publish-summary`, `scope-report`, `l4-judge`, `l4-merge`, `l4_ci`, `dup-check`, `adr-check`, `adr-retired`, `docs-check`, `rules-check`, `ci-base`, `base`, `worktree_root` |
 | `rust/rust.just` · `ts/ts.just` · `go/go.just` · `python/python.just` | `<tech>-lint`, `<tech>-check`, and that tech's Tier-4 recipe |
 | `godot/godot.just` | `godot-lint`, `godot-check` (+ the three variables you must override) |
 | your `justfile` | the imports, `*_dir`, `check`, `mutate-diff`, `base` if the trunk is not `origin/main` |
 
 The scripts the recipes call (`adr-check.mjs`, `docs-check.mjs`, `review-guard.mjs`,
-`worktree-status.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `diff-since.mjs`, `review-context.mjs`,
+`worktree-status.mjs`, `publish-summary.mjs`, `scope-report.mjs`, `l4.mjs`, `diff-since.mjs`, `review-context.mjs`,
 `work-slug.mjs`, `landed.mjs`, `work-stale.mjs`, `ocr-candidates.mjs`, `review-prompt.md`) ship **in this directory** and are called
 from here. There is nothing to move into `scripts/`: gate and implementation are
 updated together, which is the whole reason they are not copied out.
@@ -122,6 +122,34 @@ else the ticket cache `review-context.md`); with none, the table still lists the
 packages, with nothing declared. Rows read `yes`, `no — overflow`, or
 `declared, untouched`. An indicator, never a gate: it exits 0 whenever git can diff
 against `base`. `publish-summary` appends the same table to `SUMMARY.md`.
+`scope-report.mjs --json` prints the same rows as data, for a script.
+
+## L4 referee
+
+At L4 a phase merges into `rfc/<slug>` on facts read by `l4.mjs`, not on an agent's
+reading of a paragraph (`rules/agent/autonomy.md` § L4). Both recipes run from the
+integration tree, on `rfc/<slug>`:
+
+- `just l4-judge <n> ['<package>=<text>']` — in the phase tree (`phase/<slug>/<n>`,
+  found with `git worktree list`): `just check`, the review report read by
+  `review-guard`'s parser, `l4_ci` run with the branch as last argument, and the scope
+  report against the integration tree's RFC. One line `l4: <verdict> — <reasons>`;
+  exit 0 merge, 1 reject (red check, `CRITICAL`, missing or stale report, red CI, or
+  `origin` not holding the judged HEAD, so CI never checked it),
+  3 escalate (an RFC whose `**Autonomy**` is not L4, a 🔴 whose `**Model**` is `gap`, an overflow no justification quoted
+  from a `changed:` or `## Assumptions` line clears, a reject past `rejected-rounds`, a
+  board or journal that does not parse), 4 wait (CI exit 8), 2 usage.
+- `just l4-merge <n> ['<package>=<text>']` — only if the board delegates `phase-merge`:
+  runs the judge again on the phase HEAD and merges only on that fresh `merge` verdict,
+  `git merge --no-ff <the judged sha>`, then push. Any other fresh verdict exits with its
+  code and merges nothing.
+
+Every verdict and merge is appended to `.work/<slug>/l4.jsonl` and committed alone. The
+journal is a record, not the authority: no verdict is read back from it to merge, so a
+forged line buys nothing. It keeps what cannot be recomputed — the rejected rounds
+counted against the cap, each merge's `WARNINGS` (🟡 and 🔵). A line that does not
+parse is refused (exit 3). `l4_ci` defaults to `gh pr checks --required`; empty means
+Tier 4 is not wired, recorded as declared, never as green.
 
 ## What the reviewer never sees
 

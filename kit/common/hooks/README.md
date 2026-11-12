@@ -40,14 +40,22 @@ merge. Do not sell more than that.
 - **deny** (exit 2, reason on stderr → back to the agent): commands with no
   legitimate form — `--no-verify`, `git commit -n`, `core.hooksPath`,
   `lefthook uninstall`, `LEFTHOOK=0`/`SKIP=`, force-pushing or deleting the trunk,
-  and any *write* aimed at `.work/review-report.md` or at `.git/hooks/` — a
+  a `git merge`/`git pull` naming a `phase/*` ref (`just l4-merge` merges a phase),
+  and any *write* aimed at `.work/review-report.md`, an L4 journal `l4.jsonl` or `.git/hooks/` — a
   mutating command (`rm`, `mv`, `cp`, `tee`, `ln`, `install`, `touch`, `chmod`,
   `chown`, `truncate`, `dd`, `sed -i`) or a redirect. Reading them is not a write:
   `cat`, `grep` and `sed -n` pass, because a guard that blocks its own diagnostic
   invites being unwired.
 - **ask** (JSON): the command *writes* to the gate layer — a `lefthook.yml`, a
   workflow, the `justfile`, a ratchet baseline, `mutants.toml`. Sometimes that is
-  the task, so a human decides.
+  the task, so a human decides. A forge merge (`gh pr merge`, `glab mr merge`,
+  `tea pulls merge`) asks too: it is the human's act, and sometimes what they asked for.
+
+The L4 entries — `l4.jsonl` and `git merge`/`git pull` naming `phase/*` — are depth,
+not the authority: `l4-merge` re-judges and merges on its fresh verdict alone, so a
+forged journal line or a hand merge buys nothing the referee would not give. They deny
+the spellings their tests list and fail open, like the `review-report.md` entries; a
+spelling that gets past them is not a hole to plug with another pattern.
 
 Quoted text is scrubbed before matching, so `git commit -m "drop the -n flag"` is
 not a bypass. Matching stays inside the current `|;&` segment, and the write and the
@@ -62,7 +70,8 @@ only the `justfile` that holds the `import` lines would leave the commands ungua
 **`edit-guard.mjs`** — `PreToolUse` on `Edit|Write`. Two verdicts, like its sibling:
 
 - **deny** for the paths with no legitimate hand-edit: `.work/review-report.md`
-  (hand-writing it forges the verdict `review-guard` reads) and `.git/hooks/`
+  (hand-writing it forges the verdict `review-guard` reads), `.work/<slug>/l4.jsonl`
+  (the L4 journal — the rejected rounds the referee counts) and `.git/hooks/`
   (`lefthook install` owns those files). `autonomy.md` calls both a HARD bypass, and
   `bash-guard` denies the shell spelling — an ask here would leave the strongest rule
   in the doctrine enforced by the weaker half.

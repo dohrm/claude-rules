@@ -11,7 +11,7 @@
 // One line per worktree: branch · commits ahead of base · dirty files · worklist ·
 // review verdict + staleness. Then, indented under it, whatever that worklist's
 // `## Blocked on the human` section holds — the escalation channel `/rfc` and
-// `/loop-setup` already define, which is worth nothing if nobody walks the trees to read it.
+// `/defect` already define, which is worth nothing if nobody walks the trees to read it.
 //
 // It ALWAYS exits 0, and it is read-only. A dashboard that fails is a dashboard
 // nobody runs, and the verdict printed here is a REPORT of a gate, never the gate:
@@ -93,12 +93,12 @@ function blockedIn(file) {
     .filter((l) => l && !/^[-*]?\s*<[^>]*>$/.test(l))
 }
 
-const RANK = ['defect.md', 'loop.md', 'rfc.md']
+const RANK = ['defect.md', 'rfc.md']
 
 /** Every state file an agent escalates in, under `.work/<slug>/`, ranked:
- *  `defect.md` from `/defect`, then `loop.md` from `/loop-setup`, then `rfc.md` from `/rfc`. Within one
- *  slug the highest rank comes last and is the one shown: an RFC takes over the bug or
- *  loop it came from. */
+ *  `defect.md` from `/defect`, then `rfc.md` from `/rfc`. Within one
+ *  slug the highest rank comes last and is the one shown: an RFC takes over the bug it
+ *  came from. */
 function worklists(root) {
   const found = []
   for (const entry of readdirSync(root, { withFileTypes: true })) {

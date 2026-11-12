@@ -93,6 +93,32 @@ const DENY = [
     'writing the review report by hand forges the verdict review-guard reads'],
 ]
 
+// The L4 journal and a phase ref are OPERANDS: quoting one (`rm '.work/x/l4.jsonl'`,
+// `git merge "phase/x/2"`) must not hide it, so these rules read the command with
+// one-word quotes unwrapped. A quote holding a space is still data — a commit message
+// that says "git merge phase/x/2" is not a merge — unless it ENDS in the journal's name:
+// that is a path with a space in it, kept as one token so a redirect still reaches it.
+const unquoteWords = (s) => scrub(s
+  .replace(/(['"])([^'"]*l4\.jsonl)\1/g, (_, _q, path) => path.replace(/\s/g, '_'))
+  .replace(/'([^'\s]*)'/g, '$1').replace(/"([^"\s]*)"/g, '$1'))
+// git's global options (`-C <dir>`, `-c <k=v>`, `--git-dir=…`, `--no-pager`) sit between
+// `git` and the subcommand.
+const GIT = String.raw`\bgit(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+`
+const DENY_OPERANDS = [
+  // Only l4.mjs appends to the journal, the way only a review writes the report. Depth,
+  // not the authority (l4-merge re-judges): these spellings are denied, the rest fails open.
+  [new RegExp(MUTATOR + String.raw`l4\.jsonl`),
+    'the L4 journal is written by `just l4-judge` / `just l4-merge` and by nothing else'],
+  [new RegExp(REDIRECT + String.raw`l4\.jsonl`),
+    'writing the L4 journal by hand forges the record of rejected rounds `just l4-judge` counts'],
+  // A phase merges on a fresh verdict for its sha, and nobody legitimately hand-merges one.
+  [new RegExp(GIT + String.raw`(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
+    'a phase merges through `just l4-merge`, on the verdict it computes — never by hand'],
+]
+
+// A forge merge is the human's act, and the human sometimes asks for one: ask, not deny.
+const FORGE_MERGE = /\b(?:gh\s+pr|glab\s+mr|tea\s+(?:pulls?|pr))\s+merge(?![\w-])/
+
 // The gate layer's own files. Reading them is normal; rewriting them is a
 // decision. The list is deliberately short — every entry is a file whose content
 // decides whether a gate exists or what "green" means.
@@ -108,7 +134,7 @@ const DENY = [
 // `*.just` is in the list because the recipes live in an IMPORTED library now, not in
 // the justfile: guarding only the file that holds the `import` lines would leave the
 // commands the gate actually runs unguarded.
-const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard)\.mjs|review-prompt\.md)`
+const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard|l4)\.mjs|review-prompt\.md)`
 
 /** A redirect whose target is a gate file, and a mutating command carrying one in the
  *  SAME segment. Both halves come from the shared REDIRECT/MUTATOR sources above, so
@@ -141,8 +167,10 @@ function main() {
   if (!raw) return 0
   const command = scrub(raw)
 
-  for (const [re, why] of DENY) {
-    if (re.test(command)) {
+  const operands = unquoteWords(raw)
+  const rules = [...DENY.map(([re, why]) => [re, why, command]), ...DENY_OPERANDS.map(([re, why]) => [re, why, operands])]
+  for (const [re, why, text] of rules) {
+    if (re.test(text)) {
       console.error(`Blocked: ${why}`)
       console.error('  If the gate is genuinely wrong, say so and escalate — do not route around it.')
       return 2
@@ -152,6 +180,9 @@ function main() {
   if (REDIRECT_TO_GATE.test(command) || MUTATOR_ON_GATE.test(command)) {
     ask(input, 'This command writes to the gate layer (a hook, a workflow, a justfile, a baseline). '
       + 'Editing the gates is sometimes the task — a human confirms it.')
+  } else if (FORGE_MERGE.test(command)) {
+    ask(input, 'This merges a pull request on the forge — the human\'s act, unless they asked for it. '
+      + 'A phase of an L4 RFC merges through `just l4-merge` instead.')
   }
   return 0
 }

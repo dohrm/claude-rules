@@ -1,6 +1,6 @@
 ---
 name: rfc
-description: "Frame ONE request for change as an iterated RFC — the whole request, decomposed into phases and steps with proofs, local decisions, holds, stopping condition — then implement it to the end once the human marks it ready. Kept in `.work/` (local) or on a ticket in the project's tracker. Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed feature to execution; repeated chores are /loop-setup."
+description: "Frame ONE request for change as an iterated RFC — the whole request, decomposed into phases and steps with proofs, local decisions, holds, stopping condition — then implement it to the end once the human marks it ready. Kept in `.work/` (local) or on a ticket in the project's tracker. Use on /rfc, \"write an RFC\", \"build this capability\", \"let's iterate on this feature then build it\", or a ticket event. The only path from a framed change to execution, a repeated chore with a measurable end included."
 ---
 
 You and the human engineer **one request for change** in one document, round after
@@ -188,13 +188,14 @@ a gate bypass) and on a hold.
    (`just base=origin/rfc/<slug> review_cap=<n> code-review`), and this clause. The executor opens its PR against
    `rfc/<slug>` and puts its report in the description. To run phases in parallel,
    first write the dependency graph you rely on under `## Log`.
-4. **Judge the artifacts.** Re-run `just check` on the phase branch, read the diff and
-   the review report, wait for CI. Run `just base=origin/rfc/<slug> scope-report` on
-   the phase branch: log each package it marks as overflow with the `changed:` or
-   `## Assumptions` line that justifies it, else reject the phase or escalate. If the
-   board delegates phase merges, merge on the condition of `agent/autonomy.md` § L4
-   and log the review's `WARNINGS` with the merge. Otherwise stop as at L3. A rejected
-   phase goes back to its executor, up to the board's cap, re-briefed with
+4. **Judge with the referee**, from your tree: `just l4-judge <n>` reads the phase's
+   facts (`just check` in its tree, the review report, CI, the scope report) and exits
+   0 `merge`, 1 `reject`, 3 `escalate`, 4 `wait`. Clear an overflow package with
+   `just l4-judge <n> '<package>=<text>'`, the text quoted from a `changed:` or
+   `## Assumptions` line. On `merge`, `just l4-merge <n>` (same justifications) judges
+   again and merges on that fresh verdict alone, if the board delegates phase merges;
+   otherwise stop as at L3. On `escalate`, escalate. A rejected
+   phase goes back to its executor, re-briefed with
    `review_cap` = the passes already spent plus the board's cap: a branch's count
    never resets. An executor stopped at its cap is re-briefed from the board's pass
    envelope, without the human, only when every open 🔴 is `budget:` (below); log
@@ -293,12 +294,15 @@ carry it onto the base branch; the last one takes it away. A round after the han
 
 ## Delegation board
 
-<!-- L4 only. Absent, or a list left empty, means L3. -->
+<!-- L4 only. Absent, or `Delegated: none`, means L3. `just l4-judge` parses these four
+     lines and refuses one it cannot read: Delegated from phase-merge, hold-command,
+     changed-decision; agent one of claude, codex, cursor, opencode; budget in minutes
+     or tokens; every cap required; Pass envelope absent is 0. -->
 
-- Delegated: <phase merges into `rfc/<slug>` | holds with a command | `changed:` decisions>
-- Executors: <coding agent · model, one per line>
-- Caps: <token or wall-time budget per executor>; <review passes per phase, default 3>; <rejected rounds per phase> — all three required
-- Pass envelope: <extra review passes for the whole RFC, spent only on findings the model decides; absent is 0>
+- Delegated: phase-merge, hold-command, changed-decision
+- Executors: claude · <model> | codex · <model>
+- Caps: budget=<n> minutes; review-passes=3; rejected-rounds=2
+- Pass envelope: 0
 
 ## Steps
 

@@ -139,8 +139,7 @@ docs/
 
 .work/<slug>/            # committed, ephemeral — dies once its PR merges
 ├── intent.md            # what is still open while framing — /interview
-├── rfc.md               # one feature: decisions, steps, stopping condition — /rfc
-└── loop.md              # a repeated chore with a done-command — /loop-setup
+└── rfc.md               # one feature: decisions, steps, stopping condition — /rfc
 ```
 
 ---
@@ -198,7 +197,7 @@ exact command. Install `product` first, or read the table in
 | **Delivery** | `testing` `cicd` | test levels & determinism, contracts, the mutation ratchet · pipeline & release, `/ci-setup` |
 | **Run** | `ops` `k8s` `incident` `devstack` | **in production**: SLO, error budget, migrations, `/observability` · manifests · `/runbook` + `/postmortem` — **on your machine**: `devstack`, the contract between an agent and a running app (no foreground server, no orphan, the log file is the truth) plus the `process-compose` lifecycle at `--level gates` |
 | **Agent OS** | `agent` | autonomy, decisions, subagents, `/debrief`; `kit/common` (review-guard, adr-check, hooks) at `--level gates`. Not a gift on every `add` |
-| **Practice** | `product` `defect` `loop-setup` | lifecycle skills, `/rfc` included · bug diagnosis and fix · repeated-loop framing |
+| **Practice** | `product` `defect` | lifecycle skills, `/rfc` included · bug diagnosis and fix |
 
 **Aliases** unpack on `add` / `remove`; the lock keeps the merged sources' alias map, so an offline `remove` unpacks one an overlay defined: `rust-api`, `go-api`, `python-api`, `ts-node-api`, `ts-web-app`, `ts-tauri-app`. `/architect` recommends those, plus `--root` and `--level gates`.
 
@@ -491,7 +490,7 @@ auto-triggers on its `description:`. What is installed depends on your profiles:
 |---|---|
 | `product` | `/interview` `/domain-modeling` `/onboard` `/update` `/migrate` `/prd` `/architect` `/solution-exploration` `/adr-review` `/design-system` `/experience` `/ui-prompt` `/rfc` `/pre-mortem` `/diagram` |
 | `cicd` `ops` `incident` | `/ci-setup` `/observability` `/runbook` `/postmortem` |
-| `defect` (alias `investigate`) `loop-setup` | `/defect` `/loop-setup` |
+| `defect` (alias `investigate`) | `/defect` |
 
 **3. Repo commands — the gates.** One task layer, three callers: the git hooks, you
 or the agent, and CI. No command is defined twice — and the recipes themselves live
@@ -507,6 +506,7 @@ once, in the imported `.dev/kit/*/*.just` library, not copied into each repo.
 | `just mutate-diff` | 4 — mutation / coverage ratchet, on the merge-base diff | PR gate after calibration; optional locally; never a hook |
 | `just code-review` | 3 — judgment a gate cannot make: a read-only reviewer over the merge-base diff | per coherent block (the RFC), before push; writes `.work/review-report.md` |
 | `just review-guard` | 3 — the deterministic half: a `CRITICAL` report blocks the push, whatever the sha | pre-push hook; no LLM, milliseconds |
+| `just l4-judge <n>` · `just l4-merge <n>` | — the L4 referee: a phase's verdict from its check, review report, CI and scope report; the merge only on a fresh `merge` verdict `l4-merge` computes itself for that HEAD (the journal `l4.jsonl` is a record, never the authority) | L4 orchestrator, from the integration tree |
 | `just adr-retired [NNNN]` | — reads, never gates: the records deleted from `docs/adr/`, or one record's last version, from git history | on demand, with `docs/adr/` |
 | `just status` | — reports, never gates: every worktree at a glance (branch, dirty, RFC or loop, verdict, blockers) | opt-in, when sessions run in parallel trees |
 

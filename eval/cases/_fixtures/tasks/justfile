@@ -1,0 +1,3 @@
+# The repository's only gate: the test suite.
+check:
+    node --test

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-// publish-summary — the per-loop counterpart to `worktree-status.mjs`: that one is
+// publish-summary — the per-run counterpart to `worktree-status.mjs`: that one is
 // read-only across every worktree at a glance, this one is one worktree, once, at the
-// moment a `/loop-setup` or `/rfc` run stops.
+// moment an `/rfc` run stops.
 //
 // Mechanical, not LLM-authored: everything below is either parsed out of the state
-// file the run was already maintaining (`.work/<slug>/loop.md`, else `rfc.md`) or
+// file the run was already maintaining (`.work/<slug>/rfc.md`) or
 // computed from git — branch, commits ahead of
 // `base`, a one-line diffstat, `scope-report.mjs`'s per-package table. `status` is the
-// one thing only the loop knows, because it is why the loop stopped, not something
+// one thing only the run knows, because it is why the run stopped, not something
 // derivable from the file.
 //
 // Report, not a gate: always exits 0 once there is something to summarize. Fails
@@ -68,33 +68,18 @@ function nonPlaceholderLines(body) {
   return body.split('\n').map((l) => l.trim()).filter((l) => l && !isPlaceholder(l))
 }
 
-/** `.work/<slug>/loop.md`, else `rfc.md` — the state files `/loop-setup` and `/rfc`
- *  write and `worktree-status.mjs` reports. */
-function findStateFile(slug) {
-  const dir = join('.work', slug)
-  if (!existsSync(dir)) return { dir, file: null }
-  for (const name of ['loop.md', 'rfc.md']) {
-    const file = join(dir, name)
-    if (existsSync(file)) return { dir, file }
-  }
-  return { dir, file: null }
-}
-
-const { dir, file } = findStateFile(slug)
+/** `.work/<slug>/rfc.md` — the state file `/rfc` writes and `worktree-status.mjs`
+ *  reports. */
+const dir = join('.work', slug)
+const file = join(dir, 'rfc.md')
 if (!existsSync(dir)) bail(`no .work/${slug}/ directory`)
-if (!file) bail(`no loop.md or rfc.md under .work/${slug}/`)
+if (!existsSync(file)) bail(`no rfc.md under .work/${slug}/`)
 
 const text = readFileSync(file, 'utf8')
 
-const objectiveMatch = text.match(/^-\s*\*\*Objective \(bounded\)\*\*:\s*(.+)$/m)
-const h1Match = text.match(/^#\s+(?:RFC\s*[—-]\s*)?(.+)$/m)
-const objective = (objectiveMatch?.[1] ?? h1Match?.[1] ?? '—').trim()
+const objective = (text.match(/^#\s+(?:RFC\s*[—-]\s*)?(.+)$/m)?.[1] ?? '—').trim()
 
-const guardrails = section(text, 'Guardrails')
-const iterationCap = guardrails?.match(/\*\*Iteration cap\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
-const tokenBudget = guardrails?.match(/\*\*Token budget\*\*:\s*(.+)/)?.[1]?.trim() ?? 'n/a'
-
-const checklistBody = section(text, 'Remaining work') ?? section(text, 'Steps')
+const checklistBody = section(text, 'Steps')
 const items = (checklistBody ?? '')
   .split('\n')
   .map((l) => l.match(/^-\s*\[([ xX])\]\s*(.+)$/))
@@ -135,11 +120,6 @@ const body = [
   `- **Diff**: ${diffLine ?? '—'}`,
   `- **Turns logged**: ${logLines.length}`,
   `- **Generated**: ${new Date().toISOString()}`,
-  '',
-  '## Guardrails',
-  '',
-  `- **Iteration cap**: ${iterationCap}`,
-  `- **Token budget**: ${tokenBudget}`,
   '',
   `## Remaining work (${doneCount}/${items.length} done)`,
   '',

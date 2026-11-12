@@ -85,7 +85,7 @@ review_paths   := review_exclude + " " + review_secrets
 #
 # `work_slug` is the directory under `.work/` — empty means: the `.work/*/rfc.md` (or `defect.md`) whose
 # `**Branch**` header is the current branch (`/rfc` writes it per phase), else the branch
-# name (`work-slug.mjs`). Set it to a `/loop-setup` slug to park the marker next to its
+# name (`work-slug.mjs`). Set it to another slug to park the marker next to that
 # state file.
 work_slug   := ""
 incremental := "1"
@@ -525,15 +525,15 @@ work-prune:
     node {{kit}}/work-stale.mjs --prune {{base}}
 
 # ── Run summaries (opt-in) ──────────────────────────────────────────────────
-# The per-loop counterpart to `just status`: that one is read-only across every
-# worktree at a glance, this one is one worktree, once, at the moment a
-# `/loop-setup` or `/rfc` run stops — objective met, blocked, or cap/budget exhausted
-# (the setup skills' completion/escalation outcomes, mapped straight onto the
-# three statuses below). Reads `.work/<slug>/loop.md`
-# (else `rfc.md`) plus what only git knows — branch, commits
+# The per-run counterpart to `just status`: that one is read-only across every
+# worktree at a glance, this one is one worktree, once, at the moment an
+# `/rfc` run stops — objective met, blocked, or cap/budget exhausted
+# (its completion/escalation outcomes, mapped straight onto the
+# three statuses below). Reads `.work/<slug>/rfc.md`
+# plus what only git knows — branch, commits
 # ahead of `{{base}}`, a one-line diffstat, the scope report below — into
 # `.work/<slug>/SUMMARY.md`, so
-# catching up on a parallel loop means one short file, not the whole state file
+# catching up on a parallel run means one short file, not the whole state file
 # and its `## Log`. Report, not a gate: always exits 0 once there is something
 # to summarize — `status` is validated here AND inside the script, because a
 # test calls the script directly, past this guard.
@@ -552,6 +552,29 @@ publish-summary slug status base=base:
 # At L4: `just base=origin/rfc/<slug> scope-report` (skills/rfc § L4).
 scope-report:
     @node {{kit}}/scope-report.mjs --slug {{quote(work_slug)}} {{quote(base)}}
+
+# ── L4 referee (rules/agent/autonomy.md § L4) ────────────────────────────────
+# Run from the integration tree, on `rfc/<slug>`. `l4-judge` reads the facts of phase
+# <n> — `just check` in its tree, its review report, CI, the scope report — prints one
+# line and exits 0 merge, 1 reject, 3 escalate, 4 wait; every verdict is appended to
+# `.work/<slug>/l4.jsonl` and committed. `justify` clears overflow packages, one
+# `<package>=<text>` per line, each text quoted from a `changed:` or `## Assumptions`
+# line of the RFC. `l4-merge` (same arguments) requires `phase-merge` on the board,
+# re-runs the judge and merges the exact sha only on that fresh `merge` verdict, then
+# pushes; any other verdict exits with its code. The journal is a record, never read
+# back as a verdict.
+#
+# `l4_ci` is the CI state of a branch, run with the branch as its last argument: exit 0
+# green, 8 still running (`gh pr checks`' "pending"), anything else red. Empty means
+# Tier 4 is not wired: the journal records it as declared, never as green. Override it
+# for another forge.
+l4_ci := "gh pr checks --required"
+
+l4-judge n justify="":
+    node {{kit}}/l4.mjs judge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
+
+l4-merge n justify="":
+    node {{kit}}/l4.mjs merge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
 
 # ── CI: the base a gate job compares against ─────────────────────────────────
 # `<tech>-check` audits only when its lock changed against `base` (rules/cicd/pipeline.md),

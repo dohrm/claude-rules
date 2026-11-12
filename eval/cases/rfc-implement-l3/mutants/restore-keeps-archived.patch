@@ -1,0 +1,11 @@
+diff --git a/src/tasks.mjs b/src/tasks.mjs
+index 0411f28..b1b6388 100644
+--- a/src/tasks.mjs
++++ b/src/tasks.mjs
+@@ -52,5 +52,5 @@ export function archiveTask(state, id) {
+ 
+ export function restoreTask(state, id) {
+   if (!findTask(state, id).archived) throw new TaskError(`task #${id} is not archived`)
+-  return setArchived(state, id, false)
++  return setArchived(state, id, true)
+ }

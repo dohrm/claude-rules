@@ -72,6 +72,24 @@ const DENIED = [
   ['install -m755 /dev/null .git/hooks/pre-push', /git floor/],
   ['chmod 000 .git/hooks/pre-push', /git floor/],
   ['sed --in-place -e 1d .git/hooks/pre-commit', /git floor/],
+  // The L4 journal and a phase merge belong to l4.mjs (rules/agent/autonomy.md § L4).
+  ['echo "{}" >> .work/x/l4.jsonl', /forges the record/],
+  ['rm .work/x/l4.jsonl', /L4 journal/],
+  ['sed -i "" 1d .work/x/l4.jsonl', /L4 journal/],
+  ['git merge --no-ff phase/x/2', /just l4-merge/],
+  ['git merge origin/phase/x/2', /just l4-merge/],
+  ['git pull origin phase/x/2', /just l4-merge/],
+  ['git fetch && git merge refs/heads/phase/x/2; git push', /just l4-merge/],
+  // Quoting an operand does not hide it.
+  ["rm '.work/x/l4.jsonl'", /L4 journal/],
+  ['echo "{}" >> ".work/x/l4.jsonl"', /forges the record/],
+  ["git merge 'phase/x/2'", /just l4-merge/],
+  ['git merge --no-ff "origin/phase/x/2"', /just l4-merge/],
+  // A path with a space, and git's global options before the subcommand.
+  ['rm "/tmp/my repo/.work/x/l4.jsonl"', /L4 journal/],
+  ["echo '{}' >> '/tmp/my repo/.work/x/l4.jsonl'", /forges the record/],
+  ['git -C /tmp/repo merge phase/x/2', /just l4-merge/],
+  ['git -c core.editor=true --no-pager pull origin phase/x/2', /just l4-merge/],
 ]
 for (const [command, why] of DENIED) {
   test(`bash-guard denies: ${command}`, () => {
@@ -126,6 +144,19 @@ const ALLOWED = [
   'git push -f origin feature/remaster && echo ok',
   // `2>&1` duplicates an fd; it opens no file and writes to nothing.
   'echo hi > out.txt 2>&1',
+  // Reading the journal, merging anything but a phase, and the merge-base of a phase.
+  'cat .work/x/l4.jsonl',
+  'git log -p -- .work/x/l4.jsonl',
+  'git merge --no-ff feat/hooks',
+  'git merge-base rfc/x phase/x/2',
+  'git merge --abort',
+  'git pull --rebase origin rfc/x',
+  'just l4-merge 2',
+  // A quote holding a space is data, not an operand.
+  'git commit -m "never git merge phase/x/2 by hand"',
+  'git commit -m "fix: rm .work/x/l4.jsonl is denied"',
+  'git -C /tmp/repo merge feat/hooks',
+  'git -C /tmp/repo merge-base rfc/x phase/x/2',
 ]
 for (const command of ALLOWED) {
   test(`bash-guard stays out of the way: ${command}`, () => {
@@ -147,6 +178,11 @@ const ASKED = [
   'echo x 1> justfile',
   'echo x > .dev/kit/rust/rust.just',
   'echo x >| lefthook.yml',
+  // A forge merge is the human's act — and sometimes what the human asked for.
+  'gh pr merge 104 --merge',
+  'gh pr merge --squash --delete-branch',
+  'glab mr merge 7',
+  'tea pulls merge 3',
 ]
 for (const command of ASKED) {
   test(`bash-guard escalates: ${command}`, () => {
@@ -205,6 +241,7 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     '.dev/kit/common/worktree-status.mjs',
     '.dev/kit/common/landed.mjs',
     '.dev/kit/common/work-stale.mjs',
+    '.dev/kit/common/l4.mjs',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]
@@ -213,7 +250,7 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     assert.equal(r.status, 0, `${p}: edit-guard asks, it never denies`)
     assert.equal(decision(r.out), 'ask', `${p}: not escalated`)
   }
-  for (const p of ['src/main.rs', 'docs/PRD.md', 'apps/web/src/app.tsx', 'lefthook-notes.md']) {
+  for (const p of ['src/main.rs', 'docs/PRD.md', 'apps/web/src/app.tsx', 'lefthook-notes.md', '.work/x/rfc.md']) {
     const r = edit(p)
     assert.equal(r.status, 0)
     assert.equal(r.out.trim(), '', `${p}: escalated an ordinary file`)
@@ -225,6 +262,7 @@ test('edit-guard escalates the gate layer and nothing else', () => {
 // the doctrine is one keypress from a forged verdict, so this half denies too.
 test('edit-guard denies what has no legitimate hand-edit', () => {
   for (const [path, why] of [['.work/review-report.md', /forges the verdict/],
+                             ['.work/102-x/l4.jsonl', /appended by `just l4-judge`/],
                              ['.git/hooks/pre-commit', /lefthook install. owns/]]) {
     const r = edit(path)
     assert.equal(r.status, 2, `${path}: expected a block, got ${r.status}`)

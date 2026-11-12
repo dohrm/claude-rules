@@ -12,6 +12,69 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Breaking — the L4 delegation board has a fixed format, and a referee merges phases
+
+At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict of
+`just l4-judge` — no longer on an agent applying the merge paragraph of
+`agent/autonomy.md`. What L4 may delegate is unchanged.
+
+- **`kit/common/l4.mjs`**, recipes `l4-judge n [justify]` and `l4-merge n [justify]`,
+  variable `l4_ci` (default `gh pr checks --required`; empty = Tier 4 not wired,
+  recorded as declared). `l4-merge` re-runs the judge on the phase HEAD and merges only
+  on that fresh verdict. Verdicts are recorded in `.work/<slug>/l4.jsonl`, committed on
+  `rfc/<slug>` — a record (rejected rounds, each merge's WARNINGS), never the authority.
+- **The board is parsed.** Four `- Key: value` lines; one that does not parse makes
+  `judge` and `merge` exit 3 and name it:
+
+  ```markdown
+  - Delegated: phase-merge, hold-command, changed-decision
+  - Executors: claude · <model> | codex · <model>
+  - Caps: budget=<n> minutes; review-passes=3; rejected-rounds=2
+  - Pass envelope: 0
+  ```
+
+- **`scope-report.mjs --json`**; `review-guard.mjs` exports `readVerdict` and only
+  exits when run as a script.
+- **Guards**: `bash-guard` denies a write to `l4.jsonl` and a `git merge`/`git pull` naming
+  a `phase/*` ref, and asks on a forge merge (`gh pr merge`, `glab mr merge`,
+  `tea pulls merge`); `edit-guard` denies `l4.jsonl` and asks on `l4.mjs`. The `l4`
+  entries are depth: they deny the spellings their tests list and fail open.
+
+Hand-merge:
+
+- **An L4 RFC in flight** with a free-form board: its orchestrator rewrites the four
+  lines above before the next judge — `Delegated` from `phase-merge`, `hold-command`,
+  `changed-decision` (or `none`); agents from `claude`, `codex`, `cursor`, `opencode`;
+  `budget` in `minutes` or `tokens`. The referee does not guess.
+- A repo on another forge than GitHub: set `l4_ci` in the root justfile (exit 0 green,
+  8 running, anything else red), or `l4_ci := ""`.
+
+### Breaking — `/loop-setup` is removed
+
+`/rfc` is the only execution path ([ADR-0011](docs/adr/0011-rfc-only-path-no-loop.md)):
+a repeated chore with a measurable end is an RFC whose stopping condition is that
+command. The skill had no user left, and its accepted audit finding (a done-command
+neither frozen nor run first) would have been fixed in an asset nobody runs.
+
+- **The `loop-setup` profile is retired.** `update` drops it from the lock and says
+  why; the installed `.claude/skills/loop-setup/` is purged.
+- **`.work/<slug>/loop.md` is no longer read.** `just status` does not report it,
+  `just publish-summary` refuses a slug without an `rfc.md`, and no kit command
+  deletes it.
+- **`just publish-summary` reads `rfc.md` only.** `SUMMARY.md` loses its
+  `## Guardrails` section (an iteration cap and a token budget only a `loop.md` had);
+  `## Remaining work` counts the RFC's `## Steps`.
+- **`agent/autonomy.md`** no longer mentions a loop's caps: the state files are
+  `rfc.md` and `defect.md`.
+
+Hand-merge:
+
+- A `just publish-summary` caller (a script, a prompt) that pointed at a loop slug:
+  point it at an RFC slug, or drop the call.
+- A `loop.md` in flight: finish it by hand, or rewrite it as an RFC
+  (`/rfc`, its stopping condition the loop's done-command). Delete the file in a
+  commit once it is over.
+
 ### `/rfc` and the review: lifecycle, access, stakes — and spec gaps escalate, budget does not
 
 Measured on a four-phase RFC run at L4 with a Sonnet executor and a Codex reviewer:

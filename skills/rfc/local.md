@@ -42,8 +42,11 @@ Tick each step as its proof passes, and append its outcome to `## Log`. The stat
 line is the state; `just status` and `just publish-summary` read this file.
 
 At L4, `## Log` also takes the `ODD:` lines (or `dropped to L3: <why>`), the dependency
-graph before any parallel phases, and each delegated decision with its proof. The final
-report is the `rfc/<slug>` PR's description, because that PR deletes this file.
+graph before any parallel phases, and each delegated decision with its proof. Every
+verdict and merge of `just l4-judge` / `just l4-merge` is in `.work/<slug>/l4.jsonl`,
+which they write and commit; log the line, not a copy. The journal is a record, never
+the authority: `l4-merge` re-judges and merges on that fresh verdict only. The final report is the
+`rfc/<slug>` PR's description, because that PR deletes this directory.
 
 ## `ready` and escalation
 
