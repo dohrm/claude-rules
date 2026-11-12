@@ -18,9 +18,11 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
 `just l4-judge` — no longer on an agent applying the merge paragraph of
 `agent/autonomy.md`. What L4 may delegate is unchanged.
 
-- **`kit/common/l4.mjs`**, recipes `l4-judge n [justify]` and `l4-merge n`, variable
-  `l4_ci` (default `gh pr checks --required`; empty = Tier 4 not wired, recorded as
-  declared). Verdicts land in `.work/<slug>/l4.jsonl`, committed on `rfc/<slug>`.
+- **`kit/common/l4.mjs`**, recipes `l4-judge n [justify]` and `l4-merge n [justify]`,
+  variable `l4_ci` (default `gh pr checks --required`; empty = Tier 4 not wired,
+  recorded as declared). `l4-merge` re-runs the judge on the phase HEAD and merges only
+  on that fresh verdict. Verdicts are recorded in `.work/<slug>/l4.jsonl`, committed on
+  `rfc/<slug>` — a record (rejected rounds, each merge's WARNINGS), never the authority.
 - **The board is parsed.** Four `- Key: value` lines; one that does not parse makes
   `judge` and `merge` exit 3 and name it:
 
@@ -35,7 +37,8 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
   exits when run as a script.
 - **Guards**: `bash-guard` denies a write to `l4.jsonl` and a `git merge`/`git pull` naming
   a `phase/*` ref, and asks on a forge merge (`gh pr merge`, `glab mr merge`,
-  `tea pulls merge`); `edit-guard` denies `l4.jsonl` and asks on `l4.mjs`.
+  `tea pulls merge`); `edit-guard` denies `l4.jsonl` and asks on `l4.mjs`. The `l4`
+  entries are depth: they deny the spellings their tests list and fail open.
 
 Hand-merge:
 

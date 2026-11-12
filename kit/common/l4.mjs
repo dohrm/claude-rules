@@ -4,12 +4,12 @@
 // this script, not decided by an agent applying a paragraph (rules/agent/autonomy.md § L4).
 // It is a judge, not an orchestrator: it starts no agent and stores no plan.
 //
-// Invariant: a phase is merged only on a `merge` verdict recorded for the exact sha being
-// merged, and only when the RFC's `## Delegation board` delegates `phase-merge`. A level
-// never changes what counts as done.
+// Invariant: a phase is merged only on a `merge` verdict `merge` computes itself, for the
+// exact sha it merges, and only when the RFC's `## Delegation board` delegates
+// `phase-merge`. A level never changes what counts as done.
 //
 //   node l4.mjs judge <n> [--slug <s>] [--ci <cmd>] [--justify <pkg>=<text>]...
-//   node l4.mjs merge <n> [--slug <s>]
+//   node l4.mjs merge <n> [--slug <s>] [--ci <cmd>] [--justify <pkg>=<text>]...
 //
 // Both run in the INTEGRATION tree, on `rfc/<slug>`. `judge` finds the phase tree with
 // `git worktree list` (branch `phase/<slug>/<n>`), runs `just check` there, reads its
@@ -29,13 +29,18 @@
 //
 // Precedence: escalate > reject > wait > merge — a human is needed whatever else is red.
 //
-// `merge` requires the last verdict for <n> to be `merge` on the phase's current HEAD, and
-// `phase-merge` on the board; it runs `git merge --no-ff <that sha>` and pushes. It exits 0
-// merged, 3 refused (the verdict stands: the human merges, or the executor rebases).
+// `merge` requires `phase-merge` on the board, then re-runs `judge` on the phase HEAD and
+// merges only on that fresh verdict: `git merge --no-ff <the judged sha>`, then a push. It
+// exits 0 merged; a fresh verdict other than `merge` exits with that verdict's code and
+// merges nothing; 3 refused (no delegation, already merged, a merge in progress, a
+// conflict: the human merges, or the executor rebases).
 //
-// The journal `.work/<slug>/l4.jsonl` is append-only and written only here; each append is
-// committed on `rfc/<slug>`, alone (`git commit --only`). A line that does not parse is
-// refused, never skipped: state replayed "best effort" is state nobody can audit.
+// The journal `.work/<slug>/l4.jsonl` is a record, not the authority: no verdict is ever
+// read back from it to merge, so a forged line buys nothing. It is append-only; each append
+// is committed on `rfc/<slug>`, alone (`git commit --only`). It carries what cannot be
+// recomputed: the rejected rounds counted against the cap, each merge's WARNINGS. A line
+// that does not parse is refused, never skipped: a record read "best effort" is one nobody
+// can audit.
 // `--justify` takes `<pkg>=<text>`, several per value separated by newlines (the just
 // recipe passes one string); `<text>` must appear verbatim in a `changed:` line or in the
 // `## Assumptions` section of the resolved RFC.
@@ -266,14 +271,18 @@ function reviewFacts(tree, head) {
   if (!head.startsWith(sha)) reject.push(`review report is stale: it reviewed ${sha.slice(0, 7)}, the phase HEAD is ${head.slice(0, 7)}`)
   const critical = section(text, '🔴')
   if (/\*\*Model:?\*\*:?\s*`?gap\b/i.test(critical)) escalate.push('a 🔴 whose **Model** line is `gap` — a spec gap is the human\'s')
-  // One entry per top-level item; a section written as prose is kept whole.
-  // One entry per top-level item, its continuation lines included; prose is kept whole.
-  const items = []
-  for (const line of section(text, '🟡').split('\n')) {
-    if (/^([-*]|\d+[.)])\s/.test(line) || !items.length) items.push(line)
-    else items[items.length - 1] += `\n${line}`
+  // WARNINGS is "only 🟡/🔵" (agents/code-reviewer.md): both sections are recorded. One
+  // entry per top-level item, its continuation lines included; prose is kept whole.
+  const warnings = []
+  for (const emoji of verdict === 'WARNINGS' ? ['🟡', '🔵'] : []) {
+    const items = []
+    for (const line of section(text, emoji).split('\n')) {
+      if (/^([-*]|\d+[.)])\s/.test(line) || !items.length) items.push(line)
+      else items[items.length - 1] += `\n${line}`
+    }
+    warnings.push(...items.map((i) => i.trim()).filter(Boolean))
   }
-  return { reject, escalate, warnings: items.map((i) => i.trim()).filter(Boolean) }
+  return { reject, escalate, warnings }
 }
 
 /** The sha `origin` holds for `branch`, or null. */
@@ -290,8 +299,13 @@ function ciState(cmd, branch, head, cwd) {
   return r.status === 0 ? 'green' : r.status === CI_PENDING ? 'running' : 'red'
 }
 
-export function judge({ n, slug = '', ci: ciCmd = '', justify = [], cwd = '.' }) {
-  const ctx = context({ n, slug, cwd })
+export function judge({ n, slug = '', ci = '', justify = [], cwd = '.' }) {
+  return judgeIn(context({ n, slug, cwd }), { ci, justify })
+}
+
+/** The verdict on the phase tree's HEAD, recorded: `{ verdict, reasons, head }`. */
+function judgeIn(ctx, { ci: ciCmd, justify }) {
+  const { n, cwd } = ctx
   const tree = treeOn(ctx.phase, cwd)
   if (!tree) refuse(EXIT.usage, `no worktree on ${ctx.phase} — \`just tree\` makes one`)
   if (git(tree, 'status', '--porcelain')) {
@@ -342,34 +356,31 @@ export function judge({ n, slug = '', ci: ciCmd = '', justify = [], cwd = '.' })
     kind: 'verdict', phase: n, sha: head, verdict, reasons, ci,
     warnings: verdict === 'merge' ? review.warnings : [], justified,
   })
-  return { verdict, reasons }
+  return { verdict, reasons, head }
 }
 
 // ── merge ─────────────────────────────────────────────────────────────────────
 
-export function merge({ n, slug = '', cwd = '.' }) {
+export function merge({ n, slug = '', ci = '', justify = [], cwd = '.' }) {
   const ctx = context({ n, slug, cwd })
   if (!ctx.board.delegated.includes('phase-merge')) {
     refuse(EXIT.escalate, 'the board does not delegate phase-merge — the verdict stands, the human merges')
   }
-  const head = tryGit(cwd, 'rev-parse', '--verify', `refs/heads/${ctx.phase}`)
-  if (!head) refuse(EXIT.escalate, `no branch ${ctx.phase}`)
-  const mine = ctx.journal.filter((e) => e.phase === n)
-  const last = mine.at(-1)
-  if (last?.kind === 'merged' && last.sha === head) refuse(EXIT.escalate, `${ctx.phase} at ${head.slice(0, 7)} is already merged`)
-  const verdict = mine.filter((e) => e.kind === 'verdict').at(-1)
-  if (!verdict) refuse(EXIT.escalate, `no verdict for phase ${n} — run \`just l4-judge ${n}\``)
-  if (verdict.verdict !== 'merge') refuse(EXIT.escalate, `the last verdict for phase ${n} is ${verdict.verdict}, not merge`)
-  if (verdict.sha !== head) {
-    refuse(EXIT.escalate, `the merge verdict is for ${verdict.sha.slice(0, 7)}, ${ctx.phase} is now at ${head.slice(0, 7)} — judge it again`)
+  const tip = tryGit(cwd, 'rev-parse', '--verify', `refs/heads/${ctx.phase}`)
+  if (!tip) refuse(EXIT.escalate, `no branch ${ctx.phase}`)
+  if (spawnSync('git', ['merge-base', '--is-ancestor', tip, 'HEAD'], { cwd }).status === 0) {
+    refuse(EXIT.escalate, `${ctx.phase} at ${tip.slice(0, 7)} is already merged into ${ctx.integration}`)
   }
-
   // A merge already in progress is someone's work: never merged over, never aborted.
   if (tryGit(cwd, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')) {
     refuse(EXIT.escalate, 'a merge is already in progress in the integration tree — finish or abort it first')
   }
-  // The sha, not the branch name: a commit pushed between the check above and this line
-  // would otherwise be merged without a verdict.
+
+  // The fresh verdict is the authority, never a journal line.
+  const { verdict, reasons, head } = judgeIn(ctx, { ci, justify })
+  if (verdict !== 'merge') return { verdict, reasons }
+  // The judged sha, not the branch name: a commit landing after the judge is merged
+  // without a verdict otherwise.
   const merged = spawnSync('git', ['merge', '--quiet', '--no-ff', '-m', `Merge ${ctx.phase} (l4 verdict at ${head.slice(0, 7)})`, head],
     { cwd, encoding: 'utf8' })
   if (merged.status !== 0) {

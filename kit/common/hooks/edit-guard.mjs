@@ -56,7 +56,7 @@ const WHY = {
   'review-report.md': 'the report is written by a review and by nothing else — hand-editing it forges the verdict `review-guard` reads',
   baseline: 'lowering a ratchet to turn a run green is a HARD bypass (rules/agent/autonomy.md)',
   guard: 'this file IS the guard — editing it is the meta-bypass',
-  journal: 'the L4 journal is appended by `just l4-judge` / `just l4-merge` and by nothing else — a hand-written line forges the verdict a merge is checked against',
+  journal: 'the L4 journal is appended by `just l4-judge` / `just l4-merge` and by nothing else — a hand-written line forges the record of rejected rounds the referee counts',
   hooks: '`lefthook install` owns .git/hooks/ — hand-writing one replaces the git floor with whatever you put there',
 }
 function reason(path) {

@@ -192,8 +192,9 @@ a gate bypass) and on a hold.
    facts (`just check` in its tree, the review report, CI, the scope report) and exits
    0 `merge`, 1 `reject`, 3 `escalate`, 4 `wait`. Clear an overflow package with
    `just l4-judge <n> '<package>=<text>'`, the text quoted from a `changed:` or
-   `## Assumptions` line. On `merge`, `just l4-merge <n>` merges, if the board delegates
-   phase merges; otherwise stop as at L3. On `escalate`, escalate. A rejected
+   `## Assumptions` line. On `merge`, `just l4-merge <n>` (same justifications) judges
+   again and merges on that fresh verdict alone, if the board delegates phase merges;
+   otherwise stop as at L3. On `escalate`, escalate. A rejected
    phase goes back to its executor, re-briefed with
    `review_cap` = the passes already spent plus the board's cap: a branch's count
    never resets. An executor stopped at its cap is re-briefed from the board's pass
