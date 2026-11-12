@@ -205,6 +205,37 @@ test('scope-report: on an L4 phase branch, only that phase\'s steps declare', ()
   })
 })
 
+test('scope-report --json: the same rows as data, for a script that must not parse a table', () => {
+  withTmpRepo((dir) => {
+    repo(dir)
+    write(dir, '.work/x/rfc.md', RFC('- [ ] a — touches `src/a.rs`, `lib/` → proof: `t`'))
+    write(dir, 'src/a.rs', 'a\nb\n')
+    write(dir, 'docs/x.md', 'x\n')
+    commit(dir)
+    const r = run(dir, '--json', 'trunk')
+    assert.equal(r.status, 0, r.err)
+    const data = JSON.parse(r.out)
+    assert.equal(data.source, '.work/x/rfc.md (local RFC)')
+    assert.deepEqual(data.rows, [
+      { package: 'docs', added: 1, removed: 0, touched: true, declared: false, overflow: true },
+      { package: 'src', added: 2, removed: 0, touched: true, declared: true, overflow: false },
+      { package: 'lib', added: 0, removed: 0, touched: false, declared: true, overflow: false },
+    ])
+  })
+})
+
+test('scope-report --json: with no RFC nothing is overflow — there is nothing to exceed', () => {
+  withTmpRepo((dir) => {
+    repo(dir)
+    write(dir, 'src/a.rs', 'x\n')
+    commit(dir)
+    const data = JSON.parse(run(dir, 'trunk', '--json').out)
+    assert.equal(data.source, null)
+    assert.match(data.why, /No RFC for this branch/)
+    assert.deepEqual(data.rows.map((r) => [r.package, r.overflow]), [['src', false]])
+  })
+})
+
 test('scope-report: an unresolvable base is the one failure — nothing to report', () => {
   withTmpRepo((dir) => {
     repo(dir)
