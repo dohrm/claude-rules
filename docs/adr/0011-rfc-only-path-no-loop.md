@@ -1,6 +1,6 @@
 # ADR-0011: The RFC is the only execution path, with no separate loop skill
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-11-12
 
 ## Context
