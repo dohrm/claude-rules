@@ -86,22 +86,78 @@ the `justfile`): it ships the snippet, you merge it.
 |------|-----------|-------|------------|
 | **Claude Code** | `PreToolUse` hooks | `settings.snippet.json` → `.claude/settings.json` | verified against the hook API |
 | **Cursor** | agent hooks (`.cursor/hooks.json`, `version: 1`) | `cursor-hooks.snippet.json` | shell tier verified; **no pre-edit hook exists** (`afterFileEdit` is post-hoc), so tier 2 is shell-only |
+| **Codex** | project hooks (`.codex/hooks.json`) | `codex-hooks.snippet.json` — the rule loader only, not the guards | payloads verified on Codex CLI 0.167.0 |
 
-One script serves both. Cursor's `beforeShellExecution` payload
+One guard script serves Claude Code and Cursor. Cursor's `beforeShellExecution` payload
 carries `command` at the top level (Claude nests it under `tool_input`) and expects
 `{"permission": …}` (Claude expects `hookSpecificOutput`); `bash-guard.mjs` detects
 the dialect from the payload and answers in kind. Exit 2 means "blocked" to both.
 
+## The Codex rule loader
+
+Not a guard: **`rule-loader.mjs`** hands Codex the path-scoped rules Claude Code loads
+by glob. Codex reads `.agents/rules/` only because `AGENTS.md` asks it to; this hook
+delivers a rule when the session touches a file its globs match.
+
+- **`apply_patch`** — the paths come from the patch headers (`Add File`, `Update
+  File`, `Move to`), so they are exact. A matching rule not yet delivered in the session
+  **denies the patch once**, with the rules as the reason; the same patch sent again
+  passes.
+- **`Bash`** — path-like tokens of the command are a guess, so a match **injects** the
+  rules as context and never blocks. A read is never refused on a guess.
+- The rules and their root-relative globs come from `codex.rules` in
+  `.claude-rules.lock`, re-read on every call; the root is the nearest ancestor of the
+  session `cwd` holding the lock. Rules without `paths:` stay in `AGENTS.md`.
+- A rule is delivered once per session. The delivered rules are kept in a state file
+  under the OS temp directory, keyed by session, in a per-user directory that must be
+  private (`0700`, owned by you) to be trusted — never inside the repository.
+  `SessionStart` with source `compact` clears it: compaction may drop the injected text.
+- Bodies are inlined up to 6 KB per answer; past it the answer lists the rule paths to
+  read. Codex spills larger hook output to disk.
+
+**Wiring.** Merge the `hooks` key of `codex-hooks.snippet.json` into
+`<repo>/.codex/hooks.json`, then open `/hooks` in Codex and trust both entries: Codex
+skips a project hook until it is trusted. **Re-open `/hooks` after every kit update** —
+Codex records trust against the hook's hash and skips a changed hook until it is
+trusted again. Hooks run with the session `cwd`, which may be a module directory, so the
+command finds the kit from the git root; if the claude-rules root is not the git root,
+write that path instead. `claude-rules doctor` warns when Codex is a target and
+`.codex/hooks.json` does not reference the loader.
+
+**What it does not guarantee.**
+
+- That the model *applies* a rule. It guarantees the rule was in front of it before the
+  first patch on a matching file — no more.
+- Coverage of every write: a file written from a shell command (`cat > a.rs`, `sed -i`)
+  gets at most the `Bash` injection, and only when a token names the path.
+- Delivery when anything is off: an unreadable payload, no lock, a lock without
+  `codex.rules`, a rule file missing on disk or a patch path outside the repo root
+  answers nothing, with one line on stderr. When the state file cannot be written, or its
+  directory is not private, it injects instead of denying — a deny it cannot remember would block the patch forever.
+- An untrusted or unwired hook: `doctor` reads `.codex/hooks.json` only. Inline hooks in
+  `config.toml` and the trust state are not inspected.
+
+The `AGENTS.md` reading instructions stay: they are the floor for every repo that does
+not wire the hook.
+
 ## Verifying it works
 
 The guards are plain Node with no dependencies, so they are testable — and tested,
-in `test/hooks.test.mjs` of this library. In a consuming repo:
+in `test/hooks.test.mjs` of this library (the rule loader in `test/rule-loader.test.mjs`). In a consuming repo:
 
 ```bash
 echo '{"tool_input":{"command":"git commit --no-verify -m x"}}' \
   | node .dev/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=2
 echo '{"tool_input":{"command":"git commit -m \"drop the -n flag\""}}' \
   | node .dev/kit/common/hooks/bash-guard.mjs; echo "exit=$?"   # → exit=0, silent
+```
+
+For the Codex loader, name a file one of your path-scoped rules governs (a fresh
+`session_id` each time, or the second run stays silent):
+
+```bash
+echo '{"hook_event_name":"PreToolUse","session_id":"'"$RANDOM"'","cwd":"'"$PWD"'","tool_name":"Bash","tool_input":{"command":"cat src/main.rs"}}' \
+  | node .dev/kit/common/hooks/rule-loader.mjs   # → {"hookSpecificOutput":{…"additionalContext":…}}
 ```
 
 A hook that is wired but never fires is indistinguishable from no hook at all —

@@ -82,6 +82,15 @@ Do not import all of `CLAUDE.md` into Codex or all of `AGENTS.md` into Claude.
 Do not modify global Codex configuration or manufacture command-permission rules.
 This is explicit progressive reading, not native file-glob enforcement.
 
+A repo may add delivery on top of that reading: the kit's Codex hook
+`kit/common/hooks/rule-loader.mjs`, wired by hand from `codex-hooks.snippet.json`
+into the project's `.codex/hooks.json` and trusted through `/hooks`. It reads
+`codex.rules` from the lock; a patch on a file a path-scoped rule governs is denied
+once with the rule as the reason, and a shell command naming such a file gets the rule
+injected, never blocked. Each rule is delivered once per session. The installer never
+writes the wiring and never trusts the hook; the managed blocks stay the floor where
+it is not wired. Its limits are in the kit's `hooks/README.md`.
+
 ## Safe migration and ownership
 
 `purgeRetired()` no longer removes `.agents/rules` or historical instruction blocks.
@@ -116,6 +125,9 @@ whole `AGENTS.md` file.
   chain, skill description estimates, and referenced rule bytes requested for the
   supplied path. Distinguish unconditional and conditional reads and deduplicate
   files shared across the chain. No claim to measure actual runtime context.
+- `doctor` warns when Codex is a target, the rule loader is installed and
+  `.codex/hooks.json` does not reference it. Inline `config.toml` hooks and the hook
+  trust state are not inspected.
 - Warn when the generated instruction chain approaches or exceeds Codex's documented default
   32 KiB instruction limit. Existing user/global instructions also consume budget;
   a below-limit managed block is not proof against truncation.
@@ -139,4 +151,5 @@ they do not establish native dynamic loading or guaranteed model adherence.
 ## Deferred
 
 Cursor retirement, dsh support, native Codex subagent conversion, replacing hooks,
+wiring the shell and edit guards for Codex, installer-written Codex hook wiring,
 mutation scheduling and deployment into `temper-altern` are separate decisions.
