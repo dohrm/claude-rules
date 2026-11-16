@@ -23,7 +23,7 @@
 //
 // Plain Node, no dependency, no import from the installer: the kit is copied into
 // consuming repos.
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
@@ -86,21 +86,24 @@ function shellPaths(command) {
   return out
 }
 
-const statePath = session => join(tmpdir(), 'claude-rules-rule-loader', createHash('sha256').update(session).digest('hex') + '.json')
+// One delivered rule file per line, appended: Codex may run tool calls in parallel, and
+// an append of a short line does not lose a concurrent one the way a rewrite would.
+const statePath = session => join(tmpdir(), 'claude-rules-rule-loader', createHash('sha256').update(session).digest('hex'))
 
 function readState(file) {
-  try {
-    const s = JSON.parse(readFileSync(file, 'utf8'))
-    return Array.isArray(s.loaded) ? s.loaded.filter(p => typeof p === 'string') : []
-  } catch { return [] }   // absent or unparseable: empty, rewritten on the next delivery
+  let lines
+  try { lines = readFileSync(file, 'utf8').split('\n').filter(Boolean) } catch { return { loaded: [], clean: true } }
+  const loaded = lines.filter(l => isAbsolute(l))
+  return { loaded, clean: loaded.length === lines.length }
 }
 
-function writeState(file, loaded) {
+// A file holding anything but paths is rewritten whole; otherwise the new lines are appended.
+function writeState(file, state, add) {
   try {
     mkdirSync(dirname(file), { recursive: true })
-    const tmp = `${file}.${process.pid}.tmp`
-    writeFileSync(tmp, JSON.stringify({ loaded }))
-    renameSync(tmp, file)
+    const lines = add.map(p => `${p}\n`).join('')
+    if (state.clean) appendFileSync(file, lines)
+    else writeFileSync(file, state.loaded.map(p => `${p}\n`).join('') + lines)
     return true
   } catch { return false }
 }
@@ -158,11 +161,11 @@ function answer(payload) {
 
   const session = typeof payload.session_id === 'string' && payload.session_id ? payload.session_id : null
   const file = session && statePath(session)
-  const loaded = file ? readState(file) : []
-  const pending = matched.filter(r => !loaded.includes(r.abs))
+  const state = file ? readState(file) : { loaded: [], clean: true }
+  const pending = matched.filter(r => !state.loaded.includes(r.abs))
   if (!pending.length) return null
 
-  const remembered = file ? writeState(file, [...loaded, ...pending.map(r => r.abs)]) : false
+  const remembered = file ? writeState(file, state, pending.map(r => r.abs)) : false
   const rules = render(pending, root)
   if (tool === 'apply_patch' && remembered) {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
