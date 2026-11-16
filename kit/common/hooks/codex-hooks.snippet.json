@@ -1,0 +1,21 @@
+{
+  "description": "claude-rules path-scoped rule loader. MERGE the hooks key into <repo>/.codex/hooks.json by hand, then trust it through /hooks. See .dev/kit/common/hooks/README.md.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.dev/kit/common/hooks/rule-loader.mjs\"", "timeout": 10, "statusMessage": "Loading claude-rules rules" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          { "type": "command", "command": "node \"$(git rev-parse --show-toplevel)/.dev/kit/common/hooks/rule-loader.mjs\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

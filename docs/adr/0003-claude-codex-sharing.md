@@ -52,6 +52,12 @@ visible diagnostics. Existing Cursor installations continue to work.
 This proposal is not permission to accept ADRs automatically. Implementation of
 this target policy waits for the maintainer's manual status change and commit.
 
+_Amended 2026-11-16:_ an opt-in Codex hook (`kit/common/hooks/rule-loader.mjs`, wired
+from a snippet, trusted by the user) now hands path-scoped rules to the model when a
+session touches a matching file: it denies the first patch once and injects on reads.
+The blocks stay, and reading stays an obligation wherever the hook is not wired. No
+global Codex configuration is written.
+
 ## Alternatives considered
 
 - Keep the consumer bridge manual: preserves the installer, but updates remain unsafe for that bridge.

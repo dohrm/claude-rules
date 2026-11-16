@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, lstatSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { globToRe } from './glob.mjs'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
 import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides, changedUpstream } from './sources.mjs'
@@ -1200,27 +1201,9 @@ function initRepo() {
 // contradicts the lock) and WARNS on judgments (a rule that can never trigger,
 // a context budget). `--strict` promotes the warnings.
 
-// Minimal glob → RegExp. Covers the syntax the shipped `paths:` actually use:
-// `**/`, `**`, `*`, `?`, `{a,b}`. Not a general globber — a rule using anything
-// else is reported as unmatched rather than silently mis-evaluated.
+// Globs the shipped `paths:` cannot use — globToRe (bin/glob.mjs) does not
+// support them, so a rule using one is not judged.
 const GLOB_UNSUPPORTED = /[[\]!()+@]/
-function globToRe(glob) {
-  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  let re = '', i = 0
-  while (i < glob.length) {
-    const c = glob[i]
-    if (c === '*' && glob[i + 1] === '*') {
-      if (glob[i + 2] === '/') { re += '(?:.*/)?'; i += 3 } else { re += '.*'; i += 2 }
-    } else if (c === '*') { re += '[^/]*'; i += 1 }
-    else if (c === '?') { re += '[^/]'; i += 1 }
-    else if (c === '{' && glob.includes('}', i)) {
-      const end = glob.indexOf('}', i)
-      re += '(?:' + glob.slice(i + 1, end).split(',').map(esc).join('|') + ')'
-      i = end + 1
-    } else { re += esc(c); i += 1 }
-  }
-  return new RegExp(`^${re}$`)
-}
 
 // The repo's own files. The installer's own output is excluded on purpose:
 // `.dev/kit/portal-http/openapi-ts.config.ts` must not make a `**/*.ts`

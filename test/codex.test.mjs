@@ -187,6 +187,32 @@ test('doctor catches missing rules and stale blocks; budget labels advisory read
   assert.equal(r.status, 1); assert.match(r.stdout, /Codex asset missing/)
 }))
 
+test('doctor warns when the Codex rule loader is installed but not wired', () => withTmpRepo(dir => {
+  ok(runCli(['add', 'agent', 'rust', '--agent', 'codex', '--level', 'gates'], dir))
+  assert.ok(has(dir, '.dev/kit/common/hooks/rule-loader.mjs'))
+  let r = ok(runCliBare(['doctor'], dir))
+  assert.match(r.stdout, /rule-loader\.mjs is installed but \.codex\/hooks\.json does not reference it/)
+  assert.match(r.stdout, /config\.toml and hook trust state are not inspected/)
+  mkdirSync(join(dir, '.codex/hooks.json'), { recursive: true })
+  assert.match(ok(runCliBare(['doctor'], dir)).stdout, /does not reference it/, 'a directory is not a wiring')
+  rmSync(join(dir, '.codex'), { recursive: true })
+  put(dir, '.codex/hooks.json', JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node other.mjs' }] }] } }))
+  assert.match(ok(runCliBare(['doctor'], dir)).stdout, /does not reference it/)
+  put(dir, '.codex/hooks.json', read(REPO, 'kit/common/hooks/codex-hooks.snippet.json'))
+  assert.doesNotMatch(ok(runCliBare(['doctor'], dir)).stdout, /does not reference it/)
+}))
+
+test('doctor stays quiet about the rule loader when it is not installed or Codex is not a target', () => {
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
+    assert.doesNotMatch(ok(runCliBare(['doctor'], dir)).stdout, /rule-loader/)
+  })
+  withTmpRepo(dir => {
+    ok(runCli(['add', 'agent', 'rust', '--agent', 'claude', '--level', 'gates'], dir))
+    assert.doesNotMatch(ok(runCliBare(['doctor'], dir)).stdout, /rule-loader/)
+  })
+})
+
 test('modified owned assets cannot be silently overwritten or deleted', () => withTmpRepo(dir => {
   ok(runCli(['add', 'rust', '--agent', 'codex'], dir))
   put(dir, '.agents/rules/rust/code-style.md', 'local change')
