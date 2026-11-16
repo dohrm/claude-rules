@@ -109,7 +109,8 @@ delivers a rule when the session touches a file its globs match.
   `.claude-rules.lock`, re-read on every call; the root is the nearest ancestor of the
   session `cwd` holding the lock. Rules without `paths:` stay in `AGENTS.md`.
 - A rule is delivered once per session. The delivered rules are kept in a state file
-  under the OS temp directory, keyed by session — never inside the repository.
+  under the OS temp directory, keyed by session, in a per-user directory that must be
+  private (`0700`, owned by you) to be trusted — never inside the repository.
   `SessionStart` with source `compact` clears it: compaction may drop the injected text.
 - Bodies are inlined up to 6 KB per answer; past it the answer lists the rule paths to
   read. Codex spills larger hook output to disk.
@@ -131,8 +132,8 @@ write that path instead. `claude-rules doctor` warns when Codex is a target and
   gets at most the `Bash` injection, and only when a token names the path.
 - Delivery when anything is off: an unreadable payload, no lock, a lock without
   `codex.rules`, a rule file missing on disk or a patch path outside the repo root
-  answers nothing, with one line on stderr. When the state file cannot be written it
-  injects instead of denying — a deny it cannot remember would block the patch forever.
+  answers nothing, with one line on stderr. When the state file cannot be written, or its
+  directory is not private, it injects instead of denying — a deny it cannot remember would block the patch forever.
 - An untrusted or unwired hook: `doctor` reads `.codex/hooks.json` only. Inline hooks in
   `config.toml` and the trust state are not inspected.
 

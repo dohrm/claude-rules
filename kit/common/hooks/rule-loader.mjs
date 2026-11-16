@@ -23,7 +23,7 @@
 //
 // Plain Node, no dependency, no import from the installer: the kit is copied into
 // consuming repos.
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync, lstatSync } from 'node:fs'
 import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
@@ -88,9 +88,22 @@ function shellPaths(command) {
 
 // One delivered rule file per line, appended: Codex may run tool calls in parallel, and
 // an append of a short line does not lose a concurrent one the way a rewrite would.
-const statePath = session => join(tmpdir(), 'claude-rules-rule-loader', createHash('sha256').update(session).digest('hex'))
+// The directory is per user and private: in a shared /tmp, a directory someone else
+// created could forge "already delivered" or redirect the append through a symlink.
+const UID = process.getuid?.()
+const STATE_DIR = join(tmpdir(), UID === undefined ? 'claude-rules-rule-loader' : `claude-rules-rule-loader-${UID}`)
+const statePath = session => join(STATE_DIR, createHash('sha256').update(session).digest('hex'))
+
+function ownStateDir(create) {
+  try {
+    if (create) mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
+    const st = lstatSync(STATE_DIR)
+    return st.isDirectory() && (UID === undefined || (st.uid === UID && (st.mode & 0o077) === 0))
+  } catch { return false }
+}
 
 function readState(file) {
+  if (!ownStateDir(false)) return { loaded: [], clean: true }
   let lines
   try { lines = readFileSync(file, 'utf8').split('\n').filter(Boolean) } catch { return { loaded: [], clean: true } }
   const loaded = lines.filter(l => isAbsolute(l))
@@ -99,8 +112,8 @@ function readState(file) {
 
 // A file holding anything but paths is rewritten whole; otherwise the new lines are appended.
 function writeState(file, state, add) {
+  if (!ownStateDir(true)) return false
   try {
-    mkdirSync(dirname(file), { recursive: true })
     const lines = add.map(p => `${p}\n`).join('')
     if (state.clean) appendFileSync(file, lines)
     else writeFileSync(file, state.loaded.map(p => `${p}\n`).join('') + lines)
@@ -165,8 +178,8 @@ function answer(payload) {
   const pending = matched.filter(r => !state.loaded.includes(r.abs))
   if (!pending.length) return null
 
+  const rules = render(pending, root)   // before remembering: a rule that fails to read is not delivered
   const remembered = file ? writeState(file, state, pending.map(r => r.abs)) : false
-  const rules = render(pending, root)
   if (tool === 'apply_patch' && remembered) {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
       permissionDecisionReason: `claude-rules: this patch touches files governed by rules not yet loaded in this session. Apply them, then send the same patch again — it will not be stopped twice.\n\n${rules}` } }

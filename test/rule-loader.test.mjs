@@ -4,7 +4,7 @@
 // leaks between tests or onto the machine.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, statSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
@@ -63,6 +63,26 @@ test('a patch on a governed file is denied once with the rule, then passes', () 
   assert.doesNotMatch(reason, /Write in English/, 'a rule without globs stays in AGENTS.md')
   silent(run(patch(repo, 'apps/api/src/a.rs'), tmp))
   assert.deepEqual(tree(repo), before, 'the loader never writes inside the repository')
+  const [state] = readdirSync(tmp)
+  if (process.getuid) assert.equal(statSync(join(tmp, state)).mode & 0o777, 0o700, 'the session state directory is private')
+}))
+
+test('a rule that cannot be read is not recorded as delivered', { skip: process.getuid?.() === 0 && 'root reads anything' }, () => fixture(({ repo, tmp }) => {
+  chmodSync(join(repo, RUST), 0o000)
+  const r = run(patch(repo, 'apps/api/src/a.rs'), tmp)
+  chmodSync(join(repo, RUST), 0o644)
+  silent(r)
+  assert.match(r.err, /nothing loaded/)
+  denied(run(patch(repo, 'apps/api/src/a.rs'), tmp))
+}))
+
+test('a state directory that is not private is not trusted: inject, never deny', { skip: !process.getuid && 'no POSIX ownership' }, () => fixture(({ repo, tmp }) => {
+  denied(run(patch(repo, 'apps/api/src/a.rs'), tmp))
+  const [state] = readdirSync(tmp)
+  chmodSync(join(tmp, state), 0o777)
+  injected(run(patch(repo, 'apps/api/src/a.rs'), tmp))
+  chmodSync(join(tmp, state), 0o700)
+  silent(run(patch(repo, 'apps/api/src/a.rs'), tmp))
 }))
 
 test('a Bash read injects the rule without blocking, and is not delivered twice', () => fixture(({ repo, tmp }) => {
@@ -120,7 +140,7 @@ test('an unwritable session state never denies: it injects', () => fixture(({ re
 
 test('an unparseable state file is treated as empty and rewritten', () => fixture(({ repo, tmp }) => {
   denied(run(patch(repo, 'apps/api/src/a.rs'), tmp))
-  const dir = join(tmp, 'claude-rules-rule-loader')
+  const dir = join(tmp, readdirSync(tmp)[0])
   for (const f of readdirSync(dir)) writeFileSync(join(dir, f), '{broken')
   denied(run(patch(repo, 'apps/api/src/a.rs'), tmp))
   silent(run(patch(repo, 'apps/api/src/a.rs'), tmp))
