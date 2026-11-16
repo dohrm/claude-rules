@@ -5,6 +5,7 @@ import { hash, safePath } from './ownership.mjs'
 
 export const START = '<!-- claude-rules:start (managed — do not edit inside this block) -->'
 export const END = '<!-- claude-rules:end -->'
+const HOOKS = '.codex/hooks.json'
 const slash = path => path.split(sep).join('/')
 
 export function modulePath(path) {
@@ -123,6 +124,9 @@ export function auditCodex(lock, bad, warn) {
       const bytes = chain.reduce((n, p) => n + (existsSync(p) ? Buffer.byteLength(readFileSync(p)) : 0), 0)
       if (bytes >= 28 * 1024) warn.push(`Codex instruction chain for ${dir}: ${bytes} bytes; default limit 32768; global/user instructions also consume it`)
     }
+    const loader = (lock.installed || []).flatMap(e => Object.keys(e.files || {})).find(p => p.endsWith('/hooks/rule-loader.mjs'))
+    if (loader && !(existsSync(HOOKS) && lstatSync(HOOKS).isFile() && readFileSync(HOOKS, 'utf8').includes('rule-loader.mjs')))
+      warn.push(`${loader} is installed but ${HOOKS} does not reference it — path-scoped rules reach Codex only through the AGENTS.md reading instructions. Merge ${dirname(loader)}/codex-hooks.snippet.json and trust it through /hooks (${dirname(loader)}/README.md). Inline hooks in config.toml and hook trust state are not inspected.`)
     console.log('  • Codex routing requests explicit reads; doctor cannot prove model adherence. Global config and nested instructions can change discovery.')
   } catch (e) { bad.push(e.message) }
 }
