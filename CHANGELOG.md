@@ -12,6 +12,30 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Added — Codex receives path-scoped rules through an opt-in hook
+
+Codex read `.agents/rules/` only because `AGENTS.md` asked it to: a rule reached the
+model when the model chose to follow the reading instructions.
+`kit/common/hooks/rule-loader.mjs` is a Codex project hook that hands the rule over when
+the session touches a matching file (Codex CLI 0.167.0, replayed in a disposable repo).
+
+- **`apply_patch`** on a file a path-scoped rule governs is **denied once**, with the
+  rule as the reason; the same patch sent again passes. **A `Bash` command** that names
+  such a file gets the rule **injected** as context, never blocked.
+- The rules come from `codex.rules` in `.claude-rules.lock`, delivered once per session
+  (state under the OS temp directory, cleared on compaction), inlined up to 6 KB and
+  listed as paths beyond. It fails open: anything unreadable answers nothing.
+- **`doctor`** warns when Codex is a target, the loader is installed and
+  `.codex/hooks.json` does not reference it.
+- Rules without `paths:` and the `AGENTS.md` blocks are unchanged: they stay the floor
+  for a repo that does not wire the hook.
+
+**Hand-merge** (opt-in): merge the `hooks` key of
+`.dev/kit/common/hooks/codex-hooks.snippet.json` into `.codex/hooks.json`, then trust
+both entries through `/hooks` in Codex — and again after every kit update. If the
+claude-rules root is not the git root, adjust the command's path.
+`.dev/kit/common/hooks/README.md` says what it does not guarantee.
+
 ### `/rfc` and the review: lifecycle, access, stakes — and spec gaps escalate, budget does not
 
 Measured on a four-phase RFC run at L4 with a Sonnet executor and a Codex reviewer:

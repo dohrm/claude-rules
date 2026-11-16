@@ -11,7 +11,9 @@ Author rules and skills once in the existing Markdown format. Registry entries
 select emitters by `kind` (`skill`|`kit`|`rule`|`agent`). Claude receives native
 rules, Cursor receives `.mdc`, and Codex receives `.agents/rules` with root/module
 `AGENTS.md` links requesting progressive reads. Do not claim native dynamic
-Codex glob loading. Shared skills live in `.agents/skills`, with identical Claude
+Codex glob loading: the opt-in `kit/common/hooks/rule-loader.mjs` hook hands a
+path-scoped rule over on a matching patch or read, and only where a repo wires and
+trusts it. Shared skills live in `.agents/skills`, with identical Claude
 copies; the kit has one `.dev/kit` destination. Native agent definitions are
 emitted only for Claude in this installer. Never hand-maintain generated outputs.
 See [the sharing contract](docs/agent-sharing.md) for alias, scope and ownership rules.
