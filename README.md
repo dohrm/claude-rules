@@ -60,6 +60,8 @@ The lock records root profiles under `modules["."]`. Codex gets a short root
 The root asks the agent to discover module guidance when work enters a directory;
 this is explicit reading, not native dynamic rule loading. Local text outside the
 managed blocks is preserved. See the [sharing contract](docs/agent-sharing.md).
+A managed block in `.gitattributes` marks the installed copies `linguist-generated`, so
+an update's pull request folds them ([reference](docs/reference.md#what-the-installer-does-and-does-not)).
 
 Browse with `npx github:dohrm/claude-rules list`, or read the
 [full profile catalogue](docs/reference.md#the-profile-catalogue).

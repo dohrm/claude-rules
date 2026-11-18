@@ -12,6 +12,21 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 
 ## [Unreleased]
 
+### Added — installed copies fold in an update's pull request
+
+The next `update` adds a managed block to the root `.gitattributes` (creating the file
+if it is absent) that marks every installed copy `linguist-generated=true`. GitHub and
+Forgejo collapse those files in a pull request's diff, so an update's PR shows the
+lock, the hand merges and the repo's own changes; the copies stay committed and one
+click away. Local `git diff` is unchanged.
+
+- Commit the new block with the update. Outside its markers the file stays yours; a
+  hand edit inside is overwritten.
+- To keep one path expanded, add `<path> -linguist-generated` after the block.
+- `doctor` warns, never fails, on a missing, stale or malformed block.
+- Malformed `# claude-rules:start`/`end` markers, or a `.gitattributes` that is not a
+  regular file, stop `add`, `update` and `remove` before anything is written.
+
 ### Added — Codex receives path-scoped rules through an opt-in hook
 
 Codex read `.agents/rules/` only because `AGENTS.md` asked it to: a rule reached the
