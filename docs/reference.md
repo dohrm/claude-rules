@@ -247,6 +247,24 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
   into anchoring them anyway). A bare `add` on an existing install keeps its
   agent set rather than widening to the defaults; pass `--agent` to add a target.
   Narrowing is `remove`'s job, never a side effect of `add`.
+- **Installed copies are collapsed in a forge's diff.** `add`, `update` and `remove`
+  keep one block in the root `.gitattributes`, between
+  `# claude-rules:start (managed — do not edit inside this block)` and
+  `# claude-rules:end`, marking every file the lock records `linguist-generated=true`
+  except `.dev/kit/CHANGELOG.md`, whose diff is what an update's review reads:
+  GitHub and Forgejo document folding those files in a pull request (Gitea shares
+  Forgejo's lineage, undocumented), so an update's PR shows the lock, the changelog,
+  the hand merges and your own changes, and the copies stay one click away.
+  The patterns come from the lock alone — a path of four segments or more gives its
+  first three as a directory (`.claude/skills/rfc/**`), a shorter one stays the file
+  (`.claude/agents/code-reviewer.md`) — so a file of your own inside an installed rule
+  directory folds too. Local `git diff` is unchanged. Outside the markers the file is
+  yours and is never rewritten; a hand edit inside is overwritten. To expand one path,
+  add `<path> -linguist-generated` **after** the block: the last matching line wins. A
+  path no pattern line can express (anything outside `[A-Za-z0-9._/@+-]`) is left out,
+  with a warning. Malformed markers, or a `.gitattributes` that is not a regular file,
+  stop the command before anything is written. `remove all` drops the block, and the
+  file if nothing else is left in it.
 - `remove` is the exact inverse: it deletes the files the lock records for each
   profile, nothing it did not record, and updates the lock. It never touches your `justfile`/`lefthook` wiring — delete those
   recipes yourself. Review with `git status` before committing.
@@ -420,6 +438,7 @@ judgments**:
 | Leftover `.dev/rules/` or `.opencode/` | **fail** | retired OpenCode / Antigravity trees — run `update` |
 | Missing/stale Codex entries or modified owned assets | **fail** | reconcile conflicts, then `update` |
 | `AGENTS.override.md` shadows a generated entry | warn | inspect the effective instruction chain |
+| The `.gitattributes` block is missing, stale or malformed | warn | nothing is broken, only noisier: an update's pull request shows every installed copy — run `update` |
 | The lock still lists a retired agent | **fail** | `update` drops it and rewrites the lock |
 | A `lefthook.yml` git was never told about | **fail** | it looks installed and every hook in it is inert (`lefthook install`) |
 | A hook wired to a guard script that is not on disk | **fail** | the hook fires, finds nothing, and guards exactly as much as no hook at all |
