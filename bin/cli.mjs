@@ -22,6 +22,7 @@ import { join, dirname, basename } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { globToRe } from './glob.mjs'
 import { modulePath, checkCodexInventory, prepareCodex, applyCodex, auditCodex, codexBudget } from './codex.mjs'
+import { FILE as ATTRIBUTES, prepareGitattributes, applyGitattributes } from './gitattributes.mjs'
 import { safePath, plainPath, hash, walk, ownedFiles, recordsHashes, checkTree, applyTree } from './ownership.mjs'
 import { CORE, SOURCE_NAME, lockSources as readSources, sourcesLabel, parseSourceFlag, dropUndefined, isAliasMap, withSources as fetchSources, stageTree, assertOverrides, changedUpstream } from './sources.mjs'
 // No dependency: add/update fetch sources with the `git` on PATH; every other command runs offline.
@@ -160,6 +161,11 @@ const LEGACY_KIT_DIR = '.claude/kit'      // where `--agent claude` used to put 
 
 // ------------------------------------------------------------------ fs utils
 const logCopy = (from, to) => console.log(`  ✓ ${from}  →  ${to}`)
+function logAttributes(plan) {
+  for (const path of plan.skipped) console.log(`⚠ ${path} — not expressible in ${ATTRIBUTES}; left out of its block`)
+  const action = applyGitattributes(plan)
+  if (action) console.log(`  ${action === 'write' ? '✓' : '✗'} ${ATTRIBUTES}`)
+}
 
 // ------------------------------------------------------- frontmatter (dep-free)
 // The frontmatter we ship is trivial (scalars + one-level lists); a full YAML
@@ -544,11 +550,13 @@ function remove(profilesArg) {
   const keep = new Set(keptInstalled.flatMap(i => Object.keys(i.files)))
   const plan = { writes, deletes: [...new Set([...lock.installed.flatMap(i => Object.keys(i.files)), ...codexDropped])].filter(path => !keep.has(path)) }
   plan.corrupt = settleCorruption(checkTree({ ...plan, owned: ownedFiles(lock), dirs: emptiedSkills(lock.installed, plan.deletes) }))
+  const attributes = prepareGitattributes(ownedFiles({ installed: keptInstalled, codex: codex?.inventory }).keys())
   safePath(LOCK)
 
   console.log(`Removing [${toRemove.join(', ')}]${fullUninstall ? ' + shared (full uninstall)' : ''} for [${agents.join(', ')}]\n`)
   applyTree(plan, path => console.log(`  ✗ ${path}`))
   if (codex) applyCodex(codex)
+  logAttributes(attributes)
   if (fullUninstall) {
     if (existsSync(LOCK)) { rmSync(LOCK); console.log(`  ✗ ${LOCK}`) }
     console.log('\nFully uninstalled.')
@@ -837,15 +845,17 @@ async function install(profiles, fetched, agents, modules, levels) {
     const ambiguous = [...corrupt.keys()].some(path => path.startsWith(`${ENTRY_ROOT.agent}/`))
     plan.corrupt = settleCorruption(corrupt, forceFlag || (adopted.length > 0 && !ambiguous))
     if (codexInput) codex = prepareCodex(...codexInput, modules, previous?.codex)
+    for (const record of installed)
+      record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
+    const attributes = prepareGitattributes(ownedFiles({ installed, codex: codex?.inventory }).keys())
     // Apply: what the previous install wrote and this one no longer produces goes first
     // (an entry dropped upstream, a destination moved), then every write.
     applyTree(plan, path => console.log(`  ✗ ${path}  (no longer installed)`))
     if (codex) applyCodex(codex)
+    logAttributes(attributes)
     // Retired targets and the legacy kit root are cleaned up once, by the adoption that
     // listed them; a hashed install deletes only what it recorded.
     if (adopted.length) { purgeRetired(); purgeRetiredSkills(agents, Boolean(codex)); purgeLegacyKit() }
-    for (const record of installed)
-      record.files = Object.fromEntries((ctx.byEntry.get(entryKey(record)) || []).map(path => [path, hash(ctx.out.get(path))]))
     writeLock(sources, profiles, agents, modules, levels, codex?.inventory, installed, registry.aliases, staging.overrides)
   } finally {
     if (tree) rmSync(tree, { recursive: true, force: true })
@@ -1484,6 +1494,11 @@ function doctor() {
   }
   else if (existsSync('AGENTS.md') && readFileSync('AGENTS.md', 'utf8').includes(AGENTS_START))
     warn.push('AGENTS.md has a managed block outside the selected targets; preserved. Select codex to adopt it explicitly.')
+  // Nothing is broken without it, only noisier: an update's pull request shows every copy.
+  try {
+    if (prepareGitattributes(ownedFiles(lock).keys()).action)
+      warn.push(`${ATTRIBUTES} — missing or stale claude-rules block: forges show every installed copy in an update's diff (run \`update\`)`)
+  } catch (e) { warn.push(e.message) }
 
   const known = new Set()
   for (const entries of [registry.shared, ...Object.values(registry.profiles)])
