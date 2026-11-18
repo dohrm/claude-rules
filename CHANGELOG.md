@@ -15,10 +15,10 @@ slot** — pin a ref (`--ref <tag>`) if you need the guarantee `0.x` does not gi
 ### Added — installed copies fold in an update's pull request
 
 The next `update` adds a managed block to the root `.gitattributes` (creating the file
-if it is absent) that marks every installed copy `linguist-generated=true`. GitHub and
-Forgejo collapse those files in a pull request's diff, so an update's PR shows the
-lock, the hand merges and the repo's own changes; the copies stay committed and one
-click away. Local `git diff` is unchanged.
+if it is absent) that marks every installed copy `linguist-generated=true`, except
+`.dev/kit/CHANGELOG.md`, which stays expanded. GitHub and Forgejo collapse those files
+in a pull request's diff, so an update's PR shows the lock, the changelog, the hand
+merges and the repo's own changes; the copies stay committed and one click away. Local `git diff` is unchanged.
 
 - Commit the new block with the update. Outside its markers the file stays yours; a
   hand edit inside is overwritten.

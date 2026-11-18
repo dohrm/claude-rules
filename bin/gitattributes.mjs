@@ -11,12 +11,15 @@ export const END = '# claude-rules:end'
 const COMMENT = '# Installed claude-rules copies, collapsed in forge diffs: review an update through .claude-rules.lock and the CHANGELOG.'
 // What a pattern line can hold without quoting or glob meaning in git.
 const EXPRESSIBLE = /^[A-Za-z0-9._/@+-]+$/
+// Its diff is what the review of an update reads: collapsing it would hide that review.
+const CHANGELOG = '.dev/kit/CHANGELOG.md'
 
 // Four segments or more → the first three as a directory; shorter → the file itself.
 // `skipped`: the paths no pattern line can express, left out of the block.
 export function patternsOf(paths) {
   const patterns = new Set(), skipped = []
   for (const path of paths) {
+    if (path === CHANGELOG) continue
     const segments = path.split('/')
     const stem = segments.length >= 4 ? segments.slice(0, 3).join('/') : path
     if (!EXPRESSIBLE.test(stem)) { skipped.push(path); continue }

@@ -250,10 +250,11 @@ Every profile also pulls **`rules/common`** (artifacts in English). The agent OS
 - **Installed copies are collapsed in a forge's diff.** `add`, `update` and `remove`
   keep one block in the root `.gitattributes`, between
   `# claude-rules:start (managed — do not edit inside this block)` and
-  `# claude-rules:end`, marking every file the lock records `linguist-generated=true`:
+  `# claude-rules:end`, marking every file the lock records `linguist-generated=true`
+  except `.dev/kit/CHANGELOG.md`, whose diff is what an update's review reads:
   GitHub and Forgejo document folding those files in a pull request (Gitea shares
-  Forgejo's lineage, undocumented), so an update's PR shows
-  the lock, the hand merges and your own changes, and the copies stay one click away.
+  Forgejo's lineage, undocumented), so an update's PR shows the lock, the changelog,
+  the hand merges and your own changes, and the copies stay one click away.
   The patterns come from the lock alone — a path of four segments or more gives its
   first three as a directory (`.claude/skills/rfc/**`), a shorter one stays the file
   (`.claude/agents/code-reviewer.md`) — so a file of your own inside an installed rule

@@ -27,8 +27,8 @@ test('patterns: four segments or more become the first three as a directory, sho
     '.claude/skills/rfc/SKILL.md', '.claude/skills/rfc/ticket.md', '.claude/agents/code-reviewer.md',
     '.dev/kit/common/hooks/guard.mjs', '.dev/kit/CHANGELOG.md', '.agents/rules/agent/autonomy.md',
   ])
-  assert.deepEqual(patterns, ['.agents/rules/agent/**', '.claude/agents/code-reviewer.md', '.claude/skills/rfc/**', '.dev/kit/CHANGELOG.md', '.dev/kit/common/**'])
-  assert.deepEqual(skipped, [])
+  assert.deepEqual(patterns, ['.agents/rules/agent/**', '.claude/agents/code-reviewer.md', '.claude/skills/rfc/**', '.dev/kit/common/**'])
+  assert.deepEqual(skipped, [], 'the installed changelog is left out on purpose, not as inexpressible')
 })
 
 test('patterns: a path no pattern line can express is left out, a deeper odd name is covered by its directory', () => {
@@ -53,15 +53,17 @@ test('created: an absent .gitattributes is written with the block only, one patt
   assert.equal(text.split('\n').filter(l => l.startsWith('#')).length, 3, 'markers plus one comment line')
 }))
 
-test('git sees the block: every inventoried path is generated, the lock, AGENTS.md and the repo\'s own file are not', () => withTmpRepo(dir => {
+test('git sees the block: every inventoried path but the kit changelog is generated, the lock, AGENTS.md and the repo\'s own file are not', () => withTmpRepo(dir => {
   fixtureGit(dir, ['init', '-q'])
   add(dir)
   writeFileSync(join(dir, 'main.rs'), 'fn main() {}\n')
+  const CHANGELOG = '.dev/kit/CHANGELOG.md'
   const paths = inventory(dir)
+  assert.ok(paths.includes(CHANGELOG), 'the kit changelog is inventoried')
   const out = fixtureGit(dir, ['check-attr', '--stdin', 'linguist-generated'], [...paths, '.claude-rules.lock', 'AGENTS.md', 'main.rs'].join('\n') + '\n')
   const answer = Object.fromEntries(out.split('\n').map(l => { const [path, , value] = l.split(': '); return [path, value] }))
-  for (const path of paths) assert.equal(answer[path], 'true', path)
-  for (const path of ['.claude-rules.lock', 'AGENTS.md', 'main.rs']) assert.equal(answer[path], 'unspecified', path)
+  for (const path of paths.filter(p => p !== CHANGELOG)) assert.equal(answer[path], 'true', path)
+  for (const path of [CHANGELOG, '.claude-rules.lock', 'AGENTS.md', 'main.rs']) assert.equal(answer[path], 'unspecified', path)
 }))
 
 test('already there, no markers: the block is appended and every byte before it kept', () => withTmpRepo(dir => {
