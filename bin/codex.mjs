@@ -14,12 +14,13 @@ export function modulePath(path) {
   return posix.normalize(path).replace(/\/$/, '') || '.'
 }
 
-function parts(text, path) {
-  const starts = text.split(START).length - 1, ends = text.split(END).length - 1
+// The one managed block of a file, split around its markers; null when it has none.
+export function parts(text, path, start = START, end = END) {
+  const starts = text.split(start).length - 1, ends = text.split(end).length - 1
   if (!starts && !ends) return null
-  const a = text.indexOf(START), b = text.indexOf(END)
+  const a = text.indexOf(start), b = text.indexOf(end)
   if (starts !== 1 || ends !== 1 || b < a) throw new Error(`Malformed managed markers in ${path}; no files changed`)
-  return { before: text.slice(0, a), block: text.slice(a, b + END.length), after: text.slice(b + END.length) }
+  return { before: text.slice(0, a), block: text.slice(a, b + end.length), after: text.slice(b + end.length) }
 }
 const link = (from, to) => slash(relative(dirname(from), to)).split('/').map(encodeURIComponent).join('/')
 
