@@ -19,10 +19,14 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
 `agent/autonomy.md`. What L4 may delegate is unchanged.
 
 - **`kit/common/l4.mjs`**, recipes `l4-judge n [justify]` and `l4-merge n [justify]`,
-  variable `l4_ci` (default `gh pr checks --required`; empty = Tier 4 not wired,
+  variable `l4_ci` (default `gh pr checks`; empty = Tier 4 not wired,
   recorded as declared). `l4-merge` re-runs the judge on the phase HEAD and merges only
   on that fresh verdict. Verdicts are recorded in `.work/<slug>/l4.jsonl`, committed on
-  `rfc/<slug>` — a record (rejected rounds, each merge's WARNINGS), never the authority.
+  `rfc/<slug>` — a record (rejected rounds, one per distinct sha; each merge's
+  WARNINGS), never the authority. The RFC, board and journal are read from the committed
+  HEAD; a `.work/<slug>/` that differs from it is refused. An overflow justification
+  must equal one whole `changed:` entry or `## Assumptions` bullet. `origin` not
+  holding the judged HEAD is `wait`, not `reject`.
 - **The board is parsed.** Four `- Key: value` lines; one that does not parse makes
   `judge` and `merge` exit 3 and name it:
 

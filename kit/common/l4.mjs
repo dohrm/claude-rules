@@ -18,14 +18,16 @@
 // tree's RFC. It prints one line, `l4: <verdict> — <reasons>`, and exits:
 //
 //   0 merge     every fact is green (CI not wired is recorded as declared, never as green)
-//   1 reject    red check, CRITICAL, missing/malformed/stale report, red CI, or CI about
-//               another commit than the judged HEAD (origin does not hold it) — the executor
+//   1 reject    red check, CRITICAL, missing/malformed/stale report, red CI — the executor
 //               gets another round
 //   3 escalate  an RFC whose **Autonomy** is not L4, a 🔴 whose **Model** line is `gap`, an overflow package no `--justify`
 //               clears, a reject past the board's rejected-rounds cap — and the refusals:
 //               a board or a journal line that does not parse (nothing is written then)
-//   4 wait      CI still running (the CI command exited 8, `gh pr checks`' "pending")
-//   2 usage     not the integration tree, no phase tree, uncommitted work in it
+//   4 wait      CI still running (the CI command exited 8, `gh pr checks`' "pending"), or
+//               CI cannot speak about the judged HEAD yet: origin does not hold it, or
+//               `ls-remote` fails — infrastructure, never a verdict on the phase
+//   2 usage     not the integration tree, a `.work/<slug>/` that differs from HEAD, no phase
+//               tree, uncommitted work in it, `just check` unable to start
 //
 // Precedence: escalate > reject > wait > merge — a human is needed whatever else is red.
 //
@@ -35,24 +37,31 @@
 // merges nothing; 3 refused (no delegation, already merged, a merge in progress, a
 // conflict: the human merges, or the executor rebases).
 //
+// The RFC, its `**Autonomy**` header, the board and the journal are read from the
+// integration tree's committed HEAD (`git show HEAD:.work/<slug>/…`), never from the
+// working copy, and a `.work/<slug>/` that differs from HEAD is refused: what was judged
+// is what anyone can check out. A ticket RFC's board is the exception the forge imposes:
+// it is read from the ticket cache, which is never committed.
+//
 // The journal `.work/<slug>/l4.jsonl` is a record, not the authority: no verdict is ever
 // read back from it to merge, so a forged line buys nothing. It is append-only; each append
 // is committed on `rfc/<slug>`, alone (`git commit --only`). It carries what cannot be
-// recomputed: the rejected rounds counted against the cap, each merge's WARNINGS. A line
-// that does not parse is refused, never skipped: a record read "best effort" is one nobody
-// can audit.
+// recomputed: the rejected rounds counted against the cap — one per distinct sha of the
+// phase with a `reject` verdict, so judging a commit again never spends a round — and each
+// merge's WARNINGS. A line that does not parse is refused, never skipped: a record read
+// "best effort" is one nobody can audit.
 // `--justify` takes `<pkg>=<text>`, several per value separated by newlines (the just
-// recipe passes one string); `<text>` must appear verbatim in a `changed:` line or in the
-// `## Assumptions` section of the resolved RFC.
+// recipe passes one string); `<text>` must equal, after trimming, one whole `changed:`
+// entry or one `## Assumptions` bullet of the resolved RFC — a fragment justifies nothing.
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveRfc } from './review-context.mjs'
 import { readVerdict } from './review-guard.mjs'
 import { scopeData } from './scope-report.mjs'
-import { currentBranch, headerOf, resolveSlug } from './work-slug.mjs'
+import { currentBranch, ensureWorkIgnored, headerOf, resolveSlug } from './work-slug.mjs'
 
 const EXIT = { merge: 0, reject: 1, usage: 2, escalate: 3, wait: 4 }
 const VERDICTS = ['merge', 'reject', 'escalate', 'wait']
@@ -143,11 +152,10 @@ function parseBoardValue(key, value, where) {
 // One JSON object per line: `{ kind: 'verdict', phase, sha, verdict, reasons, ci,
 // warnings, justified, at }` or `{ kind: 'merged', phase, sha, commit, at }`.
 
-/** Every entry of the journal at `path` (none when it does not exist yet), or throws a
+/** Every entry of the journal `text` read from `name` (none when it is empty), or throws a
  *  Refusal (3) naming the first line that does not parse. */
-export function readJournal(path) {
-  if (!existsSync(path)) return []
-  const lines = readFileSync(path, 'utf8').split('\n')
+export function parseJournal(text, name) {
+  const lines = text.split('\n')
   if (lines.at(-1) === '') lines.pop()
   return lines.map((line, i) => {
     let e
@@ -159,7 +167,7 @@ export function readJournal(path) {
     const ok = e && typeof e === 'object' && /^\d+$/.test(e.phase ?? '') && SHA40.test(e.sha ?? '')
       && (e.kind === 'verdict' ? VERDICTS.includes(e.verdict) && Array.isArray(e.reasons)
         : e.kind === 'merged' && SHA40.test(e.commit ?? ''))
-    if (!ok) refuse(EXIT.escalate, `${path} line ${i + 1} does not parse — the journal is refused, never read "best effort"`)
+    if (!ok) refuse(EXIT.escalate, `${name} line ${i + 1} does not parse — the journal is refused, never read "best effort"`)
     return e
   })
 }
@@ -172,6 +180,15 @@ function git(cwd, ...args) {
 function tryGit(cwd, ...args) {
   try {
     return git(cwd, ...args)
+  } catch {
+    return null
+  }
+}
+
+/** The text of `rel` (relative to `cwd`) in the commit HEAD, or null when HEAD has none. */
+function committed(cwd, rel) {
+  try {
+    return execFileSync('git', ['show', `HEAD:./${rel}`], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
   } catch {
     return null
   }
@@ -196,25 +213,36 @@ function context({ n, slug, cwd }) {
   if (branch !== integration) {
     refuse(EXIT.usage, `run from the integration tree, on ${integration} — this tree is on ${branch ?? 'a detached HEAD'}`)
   }
-  const rfc = resolveRfc({ slug: s, cwd })
-  if (rfc.kind !== 'local' && rfc.kind !== 'ticket') {
-    refuse(EXIT.escalate, `board: the RFC for ${s} cannot be read (${rfc.kind}) — refresh the ticket cache, or check .work/${s}/`)
+  // The ticket cache is never committed: ignored first, so it is not a difference.
+  ensureWorkIgnored(cwd)
+  const dir = join('.work', s)
+  if (git(cwd, 'status', '--porcelain', '--', dir)) {
+    refuse(EXIT.usage, `${dir}/ differs from HEAD — commit the RFC pointer first: the referee reads the committed RFC, board and journal`)
   }
-  // The level is the human's (autonomy.md § Levels): a board an L3 RFC kept from the
-  // template delegates nothing, and an absent header is L1.
-  if (!/^[ \t]*-[ \t]*\*\*Autonomy\*\*:[ \t]*L4\b/m.test(headerOf(rfc.text))) {
+  const pointer = committed(cwd, join(dir, 'rfc.md'))
+  if (pointer === null) refuse(EXIT.usage, `HEAD holds no ${dir}/rfc.md — commit the RFC pointer first`)
+  const resolved = resolveRfc({ slug: s, cwd })
+  if (resolved.kind !== 'local' && resolved.kind !== 'ticket') {
+    refuse(EXIT.escalate, `board: the RFC for ${s} cannot be read (${resolved.kind}) — refresh the ticket cache, or check ${dir}/`)
+  }
+  const rfc = resolved.kind === 'local' ? { ...resolved, text: pointer } : resolved
+  // The level is the human's (autonomy.md § Levels), declared in the state file's header:
+  // a board an L3 RFC kept from the template delegates nothing, and an absent header is L1.
+  if (!/^[ \t]*-[ \t]*\*\*Autonomy\*\*:[ \t]*L4\b/m.test(headerOf(pointer))) {
     refuse(EXIT.escalate, `the RFC's **Autonomy** header is not L4 — the referee judges L4 phases only`)
   }
   const board = parseBoard(rfc.text)
-  const journalPath = join(cwd, '.work', s, 'l4.jsonl')
-  return { n, slug: s, cwd, integration, phase: `phase/${s}/${n}`, rfc, board, journalPath, journal: readJournal(journalPath) }
+  const journalRel = join(dir, 'l4.jsonl')
+  const journal = parseJournal(committed(cwd, journalRel) ?? '', journalRel)
+  return { n, slug: s, cwd, integration, phase: `phase/${s}/${n}`, rfc, board, journalRel, journal }
 }
 
-/** Appends `entry` to the journal and commits that file alone on the integration branch. */
+/** Appends `entry` to the committed journal and commits that file alone on the
+ *  integration branch. */
 function record(ctx, entry) {
+  const rel = ctx.journalRel
   mkdirSync(join(ctx.cwd, '.work', ctx.slug), { recursive: true })
-  appendFileSync(ctx.journalPath, `${JSON.stringify({ ...entry, at: new Date().toISOString() })}\n`)
-  const rel = join('.work', ctx.slug, 'l4.jsonl')
+  writeFileSync(join(ctx.cwd, rel), `${committed(ctx.cwd, rel) ?? ''}${JSON.stringify({ ...entry, at: new Date().toISOString() })}\n`)
   try {
     git(ctx.cwd, 'add', '--', rel)
     git(ctx.cwd, 'commit', '--quiet', '--only', '-m',
@@ -239,15 +267,22 @@ function parseJustify(values) {
   return out
 }
 
-/** The lines a justification may quote: those holding `changed:`, and the `## Assumptions`
- *  section's. */
-function justifyingLines(text) {
+/** The whole texts a justification may equal: each `changed:` entry (with and without its
+ *  `changed:` prefix) and each `## Assumptions` bullet, list marker and backticks removed. */
+function justifyingTexts(text) {
   const out = []
   let inAssumptions = false
   for (const line of text.split('\n')) {
     const h2 = line.match(/^##\s+(.+?)\s*$/)
-    if (h2) inAssumptions = h2[1].toLowerCase() === 'assumptions'
-    else if (inAssumptions || line.includes('changed:')) out.push(line)
+    if (h2) {
+      inAssumptions = h2[1].toLowerCase() === 'assumptions'
+      continue
+    }
+    const bullet = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/)?.[1].trim()
+    if (inAssumptions && bullet) out.push(bullet)
+    // The form `/rfc` records: `changed: <decision> — <why>` in backticks.
+    const changed = line.match(/`(changed: [^`]+)`/)?.[1].trim()
+    if (changed) out.push(changed, changed.slice('changed:'.length).trim())
   }
   return out
 }
@@ -285,18 +320,38 @@ function reviewFacts(tree, head) {
   return { reject, escalate, warnings }
 }
 
-/** The sha `origin` holds for `branch`, or null. */
-const remoteHead = (branch, cwd) => tryGit(cwd, 'ls-remote', 'origin', `refs/heads/${branch}`)?.split(/\s/)[0] || null
+/** The sha `origin` holds for `branch` ('' when it holds none), or null when `ls-remote`
+ *  fails. */
+const remoteHead = (branch, cwd) => {
+  const out = tryGit(cwd, 'ls-remote', 'origin', `refs/heads/${branch}`)
+  return out === null ? null : out.split(/\s/)[0]
+}
 
-/** `green`, `running`, `red`, `not-wired` or `unpushed`, from the CI command run with the
- *  branch. A forge checks what it was pushed, so its answer is about `head` only while
- *  `origin` holds `head` — before AND after the command, since a push can land between. */
+/** Where `origin` stands on `head`: null when it holds it, else the CI state that says why
+ *  CI cannot speak about `head` yet. */
+function originState(branch, head, cwd) {
+  const at = remoteHead(branch, cwd)
+  return at === null ? 'unreachable' : at === head ? null : 'unpushed'
+}
+
+/** `green`, `running`, `red`, `not-wired`, `unpushed` or `unreachable`, from the CI command
+ *  run with the branch. A forge checks what it was pushed, so its answer is about `head`
+ *  only while `origin` holds `head` — before AND after the command, since a push can land
+ *  between. */
 function ciState(cmd, branch, head, cwd) {
   if (!cmd.trim()) return 'not-wired'
-  if (remoteHead(branch, cwd) !== head) return 'unpushed'
+  const before = originState(branch, head, cwd)
+  if (before) return before
   const r = spawnSync('sh', ['-c', `${cmd} "$1"`, 'sh', branch], { cwd, stdio: ['ignore', 2, 2] })
-  if (remoteHead(branch, cwd) !== head) return 'unpushed'
-  return r.status === 0 ? 'green' : r.status === CI_PENDING ? 'running' : 'red'
+  return originState(branch, head, cwd) ?? (r.status === 0 ? 'green' : r.status === CI_PENDING ? 'running' : 'red')
+}
+
+/** The CI states that are no verdict on the phase — wait, with the reason. Infrastructure
+ *  never spends a rejected round. */
+const WAIT = {
+  running: () => 'CI is still running',
+  unpushed: (head, branch) => `origin does not hold ${head.slice(0, 7)} on ${branch} — CI never checked the judged commit; push it`,
+  unreachable: () => 'origin cannot be read (`git ls-remote` failed) — CI cannot be tied to the judged commit',
 }
 
 export function judge({ n, slug = '', ci = '', justify = [], cwd = '.' }) {
@@ -317,7 +372,9 @@ function judgeIn(ctx, { ci: ciCmd, justify }) {
   const reject = []
   const escalate = []
   const check = spawnSync('just', ['check'], { cwd: tree, stdio: ['ignore', 2, 2] })
-  if (check.status !== 0) reject.push(check.error ? `just check could not run (${check.error.code})` : `just check exited ${check.status}`)
+  // A check that never started says nothing about the phase: the referee's host is broken.
+  if (check.error) refuse(EXIT.usage, `just check could not start (${check.error.code}) — fix the referee's host, then judge again`)
+  if (check.status !== 0) reject.push(`just check exited ${check.status}`)
 
   const review = reviewFacts(tree, head)
   reject.push(...review.reject)
@@ -325,7 +382,6 @@ function judgeIn(ctx, { ci: ciCmd, justify }) {
 
   const ci = ciState(ciCmd, ctx.phase, head, tree)
   if (ci === 'red') reject.push('CI is red')
-  if (ci === 'unpushed') reject.push(`origin does not hold ${head.slice(0, 7)} on ${ctx.phase} — CI never checked the judged commit`)
 
   // The facts are about `head` only if the tree still is: a check that rewrites tracked
   // files judged something else, and a commit landing mid-judge voids the whole run.
@@ -334,23 +390,26 @@ function judgeIn(ctx, { ci: ciCmd, justify }) {
 
   const scope = scopeData({ base: ctx.integration, slug: ctx.slug, cwd: tree, rfc: ctx.rfc })
   if (!scope) refuse(EXIT.usage, `git cannot diff ${ctx.phase} against ${ctx.integration}`)
-  const quotable = justifyingLines(ctx.rfc.text)
+  const quotable = justifyingTexts(ctx.rfc.text)
   for (const { package: pkg } of scope.rows.filter((r) => r.overflow)) {
     const text = justified[pkg]
     if (!text) escalate.push(`overflow package \`${pkg}\` is not justified`)
-    else if (!quotable.some((l) => l.includes(text))) {
-      escalate.push(`overflow package \`${pkg}\`: its justification is in no \`changed:\` or \`## Assumptions\` line`)
+    else if (!quotable.includes(text)) {
+      escalate.push(`overflow package \`${pkg}\`: its justification is no whole \`changed:\` line or \`## Assumptions\` bullet`)
     }
   }
 
-  const rejectedBefore = ctx.journal.filter((e) => e.kind === 'verdict' && e.phase === n && e.verdict === 'reject').length
+  // A round is a commit: the same sha rejected again is the same round.
+  const rejectedBefore = new Set(ctx.journal
+    .filter((e) => e.kind === 'verdict' && e.phase === n && e.verdict === 'reject' && e.sha !== head).map((e) => e.sha)).size
   if (!escalate.length && reject.length && rejectedBefore >= ctx.board.caps['rejected-rounds']) {
     escalate.push(`rejected past the cap: ${rejectedBefore} rejected round(s) of ${ctx.board.caps['rejected-rounds']} already spent`)
   }
 
-  const verdict = escalate.length ? 'escalate' : reject.length ? 'reject' : ci === 'running' ? 'wait' : 'merge'
+  const waiting = WAIT[ci]?.(head, ctx.phase)
+  const verdict = escalate.length ? 'escalate' : reject.length ? 'reject' : waiting ? 'wait' : 'merge'
   const reasons = escalate.length ? [...escalate, ...reject] : reject.length ? reject
-    : ci === 'running' ? ['CI is still running']
+    : waiting ? [waiting]
       : [`all green at ${head.slice(0, 7)}${ci === 'not-wired' ? ' — Tier 4 not wired (declared, not green)' : ''}`]
   record(ctx, {
     kind: 'verdict', phase: n, sha: head, verdict, reasons, ci,

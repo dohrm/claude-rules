@@ -134,22 +134,31 @@ integration tree, on `rfc/<slug>`:
   found with `git worktree list`): `just check`, the review report read by
   `review-guard`'s parser, `l4_ci` run with the branch as last argument, and the scope
   report against the integration tree's RFC. One line `l4: <verdict> — <reasons>`;
-  exit 0 merge, 1 reject (red check, `CRITICAL`, missing or stale report, red CI, or
-  `origin` not holding the judged HEAD, so CI never checked it),
-  3 escalate (an RFC whose `**Autonomy**` is not L4, a 🔴 whose `**Model**` is `gap`, an overflow no justification quoted
-  from a `changed:` or `## Assumptions` line clears, a reject past `rejected-rounds`, a
-  board or journal that does not parse), 4 wait (CI exit 8), 2 usage.
+  exit 0 merge, 1 reject (red check, `CRITICAL`, missing or stale report, red CI),
+  3 escalate (an RFC whose `**Autonomy**` is not L4, a 🔴 whose `**Model**` is `gap`, an
+  overflow no justification clears — its text must equal one whole `changed:` entry or
+  `## Assumptions` bullet — a reject past `rejected-rounds`, a board or journal that
+  does not parse), 4 wait (CI exit 8, or `origin` not holding the judged HEAD or not
+  answering — infrastructure, never a rejected round), 2 usage (including `just check`
+  unable to start).
 - `just l4-merge <n> ['<package>=<text>']` — only if the board delegates `phase-merge`:
   runs the judge again on the phase HEAD and merges only on that fresh `merge` verdict,
   `git merge --no-ff <the judged sha>`, then push. Any other fresh verdict exits with its
   code and merges nothing.
 
+The RFC, its `**Autonomy**` header, the board and the journal are read from the
+integration tree's committed HEAD, never from the working copy; a `.work/<slug>/` that
+differs from HEAD is refused (exit 2) — commit the RFC pointer first. A ticket RFC's
+board comes from the ticket cache, which is never committed.
+
 Every verdict and merge is appended to `.work/<slug>/l4.jsonl` and committed alone. The
 journal is a record, not the authority: no verdict is read back from it to merge, so a
 forged line buys nothing. It keeps what cannot be recomputed — the rejected rounds
-counted against the cap, each merge's `WARNINGS` (🟡 and 🔵). A line that does not
-parse is refused (exit 3). `l4_ci` defaults to `gh pr checks --required`; empty means
-Tier 4 is not wired, recorded as declared, never as green.
+counted against the cap (one per distinct sha with a `reject` verdict: judging a commit
+again spends nothing), each merge's `WARNINGS` (🟡 and 🔵). A line that does not
+parse is refused (exit 3). `l4_ci` defaults to `gh pr checks` — every check, since
+`--required` reports red on a branch with none; empty means Tier 4 is not wired,
+recorded as declared, never as green.
 
 ## What the reviewer never sees
 

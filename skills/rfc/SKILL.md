@@ -191,8 +191,9 @@ a gate bypass) and on a hold.
 4. **Judge with the referee**, from your tree: `just l4-judge <n>` reads the phase's
    facts (`just check` in its tree, the review report, CI, the scope report) and exits
    0 `merge`, 1 `reject`, 3 `escalate`, 4 `wait`. Clear an overflow package with
-   `just l4-judge <n> '<package>=<text>'`, the text quoted from a `changed:` or
-   `## Assumptions` line. On `merge`, `just l4-merge <n>` (same justifications) judges
+   `just l4-judge <n> '<package>=<text>'`, the text equal to one whole `changed:` entry
+   or `## Assumptions` bullet. The referee reads the committed RFC: commit
+   `.work/<slug>/` first. On `merge`, `just l4-merge <n>` (same justifications) judges
    again and merges on that fresh verdict alone, if the board delegates phase merges;
    otherwise stop as at L3. On `escalate`, escalate. A rejected
    phase goes back to its executor, re-briefed with
