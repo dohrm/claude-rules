@@ -93,6 +93,9 @@ const DENY = [
     'writing the review report by hand forges the verdict review-guard reads'],
 ]
 
+// A forge merge is the human's act, and the human sometimes asks for one: ask, not deny.
+const FORGE_MERGE = /\b(?:gh\s+pr|glab\s+mr|tea\s+(?:pulls?|pr))\s+merge(?![\w-])/
+
 // The gate layer's own files. Reading them is normal; rewriting them is a
 // decision. The list is deliberately short — every entry is a file whose content
 // decides whether a gate exists or what "green" means.
@@ -108,7 +111,7 @@ const DENY = [
 // `*.just` is in the list because the recipes live in an IMPORTED library now, not in
 // the justfile: guarding only the file that holds the `import` lines would leave the
 // commands the gate actually runs unguarded.
-const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard)\.mjs|review-prompt\.md)`
+const GATE_SRC = String.raw`(?<![\w.-])(?:lefthook\.ya?ml|[Jj]ustfile|\S*\.just|\.coverage-baseline|mutants\.toml|deny\.toml|\.docs-budgets\.json|\.claude/settings(?:\.local)?\.json|\.cursor/hooks\.json|\.git(?:hub|ea)/workflows/\S*|(?:adr-check|docs-check|review-guard|bash-guard|edit-guard|l4)\.mjs|review-prompt\.md)`
 
 /** A redirect whose target is a gate file, and a mutating command carrying one in the
  *  SAME segment. Both halves come from the shared REDIRECT/MUTATOR sources above, so
@@ -152,6 +155,9 @@ function main() {
   if (REDIRECT_TO_GATE.test(command) || MUTATOR_ON_GATE.test(command)) {
     ask(input, 'This command writes to the gate layer (a hook, a workflow, a justfile, a baseline). '
       + 'Editing the gates is sometimes the task — a human confirms it.')
+  } else if (FORGE_MERGE.test(command)) {
+    ask(input, 'This merges a pull request on the forge — the human\'s act, unless they asked for it. '
+      + 'A phase of an L4 RFC merges through `just l4-merge` instead.')
   }
   return 0
 }

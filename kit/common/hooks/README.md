@@ -47,7 +47,10 @@ merge. Do not sell more than that.
   invites being unwired.
 - **ask** (JSON): the command *writes* to the gate layer — a `lefthook.yml`, a
   workflow, the `justfile`, a ratchet baseline, `mutants.toml`. Sometimes that is
-  the task, so a human decides.
+  the task, so a human decides. A forge merge (`gh pr merge`, `glab mr merge`,
+  `tea pulls merge`) asks too: it is the human's act, and sometimes what they asked for.
+  Nothing here stops a hand `git merge` of a phase or a hand-written L4 journal line:
+  `just l4-merge` re-judges and merges on its fresh verdict, never on the journal.
 
 Quoted text is scrubbed before matching, so `git commit -m "drop the -n flag"` is
 not a bypass. Matching stays inside the current `|;&` segment, and the write and the

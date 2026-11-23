@@ -147,6 +147,11 @@ const ASKED = [
   'echo x 1> justfile',
   'echo x > .dev/kit/rust/rust.just',
   'echo x >| lefthook.yml',
+  // A forge merge is the human's act — and sometimes what the human asked for.
+  'gh pr merge 104 --merge',
+  'gh pr merge --squash --delete-branch',
+  'glab mr merge 7',
+  'tea pulls merge 3',
 ]
 for (const command of ASKED) {
   test(`bash-guard escalates: ${command}`, () => {
@@ -205,6 +210,7 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     '.dev/kit/common/worktree-status.mjs',
     '.dev/kit/common/landed.mjs',
     '.dev/kit/common/work-stale.mjs',
+    '.dev/kit/common/l4.mjs',
     '.coverage-baseline',
     'api/.cargo/mutants.toml',
   ]
@@ -213,7 +219,7 @@ test('edit-guard escalates the gate layer and nothing else', () => {
     assert.equal(r.status, 0, `${p}: edit-guard asks, it never denies`)
     assert.equal(decision(r.out), 'ask', `${p}: not escalated`)
   }
-  for (const p of ['src/main.rs', 'docs/PRD.md', 'apps/web/src/app.tsx', 'lefthook-notes.md']) {
+  for (const p of ['src/main.rs', 'docs/PRD.md', 'apps/web/src/app.tsx', 'lefthook-notes.md', '.work/x/rfc.md']) {
     const r = edit(p)
     assert.equal(r.status, 0)
     assert.equal(r.out.trim(), '', `${p}: escalated an ordinary file`)
