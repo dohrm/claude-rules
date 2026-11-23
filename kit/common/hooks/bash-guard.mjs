@@ -93,29 +93,6 @@ const DENY = [
     'writing the review report by hand forges the verdict review-guard reads'],
 ]
 
-// The L4 journal and a phase ref are OPERANDS: quoting one (`rm '.work/x/l4.jsonl'`,
-// `git merge "phase/x/2"`) must not hide it, so these rules read the command with
-// one-word quotes unwrapped. A quote holding a space is still data — a commit message
-// that says "git merge phase/x/2" is not a merge — unless it ENDS in the journal's name:
-// that is a path with a space in it, kept as one token so a redirect still reaches it.
-const unquoteWords = (s) => scrub(s
-  .replace(/(['"])([^'"]*l4\.jsonl)\1/g, (_, _q, path) => path.replace(/\s/g, '_'))
-  .replace(/'([^'\s]*)'/g, '$1').replace(/"([^"\s]*)"/g, '$1'))
-// git's global options (`-C <dir>`, `-c <k=v>`, `--git-dir=…`, `--no-pager`) sit between
-// `git` and the subcommand.
-const GIT = String.raw`\bgit(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+`
-const DENY_OPERANDS = [
-  // Only l4.mjs appends to the journal, the way only a review writes the report. Depth,
-  // not the authority (l4-merge re-judges): these spellings are denied, the rest fails open.
-  [new RegExp(MUTATOR + String.raw`l4\.jsonl`),
-    'the L4 journal is written by `just l4-judge` / `just l4-merge` and by nothing else'],
-  [new RegExp(REDIRECT + String.raw`l4\.jsonl`),
-    'writing the L4 journal by hand forges the record of rejected rounds `just l4-judge` counts'],
-  // A phase merges on a fresh verdict for its sha, and nobody legitimately hand-merges one.
-  [new RegExp(GIT + String.raw`(?:merge|pull)(?![\w-])[^|;&]*[\s/:]phase/`),
-    'a phase merges through `just l4-merge`, on the verdict it computes — never by hand'],
-]
-
 // A forge merge is the human's act, and the human sometimes asks for one: ask, not deny.
 const FORGE_MERGE = /\b(?:gh\s+pr|glab\s+mr|tea\s+(?:pulls?|pr))\s+merge(?![\w-])/
 
@@ -167,10 +144,8 @@ function main() {
   if (!raw) return 0
   const command = scrub(raw)
 
-  const operands = unquoteWords(raw)
-  const rules = [...DENY.map(([re, why]) => [re, why, command]), ...DENY_OPERANDS.map(([re, why]) => [re, why, operands])]
-  for (const [re, why, text] of rules) {
-    if (re.test(text)) {
+  for (const [re, why] of DENY) {
+    if (re.test(command)) {
       console.error(`Blocked: ${why}`)
       console.error('  If the gate is genuinely wrong, say so and escalate — do not route around it.')
       return 2

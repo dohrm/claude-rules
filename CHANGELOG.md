@@ -35,10 +35,9 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
 
 - **`scope-report.mjs --json`**; `review-guard.mjs` exports `readVerdict` and only
   exits when run as a script.
-- **Guards**: `bash-guard` denies a write to `l4.jsonl` and a `git merge`/`git pull` naming
-  a `phase/*` ref, and asks on a forge merge (`gh pr merge`, `glab mr merge`,
-  `tea pulls merge`); `edit-guard` denies `l4.jsonl` and asks on `l4.mjs`. The `l4`
-  entries are depth: they deny the spellings their tests list and fail open.
+- **Guards**: `bash-guard` asks on a forge merge (`gh pr merge`, `glab mr merge`,
+  `tea pulls merge`); both guards ask on a write to `l4.mjs`. Neither stops a hand
+  `git merge` of a phase or a hand-written journal line — `l4-merge` never trusts either.
 
 Hand-merge:
 

@@ -144,11 +144,12 @@ a model the board lists, as an in-harness sub-agent or a detached process (`clau
   aggregate state, a worker or a lease the RFC does not name is a scope escalation,
   whatever the review says: the executor escalates it and does not build it.
 - **The brief is the RFC and the phase number**, never a summary rewritten from it.
-- **It judges artifacts, not accounts.** A phase merges only through `just l4-merge`,
-  which re-judges the phase HEAD and merges on that fresh verdict alone; `escalate` is
-  escalated. The executor's report is a claim. `WARNINGS` do not block: the journal keeps them for the final report, never
-  for another fix round. A rejected round is re-briefed with `review_cap` = the passes
-  already spent plus the board's cap.
+- **It judges artifacts, not accounts.** A phase merges through `just l4-merge`, which
+  re-judges the phase HEAD and merges on that fresh verdict alone; `escalate` is
+  escalated. That authority is the orchestrator's convention plus CI: no host guard
+  stops a hand merge. The executor's report is a claim. `WARNINGS` do not block: the
+  journal keeps them for the final report, never for another fix round. A rejected
+  round is re-briefed with `review_cap` = the passes already spent plus the board's cap.
 - **It never writes in an executor's tree** while that executor runs.
 
 Reviewers are unrestricted: a stronger or different model reviewing is where
