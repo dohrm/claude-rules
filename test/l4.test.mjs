@@ -518,6 +518,31 @@ test('l4: dirty .work/<slug> is refused — staged, unstaged or untracked, exit 
   })
 })
 
+test('l4: ticket board comes from the committed pointer — a board edited only in the cache changes nothing', () => {
+  // A ticket RFC: the pointer carries the header and, pinned at launch, the board; the
+  // ticket cache carries the body. The cache is gitignored, so anyone may rewrite it.
+  const pointer = (boardText) => `# RFC — X\n\n- **Status**: implementing\n- **Autonomy**: L4\n- **Branch**: rfc/x\n`
+    + '- **Ticket**: https://forge.invalid/issues/1\n'
+    + (boardText === null ? '' : `\n## Delegation board\n\n${boardText}\n`)
+  const cache = (boardText) => (boardText === null
+    ? RFC().replace(/## Delegation board[\s\S]*?(?=## Steps)/, '') : RFC(boardText))
+  const cases = [
+    // [name, pointer board, cache board, merge exit, what the out says]
+    ['the cache delegates, the pointer does not', board({ delegated: '- Delegated: none' }), board(), 3, /phase-merge/],
+    ['the pointer delegates, the cache has no board', board(), null, 0, /merged/],
+    ['the pointer has no board', null, board(), 3, /no `## Delegation board`/],
+  ]
+  for (const [name, inPointer, inCache, status, out] of cases) {
+    withTmpRepo((dir) => {
+      const fx = fixture(dir, { rfc: pointer(inPointer) })
+      write(fx.main, '.work/x/review-context.md', cache(inCache))
+      const r = l4(fx, ['merge', '1'])
+      assert.equal(r.status, status, `${name}: ${r.out}${r.err}`)
+      assert.match(r.out, out, name)
+    })
+  }
+})
+
 // ------------------------------------------------------------------- merge
 const merges = (fx) => fixtureGit(fx.main, ['log', '--merges', '--oneline'])
 

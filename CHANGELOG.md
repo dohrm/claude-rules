@@ -24,7 +24,8 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
   on that fresh verdict. Verdicts are recorded in `.work/<slug>/l4.jsonl`, committed on
   `rfc/<slug>` — a record (rejected rounds, one per distinct sha; each merge's
   WARNINGS), never the authority. The RFC, board and journal are read from the committed
-  HEAD; a `.work/<slug>/` that differs from it is refused. An overflow justification
+  HEAD; a `.work/<slug>/` that differs from it is refused. A ticket RFC's board is
+  pinned in its committed pointer, never read from the ticket cache. An overflow justification
   must equal one whole `changed:` entry or `## Assumptions` bullet. `origin` not
   holding the judged HEAD is `wait`, not `reject`.
 - **The board is parsed.** Four `- Key: value` lines; one that does not parse makes
@@ -45,6 +46,9 @@ At L4 a phase merges into `rfc/<slug>` through `just l4-merge`, on the verdict o
 
 Hand-merge:
 
+- **An L4 ticket RFC in flight**: its orchestrator copies the ticket's `## Delegation
+  board` into `.work/<slug>/rfc.md` and commits it before the next judge — without it,
+  the RFC delegates nothing.
 - **An L4 RFC in flight** with a free-form board: its orchestrator rewrites the four
   lines above before the next judge — `Delegated` from `phase-merge`, `hold-command`,
   `changed-decision` (or `none`); agents from `claude`, `codex`, `cursor`, `opencode`;

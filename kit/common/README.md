@@ -149,7 +149,8 @@ integration tree, on `rfc/<slug>`:
 The RFC, its `**Autonomy**` header, the board and the journal are read from the
 integration tree's committed HEAD, never from the working copy; a `.work/<slug>/` that
 differs from HEAD is refused (exit 2) — commit the RFC pointer first. A ticket RFC's
-board comes from the ticket cache, which is never committed.
+board is the one pinned in its committed pointer, never the ticket cache's; a pointer
+without one delegates nothing.
 
 Every verdict and merge is appended to `.work/<slug>/l4.jsonl` and committed alone. The
 journal is a record, not the authority: no verdict is read back from it to merge, so a

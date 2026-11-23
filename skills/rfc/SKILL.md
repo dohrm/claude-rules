@@ -179,6 +179,7 @@ a gate bypass) and on a hold.
    rewrite `**Autonomy**` to L3, log `dropped to L3: <why>`, and run as L3.
 2. **Open and push the integration branch** `rfc/<slug>` from `**Base branch**`, in
    your tree, and write it into `**Branch**`. Only you write the RFC, and only there.
+   A ticket RFC: pin its `## Delegation board` in the pointer (`ticket.md`).
    Push each of your RFC commits.
 3. **Give each phase to an executor** the board lists, on `phase/<slug>/<n>` in its own
    tree. Pull `rfc/<slug>` first, then cut the tree from yours
