@@ -36,6 +36,11 @@ We will declare autonomy as a level chosen per run, not per model or per repo.
 > delegate a few hard checkpoints (a phase merge into `rfc/<slug>`, a hold with a check
 > command, a `changed:` decision). Below L4, the hard checkpoints stay identical.
 
+> **Amended 2026-11-12.** ADR-0011 removes `/loop-setup`, so there is no loop cap left
+> to set. At L3 the agent launches the RFC once `ready`; a level never changes the
+> RFC's stopping condition, the proof of each step, the gate, the escalation channel
+> or the hard checkpoints.
+
 ## Consequences
 
 The skills grow by about 15% and carry conditional steps. For a small model, those

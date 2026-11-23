@@ -62,7 +62,6 @@ Map the shape + language to the profiles to install. **You own this gating — t
 | `cqrs` | event-sourced write/read split | **explicit opt-in only** — offer it, never assume it; principles, no prescribed library |
 | `product` | the product-lifecycle skills (`/interview`, `/onboard`, `/update`, `/migrate`, `/prd`, `/architect`, `/rfc`, `/pre-mortem`, …) | the team wants the framing chain in-repo |
 | `defect` | diagnose a bug, then fix it on request (`/defect`); alias `investigate` | opt-in, any shape |
-| `loop-setup` | frames a self-terminating agent loop (`/loop-setup`) | opt-in, when repetitive agent work is expected |
 | `devstack` | the contract between an agent and a running app (no foreground server, no orphan, the log is the truth) + `process-compose` lifecycle at `--level gates` | the rule: any repo you run locally. The kit: only once it runs **more than one process** — one service wants a `just dev`, not an orchestrator |
 
 Aliases unpack (`rust-api`, `ts-web-app`, `ts-tauri-app`, `ts-node-api`,

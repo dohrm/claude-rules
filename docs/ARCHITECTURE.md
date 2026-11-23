@@ -45,7 +45,7 @@ staged tree, which the emitters read.
 | Tests | `node:test`, no dependency, no network; toolchain jalons gated by env | every PR runs the suite offline | — |
 | Agent regression | `eval/`, calls `claude`, manual | spends tokens: model bumps only | — |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) | the forge this repository lives on | — |
-| Execution doctrine | per-run autonomy levels, the RFC as the only path, L4 delegation | how agents run work in consuming repos | ADR-0004, ADR-0007, ADR-0009 |
+| Execution doctrine | per-run autonomy levels, the RFC as the only path, L4 delegation | how agents run work in consuming repos | ADR-0004, ADR-0009, ADR-0011 |
 
 ## Data
 
@@ -90,7 +90,7 @@ lives in `.work/<slug>/` and is committed (`rules/product/documents.md`).
 - [ADR-0003](./adr/0003-claude-codex-sharing.md) — Share source assets across Claude Code and Codex
 - [ADR-0004](./adr/0004-autonomy-levels.md) — Per-run autonomy levels, defaulting to guided
 - [ADR-0005](./adr/0005-adr-scope-and-decision-homes.md) — ADRs for cross-feature arbitrations only
-- [ADR-0007](./adr/0007-rfc-only-execution-path.md) — The feature RFC is the only execution path
 - [ADR-0008](./adr/0008-layered-sources.md) — Install from layered sources, last path wins
 - [ADR-0009](./adr/0009-l4-delegated-checkpoints.md) — L4 delegates named checkpoints inside a verified domain
 - [ADR-0010](./adr/0010-installer-refuses-unexplained-tree.md) — The installer writes only over what it owns, and refuses a tree it cannot explain
+- [ADR-0011](./adr/0011-rfc-only-path-no-loop.md) — The RFC is the only execution path, with no separate loop skill
