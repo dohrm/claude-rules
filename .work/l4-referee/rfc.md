@@ -6,3 +6,7 @@
 - **Base branch**: main
 - **Branch**: rfc/l4-referee
 - **Ticket**: https://github.com/dohrm/claude-rules/issues/114
+
+## Blocked on the human
+
+- spec-gap, phase 3: where a ticket RFC's board is read from — see the ticket.
