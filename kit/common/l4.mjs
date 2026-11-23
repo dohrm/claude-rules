@@ -40,8 +40,9 @@
 // The RFC, its `**Autonomy**` header, the board and the journal are read from the
 // integration tree's committed HEAD (`git show HEAD:.work/<slug>/…`), never from the
 // working copy, and a `.work/<slug>/` that differs from HEAD is refused: what was judged
-// is what anyone can check out. A ticket RFC's board is the exception the forge imposes:
-// it is read from the ticket cache, which is never committed.
+// is what anyone can check out. A ticket RFC's board is the `## Delegation board` the
+// orchestrator pins in the committed pointer; the ticket cache is never read for it, and a
+// pointer without one delegates nothing.
 //
 // The journal `.work/<slug>/l4.jsonl` is a record, not the authority: no verdict is ever
 // read back from it to merge, so a forged line buys nothing. It is append-only; each append
@@ -223,7 +224,7 @@ function context({ n, slug, cwd }) {
   if (pointer === null) refuse(EXIT.usage, `HEAD holds no ${dir}/rfc.md — commit the RFC pointer first`)
   const resolved = resolveRfc({ slug: s, cwd })
   if (resolved.kind !== 'local' && resolved.kind !== 'ticket') {
-    refuse(EXIT.escalate, `board: the RFC for ${s} cannot be read (${resolved.kind}) — refresh the ticket cache, or check ${dir}/`)
+    refuse(EXIT.escalate, `the RFC for ${s} cannot be read (${resolved.kind}) — refresh the ticket cache, or check ${dir}/`)
   }
   const rfc = resolved.kind === 'local' ? { ...resolved, text: pointer } : resolved
   // The level is the human's (autonomy.md § Levels), declared in the state file's header:
@@ -231,7 +232,9 @@ function context({ n, slug, cwd }) {
   if (!/^[ \t]*-[ \t]*\*\*Autonomy\*\*:[ \t]*L4\b/m.test(headerOf(pointer))) {
     refuse(EXIT.escalate, `the RFC's **Autonomy** header is not L4 — the referee judges L4 phases only`)
   }
-  const board = parseBoard(rfc.text)
+  // The board is a delegation the human checks before it binds, so it is read from the
+  // committed pointer — for a ticket RFC too, whose cache anyone may rewrite.
+  const board = parseBoard(pointer)
   const journalRel = join(dir, 'l4.jsonl')
   const journal = parseJournal(committed(cwd, journalRel) ?? '', journalRel)
   return { n, slug: s, cwd, integration, phase: `phase/${s}/${n}`, rfc, board, journalRel, journal }
