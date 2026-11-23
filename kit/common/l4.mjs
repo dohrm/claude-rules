@@ -268,22 +268,38 @@ function parseJustify(values) {
 }
 
 /** The whole texts a justification may equal: each `changed:` entry (with and without its
- *  `changed:` prefix) and each `## Assumptions` bullet, list marker and backticks removed. */
+ *  `changed:` prefix, without its backticks) and each `## Assumptions` bullet (without its
+ *  list marker). An entry wrapped over several lines is one text, its lines joined by a
+ *  space: its first line alone is a fragment. */
 function justifyingTexts(text) {
   const out = []
+  const flat = (t) => t.split('\n').map((l) => l.trim()).join(' ').trim()
+  // The form `/rfc` records: `changed: <decision> — <why>` in backticks.
+  for (const [, changed] of text.matchAll(/`(changed: [^`]+)`/g)) {
+    out.push(flat(changed), flat(changed.slice('changed:'.length)))
+  }
   let inAssumptions = false
+  let bullet = null
+  const close = () => {
+    if (bullet !== null) out.push(bullet)
+    bullet = null
+  }
   for (const line of text.split('\n')) {
     const h2 = line.match(/^##\s+(.+?)\s*$/)
     if (h2) {
+      close()
       inAssumptions = h2[1].toLowerCase() === 'assumptions'
       continue
     }
-    const bullet = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/)?.[1].trim()
-    if (inAssumptions && bullet) out.push(bullet)
-    // The form `/rfc` records: `changed: <decision> — <why>` in backticks.
-    const changed = line.match(/`(changed: [^`]+)`/)?.[1].trim()
-    if (changed) out.push(changed, changed.slice('changed:'.length).trim())
+    if (!inAssumptions) continue
+    const marker = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(.*)$/)
+    if (marker) {
+      close()
+      bullet = marker[1].trim()
+    } else if (bullet !== null && /^\s+\S/.test(line)) bullet += ` ${line.trim()}`
+    else close()
   }
+  close()
   return out
 }
 

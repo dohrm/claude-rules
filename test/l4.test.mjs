@@ -42,6 +42,8 @@ Proposed by the agent; the human keeps or edits it.
 ## Assumptions
 
 - the docs page moves with the code it describes
+- the fixture wraps this bullet
+  over two lines
 
 ## Log
 
@@ -361,6 +363,10 @@ test('l4 judge: justification is a whole line — a substring of an Assumptions 
     assert.equal(lib.status, 3, 'a fragment of a `changed:` entry justifies nothing either')
     const ok = l4(fx, ['judge', '1', '--justify', 'docs=  the docs page moves with the code it describes  '])
     assert.equal(ok.status, 0, ok.out + ok.err)
+    const first = l4(fx, ['judge', '1', '--justify', 'docs=the fixture wraps this bullet'])
+    assert.equal(first.status, 3, `the first line of a wrapped bullet is a fragment: ${first.out}`)
+    const wrapped = l4(fx, ['judge', '1', '--justify', 'docs=the fixture wraps this bullet over two lines'])
+    assert.equal(wrapped.status, 0, `a wrapped bullet is one text: ${wrapped.out}${wrapped.err}`)
   })
 })
 
