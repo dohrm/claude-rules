@@ -4,11 +4,11 @@
 // check` and the CI state are inputs the test sets, with no toolchain installed.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { REPO, withTmpRepo, fixtureGit } from './helpers.mjs'
-import { parseBoard, readJournal } from '../kit/common/l4.mjs'
+import { parseBoard, parseJournal } from '../kit/common/l4.mjs'
 
 const L4 = join(REPO, 'kit', 'common', 'l4.mjs')
 // The real just, resolved before a test puts its fake one first on PATH.
@@ -42,6 +42,8 @@ Proposed by the agent; the human keeps or edits it.
 ## Assumptions
 
 - the docs page moves with the code it describes
+- the fixture wraps this bullet
+  over two lines
 
 ## Log
 
@@ -92,19 +94,14 @@ test('l4 board: each malformed line is named, never guessed', () => {
 
 // ---------------------------------------------------------------- the journal
 test('l4 journal: entries are read back; a line that does not parse is refused by number', () => {
-  withTmpRepo((dir) => {
-    const path = join(dir, 'l4.jsonl')
-    assert.deepEqual(readJournal(path), [], 'no journal yet is an empty one')
-    const sha = 'a'.repeat(40)
-    const good = { kind: 'verdict', phase: '1', sha, verdict: 'reject', reasons: ['x'] }
-    writeFileSync(path, `${JSON.stringify(good)}\n${JSON.stringify({ kind: 'merged', phase: '1', sha, commit: sha })}\n`)
-    assert.equal(readJournal(path).length, 2)
-    for (const bad of ['{not json', JSON.stringify({ ...good, verdict: 'maybe' }), JSON.stringify({ ...good, sha: 'abc' }),
-      JSON.stringify({ kind: 'merged', phase: '1', sha })]) {
-      writeFileSync(path, `${JSON.stringify(good)}\n${bad}\n`)
-      assert.match(thrown(() => readJournal(path)), /l4\.jsonl line 2 does not parse/)
-    }
-  })
+  assert.deepEqual(parseJournal('', 'l4.jsonl'), [], 'no journal yet is an empty one')
+  const sha = 'a'.repeat(40)
+  const good = { kind: 'verdict', phase: '1', sha, verdict: 'reject', reasons: ['x'] }
+  assert.equal(parseJournal(`${JSON.stringify(good)}\n${JSON.stringify({ kind: 'merged', phase: '1', sha, commit: sha })}\n`, 'l4.jsonl').length, 2)
+  for (const bad of ['{not json', JSON.stringify({ ...good, verdict: 'maybe' }), JSON.stringify({ ...good, sha: 'abc' }),
+    JSON.stringify({ kind: 'merged', phase: '1', sha })]) {
+    assert.match(thrown(() => parseJournal(`${JSON.stringify(good)}\n${bad}\n`, 'l4.jsonl')), /l4\.jsonl line 2 does not parse/)
+  }
 })
 
 // ------------------------------------------------------------- the fixture
@@ -243,20 +240,38 @@ test('l4 judge: each red fact is a reject — exit 1', () => {
   }
 })
 
-test('l4 judge: green CI about another commit is a reject — origin must hold the judged HEAD', () => {
+test('l4 judge: infrastructure failure is not a rejected round — unpushed or unreadable origin waits, a check that cannot start is usage', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir)
     write(fx.tree, 'src/a.txt', 'newer\n')
     commitIn(fx.tree)
     review(fx.tree, 'CLEAN')
-    const r = l4(fx, ['judge', '1', '--ci', 'fake-ci'])
-    assert.equal(r.status, 1, r.out + r.err)
-    assert.match(r.out, /origin does not hold [0-9a-f]{7} on phase\/x\/1 — CI never checked the judged commit/)
-    assert.doesNotMatch(r.err, /ci-arg/, 'the CI command is not even asked')
-    assert.equal(journal(fx)[0].ci, 'unpushed')
+    for (let round = 0; round < 3; round++) {
+      const r = l4(fx, ['judge', '1', '--ci', 'fake-ci'])
+      assert.equal(r.status, 4, r.out + r.err)
+      assert.match(r.out, /^l4: wait — origin does not hold [0-9a-f]{7} on phase\/x\/1 — CI never checked the judged commit/)
+      assert.doesNotMatch(r.err, /ci-arg/, 'the CI command is not even asked')
+    }
+    assert.deepEqual(journal(fx).map((e) => [e.verdict, e.ci]), Array(3).fill(['wait', 'unpushed']), 'never journaled as reject, never past the cap')
+    fixtureGit(fx.main, ['remote', 'set-url', 'origin', join(dir, 'nowhere.git')])
+    const gone = l4(fx, ['judge', '1', '--ci', 'fake-ci'])
+    assert.equal(gone.status, 4, gone.out + gone.err)
+    assert.match(gone.out, /^l4: wait — origin cannot be read/)
+    assert.equal(journal(fx).at(-1).ci, 'unreachable')
+    fixtureGit(fx.main, ['remote', 'set-url', 'origin', join(dir, 'origin.git')])
     pushPhase(fx.tree)
     assert.equal(l4(fx, ['judge', '1', '--ci', 'fake-ci']).status, 0, 'once pushed, the same commit merges')
     assert.equal(l4(fx, ['judge', '1', '--ci', '']).status, 0, 'unwired CI asks nothing of origin')
+
+    // No `just` on PATH: only git, so the spawn itself fails.
+    const bare = join(dir, 'bare-bin')
+    mkdirSync(bare)
+    symlinkSync(spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim(), join(bare, 'git'))
+    const before = journal(fx).length
+    const r = l4(fx, ['judge', '1'], { PATH: bare })
+    assert.equal(r.status, 2, r.out + r.err)
+    assert.match(r.out, /^l4: error — just check could not start \(ENOENT\)/)
+    assert.equal(journal(fx).length, before, 'nothing journaled')
   })
 })
 
@@ -326,10 +341,32 @@ test('l4 judge: an overflow package escalates unless a justification quotes the 
     assert.match(bare.out, /^l4: escalate — overflow package `docs` is not justified/)
     const made = l4(fx, ['judge', '1', '--justify', 'docs=a page nobody asked for'])
     assert.equal(made.status, 3, made.out)
-    assert.match(made.out, /`docs`: its justification is in no `changed:` or `## Assumptions` line/)
-    const ok = l4(fx, ['judge', '1', '--justify', 'docs=the docs page moves with the code'])
+    assert.match(made.out, /`docs`: its justification is no whole `changed:` line or `## Assumptions` bullet/)
+    const ok = l4(fx, ['judge', '1', '--justify', 'docs=the docs page moves with the code it describes'])
     assert.equal(ok.status, 0, ok.out + ok.err)
-    assert.deepEqual(journal(fx).at(-1).justified, { docs: 'the docs page moves with the code' })
+    assert.deepEqual(journal(fx).at(-1).justified, { docs: 'the docs page moves with the code it describes' })
+  })
+})
+
+test('l4 judge: justification is a whole line — a substring of an Assumptions bullet escalates, the exact bullet clears', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    write(fx.tree, 'docs/a.md', 'x\n')
+    commitIn(fx.tree)
+    review(fx.tree, 'CLEAN')
+    for (const part of ['the docs page moves with the code', 'docs', 'it describes', '- the docs page moves with the code it describes x']) {
+      const r = l4(fx, ['judge', '1', '--justify', `docs=${part}`])
+      assert.equal(r.status, 3, `${part}: ${r.out}`)
+      assert.match(r.out, /`docs`: its justification is no whole `changed:` line or `## Assumptions` bullet/)
+    }
+    const lib = l4(fx, ['judge', '1', '--justify', 'docs=the helper lives in lib'])
+    assert.equal(lib.status, 3, 'a fragment of a `changed:` entry justifies nothing either')
+    const ok = l4(fx, ['judge', '1', '--justify', 'docs=  the docs page moves with the code it describes  '])
+    assert.equal(ok.status, 0, ok.out + ok.err)
+    const first = l4(fx, ['judge', '1', '--justify', 'docs=the fixture wraps this bullet'])
+    assert.equal(first.status, 3, `the first line of a wrapped bullet is a fragment: ${first.out}`)
+    const wrapped = l4(fx, ['judge', '1', '--justify', 'docs=the fixture wraps this bullet over two lines'])
+    assert.equal(wrapped.status, 0, `a wrapped bullet is one text: ${wrapped.out}${wrapped.err}`)
   })
 })
 
@@ -340,8 +377,28 @@ test('l4 judge: a `changed:` line justifies too, and several justifications fit 
     write(fx.tree, 'lib/h.txt', 'x\n')
     commitIn(fx.tree)
     review(fx.tree, 'CLEAN')
-    const r = l4(fx, ['judge', '1', '--justify', 'docs=moves with the code\nlib=the helper lives in lib'])
+    const r = l4(fx, ['judge', '1', '--justify',
+      'docs=the docs page moves with the code it describes\nlib=changed: the helper lives in lib — it is shared'])
     assert.equal(r.status, 0, r.out + r.err)
+    const bare = l4(fx, ['judge', '1', '--justify',
+      'docs=the docs page moves with the code it describes\nlib=the helper lives in lib — it is shared'])
+    assert.equal(bare.status, 0, `the entry without its \`changed:\` prefix too: ${bare.out}`)
+  })
+})
+
+test('l4 judge: same sha judged twice counts one round', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    for (let i = 0; i < 3; i++) {
+      const r = l4(fx, ['judge', '1'], { FAKE_CHECK: '1' })
+      assert.equal(r.status, 1, `judging the same sha again is the same round: ${r.out}`)
+    }
+    write(fx.tree, 'src/a.txt', 'b\n')
+    commitIn(fx.tree)
+    review(fx.tree, 'CLEAN')
+    const next = l4(fx, ['judge', '1'], { FAKE_CHECK: '1' })
+    assert.equal(next.status, 3, next.out)
+    assert.match(next.out, /rejected past the cap: 1 rejected round\(s\) of 1 already spent/)
   })
 })
 
@@ -363,6 +420,9 @@ test('l4 judge: a reject past the rejected-rounds cap escalates', () => {
   withTmpRepo((dir) => {
     const fx = fixture(dir)
     assert.equal(l4(fx, ['judge', '1'], { FAKE_CHECK: '1' }).status, 1, 'the first rejected round is within the cap of 1')
+    write(fx.tree, 'src/a.txt', 'b\n')
+    commitIn(fx.tree)
+    review(fx.tree, 'CLEAN')
     const r = l4(fx, ['judge', '1'], { FAKE_CHECK: '1' })
     assert.equal(r.status, 3, r.out)
     assert.match(r.out, /rejected past the cap: 1 rejected round\(s\) of 1 already spent/)
@@ -381,6 +441,7 @@ test('l4 judge: an unparsable board or journal is refused — exit 3, nothing wr
   withTmpRepo((dir) => {
     const fx = fixture(dir)
     write(fx.main, '.work/x/l4.jsonl', 'garbage\n')
+    commitIn(fx.main, 'garbage')
     const r = l4(fx, ['judge', '1'])
     assert.equal(r.status, 3, r.out)
     assert.match(r.out, /l4\.jsonl line 1 does not parse/)
@@ -401,6 +462,59 @@ test('l4 judge: usage errors are exit 2 — wrong tree, no phase tree, uncommitt
     assert.match(wrong.stdout, /run from the integration tree, on rfc\/x/)
     assert.equal(l4(fx, ['judge']).status, 2)
     assert.equal(l4(fx, ['vote', '1']).status, 2)
+  })
+})
+
+// ------------------------------------------------------- the committed RFC
+test('l4: committed RFC wins over the working copy — board, header and journal come from HEAD', () => {
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    const sha = head(fx.tree)
+    const rejected = { kind: 'verdict', phase: '1', sha: 'c'.repeat(40), verdict: 'reject', reasons: ['x'], at: 'then' }
+    write(fx.main, '.work/x/l4.jsonl', `${JSON.stringify(rejected)}\n`)
+    commitIn(fx.main, 'one round spent')
+    // A working copy git status cannot see: an L3 header, no phase-merge, a cap of 5.
+    fixtureGit(fx.main, ['update-index', '--skip-worktree', '.work/x/rfc.md'])
+    write(fx.main, '.work/x/rfc.md', RFC(board({
+      delegated: '- Delegated: none', caps: '- Caps: budget=120 minutes; review-passes=3; rejected-rounds=5',
+    })).replace('**Autonomy**: L4', '**Autonomy**: L3'))
+    const red = l4(fx, ['judge', '1'], { FAKE_CHECK: '1' })
+    assert.equal(red.status, 3, `the committed L4 header and the committed round count: ${red.out}`)
+    assert.match(red.out, /rejected past the cap: 1 rejected round\(s\) of 1 already spent/)
+    const r = l4(fx, ['merge', '1'])
+    assert.equal(r.status, 0, `the committed board delegates phase-merge: ${r.out}${r.err}`)
+    assert.equal(fixtureGit(fx.main, ['rev-parse', 'HEAD^^2']), sha)
+    const lines = fixtureGit(fx.main, ['show', 'HEAD:.work/x/l4.jsonl']).split('\n').map((l) => JSON.parse(l))
+    assert.deepEqual(lines.map((e) => e.kind), ['verdict', 'verdict', 'verdict', 'merged'], 'appended to the committed journal')
+  })
+})
+
+test('l4: dirty .work/<slug> is refused — staged, unstaged or untracked, exit 2, nothing written', () => {
+  const dirty = {
+    unstaged: (fx) => write(fx.main, '.work/x/rfc.md', `${RFC()}\nmore\n`),
+    staged: (fx) => {
+      write(fx.main, '.work/x/rfc.md', `${RFC()}\nmore\n`)
+      fixtureGit(fx.main, ['add', '.work/x/rfc.md'])
+    },
+    untracked: (fx) => write(fx.main, '.work/x/l4.jsonl', ''),
+  }
+  for (const [name, make] of Object.entries(dirty)) {
+    withTmpRepo((dir) => {
+      const fx = fixture(dir)
+      make(fx)
+      const before = fixtureGit(fx.main, ['rev-parse', 'HEAD'])
+      for (const verb of ['judge', 'merge']) {
+        const r = l4(fx, [verb, '1'])
+        assert.equal(r.status, 2, `${name} ${verb}: ${r.out}`)
+        assert.match(r.out, /^l4: error — \.work\/x\/ differs from HEAD — commit the RFC pointer first/)
+      }
+      assert.equal(fixtureGit(fx.main, ['rev-parse', 'HEAD']), before, `${name}: nothing committed`)
+    })
+  }
+  withTmpRepo((dir) => {
+    const fx = fixture(dir)
+    write(fx.main, '.work/x/review-context.md', 'a ticket cache\n')
+    assert.equal(l4(fx, ['judge', '1']).status, 0, 'the ticket cache is ignored, never a difference')
   })
 })
 
@@ -493,11 +607,11 @@ test('just l4-judge / l4-merge: the recipes pass l4_ci and a multi-line justify 
     const just = (...args) => spawnSync(JUST, args, { cwd: fx.main, encoding: 'utf8', env })
     const red = just('l4_ci=fake-ci', 'l4-judge', '1')
     assert.equal(red.status, 3, 'the exit code reaches the caller through just')
-    const ok = just('l4_ci=fake-ci', 'l4-judge', '1', 'docs=the docs page moves\nlib=never used')
+    const ok = just('l4_ci=fake-ci', 'l4-judge', '1', 'docs=the docs page moves with the code it describes\nlib=never used')
     assert.equal(ok.status, 0, ok.stdout + ok.stderr)
     assert.match(ok.stderr, /ci-arg: phase\/x\/1/)
     assert.equal(journal(fx).at(-1).ci, 'green')
-    const merged = just('l4_ci=fake-ci', 'l4-merge', '1', 'docs=the docs page moves')
+    const merged = just('l4_ci=fake-ci', 'l4-merge', '1', 'docs=the docs page moves with the code it describes')
     assert.equal(merged.status, 0, merged.stdout + merged.stderr)
     assert.match(merged.stdout, /^l4: merged — /m)
   })

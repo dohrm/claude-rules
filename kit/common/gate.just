@@ -556,19 +556,23 @@ scope-report:
 # ── L4 referee (rules/agent/autonomy.md § L4) ────────────────────────────────
 # Run from the integration tree, on `rfc/<slug>`. `l4-judge` reads the facts of phase
 # <n> — `just check` in its tree, its review report, CI, the scope report — prints one
-# line and exits 0 merge, 1 reject, 3 escalate, 4 wait; every verdict is appended to
-# `.work/<slug>/l4.jsonl` and committed. `justify` clears overflow packages, one
-# `<package>=<text>` per line, each text quoted from a `changed:` or `## Assumptions`
-# line of the RFC. `l4-merge` (same arguments) requires `phase-merge` on the board,
+# line and exits 0 merge, 1 reject, 3 escalate, 4 wait (CI running, or `origin` not
+# holding the judged HEAD), 2 usage; every verdict is appended to
+# `.work/<slug>/l4.jsonl` and committed. The RFC, board and journal are read from the
+# committed HEAD; a `.work/<slug>/` that differs from it is refused (exit 2). `justify`
+# clears overflow packages, one `<package>=<text>` per line, each text equal to one
+# whole `changed:` entry or `## Assumptions` bullet of the RFC. `l4-merge` (same
+# arguments) requires `phase-merge` on the board,
 # re-runs the judge and merges the exact sha only on that fresh `merge` verdict, then
 # pushes; any other verdict exits with its code. The journal is a record, never read
 # back as a verdict.
 #
 # `l4_ci` is the CI state of a branch, run with the branch as its last argument: exit 0
-# green, 8 still running (`gh pr checks`' "pending"), anything else red. Empty means
-# Tier 4 is not wired: the journal records it as declared, never as green. Override it
-# for another forge.
-l4_ci := "gh pr checks --required"
+# green, 8 still running (`gh pr checks`' "pending"), anything else red. Every check,
+# not only required ones: `--required` reports red on a branch that has none. Empty
+# means Tier 4 is not wired: the journal records it as declared, never as green.
+# Override it for another forge.
+l4_ci := "gh pr checks"
 
 l4-judge n justify="":
     node {{kit}}/l4.mjs judge {{quote(n)}} --slug {{quote(work_slug)}} --ci {{quote(l4_ci)}} --justify {{quote(justify)}}
